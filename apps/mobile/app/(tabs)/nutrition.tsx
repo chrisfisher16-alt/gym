@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -16,6 +16,10 @@ import {
   Badge,
 } from '../../src/components/ui';
 import { CoachFAB } from '../../src/components/CoachFAB';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
+import { UpgradeBanner } from '../../src/components/UpgradeBanner';
+import { checkMealLogLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
 import {
   formatCalories,
   formatMealTime,
@@ -49,12 +53,45 @@ export default function NutritionTab() {
   const { waterIntake, waterTarget, glasses, targetGlasses, addGlass } = useWaterTracking();
   const { activeSupplements, isSupplementTaken, logSupplement, unlogSupplement } = useSupplements();
   const [showSupplements, setShowSupplements] = useState(false);
+  const { tier, canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
+  const [mealUsage, setMealUsage] = useState<UsageCheck | null>(null);
 
   useEffect(() => {
     if (!isInitialized) {
       initialize();
     }
   }, [isInitialized, initialize]);
+
+  // Check free tier meal limits
+  useEffect(() => {
+    if (tier === 'free') {
+      checkMealLogLimit().then(setMealUsage);
+    }
+  }, [tier, meals.length]);
+
+  const handleLogMeal = useCallback(() => {
+    if (canAccess('unlimited_meals')) {
+      router.push('/nutrition/log-meal');
+      return;
+    }
+    checkMealLogLimit().then((usage) => {
+      setMealUsage(usage);
+      if (usage.allowed) {
+        incrementUsage('meal_logs');
+        router.push('/nutrition/log-meal');
+      } else {
+        Alert.alert(
+          'Daily Meal Limit Reached',
+          `You've logged ${usage.limit} meals today. Upgrade to Nutrition Coach for unlimited meal logging.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_meals', source: 'nutrition_tab' }) },
+          ],
+        );
+      }
+    });
+  }, [canAccess, showPaywall, router]);
 
   const navigateDate = (direction: -1 | 1) => {
     const current = new Date(selectedDate + 'T12:00:00');
@@ -67,6 +104,16 @@ export default function NutritionTab() {
 
   return (
     <ScreenContainer>
+      {/* Upgrade Banner for free users */}
+      {tier === 'free' && (
+        <UpgradeBanner
+          plan="nutrition_coach"
+          feature="unlimited_meals"
+          source="nutrition_tab"
+          message="Unlock unlimited meal logging with Nutrition Coach"
+        />
+      )}
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: spacing.base, paddingBottom: spacing.md }]}>
         <Text style={[typography.h1, { color: colors.text }]}>Nutrition</Text>
@@ -373,12 +420,12 @@ export default function NutritionTab() {
       {/* FAB - Log Meal */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary, bottom: spacing['2xl'] }]}
-        onPress={() => router.push('/nutrition/log-meal')}
+        onPress={handleLogMeal}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color={colors.textInverse} />
         <Text style={[typography.label, { color: colors.textInverse, marginLeft: spacing.xs }]}>
-          Log Meal
+          Log Meal{tier === 'free' && mealUsage ? ` (${mealUsage.remaining})` : ''}
         </Text>
       </TouchableOpacity>
     </ScreenContainer>

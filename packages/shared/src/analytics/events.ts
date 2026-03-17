@@ -50,6 +50,8 @@ export const SUBSCRIPTION_EVENTS = {
   SUBSCRIPTION_STARTED: 'subscription.started',
   SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
   SUBSCRIPTION_RESTORED: 'subscription.restored',
+  UPGRADE_PROMPT_SHOWN: 'subscription.upgrade_prompt_shown',
+  FREE_LIMIT_REACHED: 'subscription.free_limit_reached',
 } as const;
 
 // ── Notification Events ──────────────────────────────────────────────

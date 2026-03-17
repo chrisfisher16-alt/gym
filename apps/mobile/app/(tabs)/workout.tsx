@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,10 @@ import { useWorkoutStore } from '../../src/stores/workout-store';
 import { Button, Card, ScreenContainer, Badge } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume } from '../../src/lib/workout-utils';
 import { CoachFAB } from '../../src/components/CoachFAB';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
+import { UpgradeBanner } from '../../src/components/UpgradeBanner';
+import { checkWorkoutLogLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
 
 export default function WorkoutTab() {
   const router = useRouter();
@@ -20,12 +24,49 @@ export default function WorkoutTab() {
   const { activeProgram, getTodayWorkout } = useWorkoutPrograms();
   const { recentWorkouts, weeklyVolume, totalWorkouts } = useWorkoutHistory();
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
+  const { tier, canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
+  const [workoutUsage, setWorkoutUsage] = useState<UsageCheck | null>(null);
 
   useEffect(() => {
     if (!isInitialized) {
       initialize();
     }
   }, [isInitialized, initialize]);
+
+  // Check free tier workout limits
+  useEffect(() => {
+    if (tier === 'free') {
+      checkWorkoutLogLimit().then(setWorkoutUsage);
+    }
+  }, [tier]);
+
+  const handleWorkoutLimitCheck = useCallback(
+    (proceed: () => void) => {
+      if (canAccess('unlimited_workouts')) {
+        proceed();
+        return;
+      }
+      // Free tier — check usage
+      checkWorkoutLogLimit().then((usage) => {
+        setWorkoutUsage(usage);
+        if (usage.allowed) {
+          incrementUsage('workout_logs');
+          proceed();
+        } else {
+          Alert.alert(
+            'Workout Limit Reached',
+            `You've used all ${usage.limit} free workouts this month. Upgrade to Workout Coach for unlimited workouts.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_workouts', source: 'workout_tab' }) },
+            ],
+          );
+        }
+      });
+    },
+    [canAccess, showPaywall],
+  );
 
   const todayWorkout = activeProgram ? getTodayWorkout() : null;
 
@@ -34,8 +75,10 @@ export default function WorkoutTab() {
       router.push('/workout/active');
       return;
     }
-    startEmptyWorkout();
-    router.push('/workout/active');
+    handleWorkoutLimitCheck(() => {
+      startEmptyWorkout();
+      router.push('/workout/active');
+    });
   };
 
   const handleStartToday = () => {
@@ -45,7 +88,9 @@ export default function WorkoutTab() {
     }
     if (!todayWorkout || !activeProgram) return;
 
-    startWorkout({
+    handleWorkoutLimitCheck(() => {
+      if (!todayWorkout || !activeProgram) return;
+      startWorkout({
       name: `${activeProgram.name} — ${todayWorkout.name}`,
       programId: activeProgram.id,
       dayId: todayWorkout.id,
@@ -57,8 +102,9 @@ export default function WorkoutTab() {
         restSeconds: e.restSeconds,
         supersetGroupId: e.supersetGroupId,
       })),
+      });
+      router.push('/workout/active');
     });
-    router.push('/workout/active');
   };
 
   // Simple weekly volume chart bars
@@ -67,6 +113,16 @@ export default function WorkoutTab() {
 
   return (
     <ScreenContainer>
+      {/* Upgrade Banner for free users */}
+      {tier === 'free' && (
+        <UpgradeBanner
+          plan="workout_coach"
+          feature="unlimited_workouts"
+          source="workout_tab"
+          message="Unlock unlimited workouts with Workout Coach"
+        />
+      )}
+
       <View style={[styles.header, { paddingTop: spacing.base, paddingBottom: spacing.lg }]}>
         <Text style={[typography.h1, { color: colors.text }]}>Workout</Text>
         {isActive && (
@@ -138,6 +194,12 @@ export default function WorkoutTab() {
             <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm }]}>
               Quick Start
             </Text>
+            {tier === 'free' && workoutUsage && (
+              <Badge
+                label={`${workoutUsage.remaining}/${workoutUsage.limit} left`}
+                variant={workoutUsage.remaining <= 2 ? 'warning' : 'default'}
+              />
+            )}
           </View>
           <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>
             Start an empty workout and add exercises as you go.

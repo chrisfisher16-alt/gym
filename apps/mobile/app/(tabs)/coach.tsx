@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -16,6 +17,9 @@ import { ChatBubble } from '../../src/components/coach/ChatBubble';
 import { TypingIndicator } from '../../src/components/coach/TypingIndicator';
 import { SuggestedPrompts } from '../../src/components/coach/SuggestedPrompts';
 import { CoachAvatar } from '../../src/components/coach/CoachAvatar';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
+import { checkAIMessageLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
 import type { CoachMessage } from '../../src/stores/coach-store';
 
 export default function CoachTab() {
@@ -52,6 +56,17 @@ export default function CoachTab() {
     }
   }, [prefilledMessage, isInitialized, clearPrefilledContext]);
 
+  const { tier, canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
+  const [aiUsage, setAIUsage] = useState<UsageCheck | null>(null);
+
+  // Check AI message limits for free users
+  useEffect(() => {
+    if (tier === 'free') {
+      checkAIMessageLimit().then(setAIUsage);
+    }
+  }, [tier]);
+
   const currentMessages = activeConversation
     ? messages.filter((m) => m.conversation_id === activeConversation.id)
     : [];
@@ -59,9 +74,32 @@ export default function CoachTab() {
   const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text || isLoading) return;
+
+    // Check AI message limit for free users
+    if (!canAccess('unlimited_ai') && tier === 'free') {
+      checkAIMessageLimit().then((usage) => {
+        setAIUsage(usage);
+        if (usage.allowed) {
+          incrementUsage('ai_messages');
+          setInputText('');
+          sendMessage(text, prefilledContext ?? undefined);
+        } else {
+          Alert.alert(
+            'Daily Message Limit Reached',
+            'You\'ve used all 5 free AI messages today. Upgrade for unlimited coaching.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_ai', source: 'coach_tab' }) },
+            ],
+          );
+        }
+      });
+      return;
+    }
+
     setInputText('');
     sendMessage(text, prefilledContext ?? undefined);
-  }, [inputText, isLoading, sendMessage, prefilledContext]);
+  }, [inputText, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
 
   const handlePromptSelect = useCallback(
     (prompt: string) => {
@@ -146,9 +184,25 @@ export default function CoachTab() {
             </Text>
           </View>
         </View>
-        <TouchableOpacity onPress={handleNewConversation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {tier === 'free' && aiUsage && (
+            <View
+              style={{
+                backgroundColor: aiUsage.remaining <= 1 ? colors.warningLight : colors.surfaceSecondary,
+                borderRadius: 12,
+                paddingHorizontal: spacing.sm,
+                paddingVertical: 2,
+              }}
+            >
+              <Text style={[typography.caption, { color: aiUsage.remaining <= 1 ? colors.warning : colors.textSecondary, fontWeight: '600' }]}>
+                {aiUsage.remaining}/{aiUsage.limit} left
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity onPress={handleNewConversation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Messages */}

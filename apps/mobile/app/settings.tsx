@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
 import { Card, ScreenContainer, Badge, Divider } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/auth-store';
+import { useNotificationStore } from '../src/stores/notification-store';
+import { useSubscriptionStore } from '../src/stores/subscription-store';
+import { useEntitlement } from '../src/hooks/useEntitlement';
 import { APP_CONFIG } from '@health-coach/shared';
 
 export default function SettingsScreen() {
@@ -12,6 +15,9 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const coachPreferences = useAuthStore((s) => s.coachPreferences);
   const signOut = useAuthStore((s) => s.signOut);
+  const logoutSubscription = useSubscriptionStore((s) => s.logout);
+  const notificationStatus = useNotificationStore((s) => s.preferences.permissionStatus);
+  const { tier, tierName, isSubscribed, isTrial } = useEntitlement();
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -20,6 +26,7 @@ export default function SettingsScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          await logoutSubscription();
           await signOut();
           router.replace('/');
         },
@@ -48,7 +55,7 @@ export default function SettingsScreen() {
               {user?.email ?? ''}
             </Text>
           </View>
-          <Badge label="Free" variant="default" />
+          <Badge label={tierName} variant={isSubscribed ? 'pro' : 'default'} />
         </View>
       </Card>
 
@@ -101,12 +108,42 @@ export default function SettingsScreen() {
         <SettingRow
           icon="diamond-outline"
           label="Plan"
-          value="Free"
+          value={tierName + (isTrial ? ' (Trial)' : '')}
           colors={colors}
           typography={typography}
           spacing={spacing}
           showChevron
+          onPress={() => isSubscribed ? {} : router.push('/paywall')}
         />
+        {!isSubscribed && (
+          <>
+            <Divider />
+            <SettingRow
+              icon="arrow-up-circle-outline"
+              label="Upgrade"
+              value="View plans"
+              colors={colors}
+              typography={typography}
+              spacing={spacing}
+              showChevron
+              onPress={() => router.push('/paywall')}
+            />
+          </>
+        )}
+        {isSubscribed && (
+          <>
+            <Divider />
+            <SettingRow
+              icon="settings-outline"
+              label="Manage Subscription"
+              colors={colors}
+              typography={typography}
+              spacing={spacing}
+              showChevron
+              onPress={() => router.push('/paywall')}
+            />
+          </>
+        )}
       </Card>
 
       {/* More */}
@@ -117,10 +154,12 @@ export default function SettingsScreen() {
         <SettingRow
           icon="notifications-outline"
           label="Notifications"
+          value={notificationStatus === 'granted' ? 'Enabled' : 'Disabled'}
           colors={colors}
           typography={typography}
           spacing={spacing}
           showChevron
+          onPress={() => router.push('/notifications')}
         />
         <Divider />
         <SettingRow
@@ -182,6 +221,7 @@ function SettingRow({
   colors,
   typography: typo,
   spacing: sp,
+  onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -190,11 +230,12 @@ function SettingRow({
   colors: ReturnType<typeof useTheme>['colors'];
   typography: ReturnType<typeof useTheme>['typography'];
   spacing: ReturnType<typeof useTheme>['spacing'];
+  onPress?: () => void;
 }) {
   return (
     <TouchableOpacity
       activeOpacity={0.7}
-      onPress={() => {}}
+      onPress={onPress ?? (() => {})}
       style={[settingStyles.row, { paddingVertical: sp.md }]}
     >
       <View style={settingStyles.left}>
