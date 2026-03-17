@@ -15,6 +15,7 @@ import {
   ProgressBar,
   Badge,
 } from '../../src/components/ui';
+import { CoachFAB } from '../../src/components/CoachFAB';
 import {
   formatCalories,
   formatMealTime,
@@ -362,6 +363,9 @@ export default function NutritionTab() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Ask Coach */}
+      <CoachFAB context="nutrition" label="Ask Coach" prefilledMessage="Help with my nutrition" />
 
       {/* Spacer for FAB */}
       <View style={{ height: 80 }} />

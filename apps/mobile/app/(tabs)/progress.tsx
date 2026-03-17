@@ -2,6 +2,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Card, ScreenContainer, EmptyState } from '../../src/components/ui';
+import { CoachFAB } from '../../src/components/CoachFAB';
 
 export default function ProgressTab() {
   const { colors, spacing, typography, radius } = useTheme();
@@ -66,6 +67,9 @@ export default function ProgressTab() {
           description="Complete workouts to start tracking your personal records."
         />
       </View>
+
+      {/* Ask Coach */}
+      <CoachFAB context="progress" label="Analyze My Progress" prefilledMessage="Analyze my progress this week" />
 
       {/* Body Measurements */}
       <View style={{ marginBottom: spacing['2xl'] }}>

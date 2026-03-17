@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Card, ScreenContainer, MacroBar, ProgressBar } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { CoachFAB } from '../../src/components/CoachFAB';
 
 export default function TodayTab() {
   const { colors, spacing, typography, radius } = useTheme();
@@ -77,17 +78,23 @@ export default function TodayTab() {
       </Card>
 
       {/* Coach Tip */}
-      <Card style={{ marginBottom: spacing.base, backgroundColor: colors.primaryMuted }}>
-        <View style={styles.cardHeader}>
-          <Ionicons name="bulb-outline" size={20} color={colors.primary} />
-          <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm }]}>
-            Coach Tip
+      <TouchableOpacity onPress={() => router.push('/(tabs)/coach')} activeOpacity={0.7}>
+        <Card style={{ marginBottom: spacing.base, backgroundColor: colors.primaryMuted }}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="bulb-outline" size={20} color={colors.primary} />
+            <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm, flex: 1 }]}>
+              Coach Tip
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          </View>
+          <Text style={[typography.body, { color: colors.text, marginTop: spacing.sm }]}>
+            Stay consistent with your workouts and nutrition tracking. Small daily habits lead to big results over time.
           </Text>
-        </View>
-        <Text style={[typography.body, { color: colors.text, marginTop: spacing.sm }]}>
-          Stay consistent with your workouts and nutrition tracking. Small daily habits lead to big results over time.
-        </Text>
-      </Card>
+          <Text style={[typography.bodySmall, { color: colors.primary, marginTop: spacing.sm }]}>
+            Ask Coach for personalized advice
+          </Text>
+        </Card>
+      </TouchableOpacity>
 
       {/* Quick Actions */}
       <View style={[styles.quickActions, { marginBottom: spacing.lg, gap: spacing.sm }]}>
@@ -139,6 +146,7 @@ export default function TodayTab() {
           </Text>
         </View>
       </View>
+      <CoachFAB context="general" />
     </ScreenContainer>
   );
 }

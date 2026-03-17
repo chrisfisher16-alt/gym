@@ -9,6 +9,7 @@ import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { useWorkoutStore } from '../../src/stores/workout-store';
 import { Button, Card, ScreenContainer, Badge } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume } from '../../src/lib/workout-utils';
+import { CoachFAB } from '../../src/components/CoachFAB';
 
 export default function WorkoutTab() {
   const router = useRouter();
@@ -257,6 +258,7 @@ export default function WorkoutTab() {
           ))
         )}
       </View>
+      <CoachFAB context="workout" label="Ask Coach" prefilledMessage="Help me with my workout" />
     </ScreenContainer>
   );
 }
