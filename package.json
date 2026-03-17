@@ -1,0 +1,21 @@
+{
+  "name": "health-coach-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile": "cd apps/mobile && npx expo start",
+    "admin": "cd apps/admin && npm run dev",
+    "mobile:ios": "cd apps/mobile && npx expo start --ios",
+    "mobile:android": "cd apps/mobile && npx expo start --android",
+    "admin:build": "cd apps/admin && npm run build",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
