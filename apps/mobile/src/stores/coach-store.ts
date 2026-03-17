@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { CoachContext, CoachTone } from '@health-coach/shared';
+import type { CoachContext } from '@health-coach/shared';
 import * as coachApi from '../lib/coach-api';
+import type { AIMessage } from '../lib/ai-provider';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -71,6 +72,18 @@ interface CoachState {
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Convert coach messages to AIMessage format for the provider.
+ */
+function toAIHistory(messages: CoachMessage[]): AIMessage[] {
+  return messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
 }
 
 // ── Store ───────────────────────────────────────────────────────────
@@ -144,30 +157,35 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     }));
 
     try {
-      // Call the API
+      // Build history from current conversation messages
+      const currentMessages = get().messages.filter(
+        (m) => m.conversation_id === conversation!.id,
+      );
+      // Exclude the just-added user message from history (it's the current input)
+      const historyMessages = currentMessages.slice(0, -1);
+      const aiHistory = toAIHistory(historyMessages);
+
+      // Call the API with conversation history
       const response = await coachApi.sendChatMessage(
         conversation.id,
         text,
         context ?? conversation.context,
+        aiHistory,
       );
 
       // Add assistant message
       const assistantMessage: CoachMessage = {
         id: response.message_id ?? generateId('msg'),
-        conversation_id: response.conversation_id ?? conversation.id,
+        conversation_id: conversation.id,
         role: 'assistant',
         content: response.content,
-        structured_content: response.structured_content,
-        tool_calls: response.tool_calls,
         model: response.model,
-        tokens_used: response.tokens?.total,
         created_at: new Date().toISOString(),
       };
 
       // Update conversation
       const updatedConversation: CoachConversation = {
         ...conversation,
-        id: response.conversation_id ?? conversation.id,
         last_message_at: new Date().toISOString(),
         message_count: (conversation.message_count ?? 0) + 2,
       };

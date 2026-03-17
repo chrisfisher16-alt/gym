@@ -9,13 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { useMealLog } from '../../src/hooks/useMealLog';
 import { Card, Button, Badge, ScreenContainer } from '../../src/components/ui';
-import { parseMealText } from '../../src/lib/meal-parser';
+import { analyzeMealText } from '../../src/lib/ai-meal-analyzer';
 import { calculateMealTotals, generateNutritionId } from '../../src/lib/nutrition-utils';
 import type { MealItemEntry, MealType } from '../../src/types/nutrition';
 
@@ -28,13 +29,19 @@ export default function TextLogScreen() {
   const [text, setText] = useState('');
   const [parsedItems, setParsedItems] = useState<MealItemEntry[] | null>(null);
   const [mealName, setMealName] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const handleParse = () => {
+  const handleParse = async () => {
     if (!text.trim()) return;
-    const result = parseMealText(text);
-    setParsedItems(result.items);
-    if (!mealName) {
-      setMealName(text.trim().substring(0, 40));
+    setIsAnalyzing(true);
+    try {
+      const items = await analyzeMealText(text);
+      setParsedItems(items);
+      if (!mealName) {
+        setMealName(text.trim().substring(0, 40));
+      }
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -130,12 +137,21 @@ export default function TextLogScreen() {
                 </Text>
               </View>
 
-              <Button
-                title="Parse Meal"
-                onPress={handleParse}
-                disabled={!text.trim()}
-                icon={<Ionicons name="sparkles-outline" size={20} color={colors.textInverse} />}
-              />
+              {isAnalyzing ? (
+                <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
+                    Analyzing your meal with AI...
+                  </Text>
+                </View>
+              ) : (
+                <Button
+                  title="Analyze with AI"
+                  onPress={handleParse}
+                  disabled={!text.trim()}
+                  icon={<Ionicons name="sparkles" size={20} color={colors.textInverse} />}
+                />
+              )}
             </>
           ) : (
             <>

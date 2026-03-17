@@ -26,6 +26,7 @@ const STORAGE_KEYS = {
   PROGRAMS: '@workout/programs',
   EXERCISES: '@workout/exercises',
   PERSONAL_RECORDS: '@workout/personal_records',
+  DEFAULT_REST_SECONDS: '@workout/default_rest_seconds',
 } as const;
 
 // ── State ───────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ interface WorkoutState {
   history: CompletedSession[];
   exercises: ExerciseLibraryEntry[];
   personalRecords: Record<string, PersonalRecord>;
+  defaultRestSeconds: number;
   isInitialized: boolean;
 
   // Actions - Initialization
@@ -78,13 +80,22 @@ interface WorkoutState {
   reorderExercises: (orderedIds: string[]) => void;
   setCurrentExerciseIndex: (index: number) => void;
 
+  // Actions - Exercise Replacement
+  replaceExercise: (exerciseInstanceId: string, newExercise: ExerciseLibraryEntry) => void;
+
+  // Actions - Timed Sets
+  logTimedSet: (exerciseInstanceId: string, setId: string, durationSeconds: number) => void;
+
   // Actions - Superset
   createSuperset: (exerciseInstanceIds: string[]) => void;
   removeSuperset: (exerciseInstanceId: string) => void;
+  createSupersetGroup: (exerciseInstanceIds: string[]) => void;
+  removeSupersetGroup: (groupId: string) => void;
 
   // Actions - Rest Timer
   startRestTimer: (durationSeconds: number) => void;
   clearRestTimer: () => void;
+  setDefaultRestSeconds: (seconds: number) => void;
 
   // Actions - Workout Completion
   completeWorkout: () => CompletedSession | null;
@@ -110,6 +121,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   history: [],
   exercises: [],
   personalRecords: {},
+  defaultRestSeconds: 90,
   isInitialized: false,
 
   // ── Initialize ──────────────────────────────────────────────────
@@ -122,12 +134,14 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         storedPrograms,
         storedExercises,
         storedRecords,
+        storedDefaultRest,
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION),
         AsyncStorage.getItem(STORAGE_KEYS.HISTORY),
         AsyncStorage.getItem(STORAGE_KEYS.PROGRAMS),
         AsyncStorage.getItem(STORAGE_KEYS.EXERCISES),
         AsyncStorage.getItem(STORAGE_KEYS.PERSONAL_RECORDS),
+        AsyncStorage.getItem(STORAGE_KEYS.DEFAULT_REST_SECONDS),
       ]);
 
       const baseExercises = [...EXERCISE_LIBRARY];
@@ -152,12 +166,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ? JSON.parse(storedSession)
         : null;
 
+      const defaultRestSeconds = storedDefaultRest
+        ? parseInt(storedDefaultRest, 10)
+        : 90;
+
       set({
         exercises: allExercises,
         programs,
         history,
         personalRecords,
         activeSession,
+        defaultRestSeconds: isNaN(defaultRestSeconds) ? 90 : defaultRestSeconds,
         isInitialized: true,
       });
 
@@ -226,21 +245,26 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       dayId,
       name,
       startedAt: new Date().toISOString(),
-      exercises: exercises.map((e, index) => ({
-        id: generateId('ae'),
-        exerciseId: e.exerciseId,
-        exerciseName: e.exerciseName,
-        sets: Array.from({ length: e.targetSets }, (_, i) => ({
-          id: generateId('set'),
-          setNumber: i + 1,
-          setType: 'working' as const,
-          isCompleted: false,
-          isPR: false,
-        })),
-        supersetGroupId: e.supersetGroupId,
-        isSkipped: false,
-        order: index,
-      })),
+      exercises: exercises.map((e, index) => {
+        const libExercise = get().exercises.find((ex) => ex.id === e.exerciseId);
+        return {
+          id: generateId('ae'),
+          exerciseId: e.exerciseId,
+          exerciseName: e.exerciseName,
+          sets: Array.from({ length: e.targetSets }, (_, i) => ({
+            id: generateId('set'),
+            setNumber: i + 1,
+            setType: 'working' as const,
+            isCompleted: false,
+            isPR: false,
+          })),
+          supersetGroupId: e.supersetGroupId,
+          isTimeBased: libExercise?.isTimeBased,
+          defaultDurationSeconds: libExercise?.defaultDurationSeconds,
+          isSkipped: false,
+          order: index,
+        };
+      }),
       currentExerciseIndex: 0,
       notes: '',
     };
@@ -389,7 +413,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
         const newSet: ActiveSet = {
           id: generateId('set'),
-          setNumber: exercise.sets.length + 1,
+          setNumber: 0, // will be renumbered below
           setType,
           isCompleted: false,
           isPR: false,
@@ -404,7 +428,27 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           newSet.reps = lastCompleted.reps;
         }
 
-        return { ...exercise, sets: [...exercise.sets, newSet] };
+        let updatedSets: ActiveSet[];
+        if (setType === 'warmup') {
+          // Insert warmup sets before working sets (after existing warmups)
+          const lastWarmupIndex = exercise.sets.reduce(
+            (acc, s, i) => (s.setType === 'warmup' ? i : acc),
+            -1,
+          );
+          const insertIndex = lastWarmupIndex + 1;
+          updatedSets = [
+            ...exercise.sets.slice(0, insertIndex),
+            newSet,
+            ...exercise.sets.slice(insertIndex),
+          ];
+        } else {
+          updatedSets = [...exercise.sets, newSet];
+        }
+
+        // Renumber all sets sequentially
+        updatedSets = updatedSets.map((s, i) => ({ ...s, setNumber: i + 1 }));
+
+        return { ...exercise, sets: updatedSets };
       });
 
       return {
@@ -431,6 +475,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           isCompleted: false,
           isPR: false,
         })),
+        isTimeBased: exercise.isTimeBased,
+        defaultDurationSeconds: exercise.defaultDurationSeconds,
         isSkipped: false,
         order: state.activeSession.exercises.length,
       };
@@ -467,6 +513,51 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const exercises = state.activeSession.exercises.map((e) =>
         e.id === exerciseInstanceId ? { ...e, isSkipped: true } : e,
       );
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  replaceExercise: (exerciseInstanceId, newExercise) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((e) => {
+        if (e.id !== exerciseInstanceId) return e;
+        return {
+          ...e,
+          exerciseId: newExercise.id,
+          exerciseName: newExercise.name,
+          isTimeBased: newExercise.isTimeBased,
+          defaultDurationSeconds: newExercise.defaultDurationSeconds,
+          // Keep existing sets data structure
+        };
+      });
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  logTimedSet: (exerciseInstanceId, setId, durationSeconds) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((exercise) => {
+        if (exercise.id !== exerciseInstanceId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((s) => {
+            if (s.id !== setId) return s;
+            return { ...s, durationSeconds };
+          }),
+        };
+      });
 
       return {
         activeSession: { ...state.activeSession, exercises },
@@ -549,6 +640,42 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     get().persistActiveSession();
   },
 
+  createSupersetGroup: (exerciseInstanceIds) => {
+    if (exerciseInstanceIds.length < 2 || exerciseInstanceIds.length > 3) return;
+    const groupId = generateId('ss');
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((e) =>
+        exerciseInstanceIds.includes(e.id)
+          ? { ...e, supersetGroupId: groupId }
+          : e,
+      );
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  removeSupersetGroup: (groupId) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((e) =>
+        e.supersetGroupId === groupId
+          ? { ...e, supersetGroupId: undefined }
+          : e,
+      );
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
   // ── Rest Timer ──────────────────────────────────────────────────
 
   startRestTimer: (durationSeconds) => {
@@ -578,6 +705,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         },
       };
     });
+  },
+
+  setDefaultRestSeconds: (seconds) => {
+    const clamped = Math.max(5, Math.min(600, seconds));
+    set({ defaultRestSeconds: clamped });
+    AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_REST_SECONDS, clamped.toString());
   },
 
   // ── Workout Completion ──────────────────────────────────────────

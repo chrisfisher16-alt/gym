@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { useExerciseLibrary } from '../../src/hooks/useExerciseLibrary';
 import { usePersonalRecords } from '../../src/hooks/usePersonalRecords';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
 import { Badge, Card, Button } from '../../src/components/ui';
-import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS } from '../../src/lib/exercise-data';
+import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import { getExerciseHistory } from '../../src/lib/workout-db';
 import { useWorkoutStore } from '../../src/stores/workout-store';
 import { formatFullDate, formatWeight } from '../../src/lib/workout-utils';
@@ -47,6 +47,11 @@ export default function ExerciseDetailScreen() {
     router.back();
   };
 
+  const handleWatchTutorial = () => {
+    const query = encodeURIComponent(`how to do ${exercise.name} proper form`);
+    Linking.openURL(`https://www.youtube.com/results?search_query=${query}`);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[styles.header, { paddingHorizontal: spacing.base }]}>
@@ -67,18 +72,66 @@ export default function ExerciseDetailScreen() {
           <Badge label={MUSCLE_GROUP_LABELS[exercise.category]} variant="info" />
           <Badge label={EQUIPMENT_LABELS[exercise.equipment]} variant="default" />
           {exercise.isCustom && <Badge label="Custom" variant="pro" />}
+          {exercise.isTimeBased && <Badge label="Timed" variant="default" />}
         </View>
 
-        {/* Muscles */}
+        {/* Exercise Illustration Placeholder */}
+        <Card style={{ marginBottom: spacing.base }}>
+          <View style={styles.illustrationPlaceholder}>
+            <View style={[styles.illustrationIcon, { backgroundColor: colors.primaryMuted }]}>
+              <Ionicons
+                name={(EQUIPMENT_ICONS[exercise.equipment] ?? 'barbell-outline') as keyof typeof Ionicons.glyphMap}
+                size={48}
+                color={colors.primary}
+              />
+            </View>
+            <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.sm }]}>
+              {exercise.name}
+            </Text>
+          </View>
+        </Card>
+
+        {/* Primary Muscles Visual */}
         <Card style={{ marginBottom: spacing.base }}>
           <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>Muscles</Text>
-          <Text style={[typography.body, { color: colors.text }]}>
-            Primary: {exercise.primaryMuscles.join(', ')}
-          </Text>
+          <View style={styles.muscleChips}>
+            {exercise.primaryMuscles.map((muscle) => (
+              <View
+                key={muscle}
+                style={[
+                  styles.muscleChip,
+                  {
+                    backgroundColor: colors.primaryMuted,
+                    borderRadius: radius.full,
+                  },
+                ]}
+              >
+                <Ionicons name="fitness" size={12} color={colors.primary} />
+                <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: 4 }]}>
+                  {muscle}
+                </Text>
+              </View>
+            ))}
+          </View>
           {exercise.secondaryMuscles.length > 0 && (
-            <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-              Secondary: {exercise.secondaryMuscles.join(', ')}
-            </Text>
+            <View style={[styles.muscleChips, { marginTop: spacing.xs }]}>
+              {exercise.secondaryMuscles.map((muscle) => (
+                <View
+                  key={muscle}
+                  style={[
+                    styles.muscleChip,
+                    {
+                      backgroundColor: colors.surfaceSecondary,
+                      borderRadius: radius.full,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>
+                    {muscle}
+                  </Text>
+                </View>
+              ))}
+            </View>
           )}
         </Card>
 
@@ -167,14 +220,24 @@ export default function ExerciseDetailScreen() {
           </Card>
         )}
 
-        {/* Media placeholder */}
+        {/* Watch Tutorial */}
         <Card style={{ marginBottom: spacing.base }}>
-          <View style={styles.mediaPlaceholder}>
-            <Ionicons name="videocam-outline" size={40} color={colors.textTertiary} />
-            <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.sm }]}>
-              Exercise demo coming soon
-            </Text>
-          </View>
+          <TouchableOpacity
+            onPress={handleWatchTutorial}
+            style={styles.tutorialButton}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.youtubeIcon, { backgroundColor: '#FF0000' }]}>
+              <Ionicons name="logo-youtube" size={24} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={[typography.label, { color: colors.text }]}>Watch Tutorial</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Search YouTube for proper form
+              </Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
         </Card>
       </ScrollView>
 
@@ -230,10 +293,39 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     marginBottom: 4,
   },
-  mediaPlaceholder: {
+  illustrationPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 32,
+    paddingVertical: 24,
+  },
+  illustrationIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  muscleChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  muscleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  tutorialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  youtubeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fab: {
     position: 'absolute',

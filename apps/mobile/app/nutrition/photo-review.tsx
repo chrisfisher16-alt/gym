@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,24 +9,17 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { useMealLog } from '../../src/hooks/useMealLog';
 import { Card, Button, Badge } from '../../src/components/ui';
+import { analyzePhotoMeal } from '../../src/lib/ai-meal-analyzer';
 import { calculateMealTotals, generateNutritionId } from '../../src/lib/nutrition-utils';
 import type { MealItemEntry, MealType } from '../../src/types/nutrition';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// Simulated photo analysis results — will be replaced by AI in Phase 4
-function generateMockPhotoItems(): MealItemEntry[] {
-  return [
-    { id: generateNutritionId('mi'), name: 'Grilled Chicken', calories: 248, protein_g: 46, carbs_g: 0, fat_g: 5.4, fiber_g: 0, quantity: 1, unit: 'serving', is_estimate: true },
-    { id: generateNutritionId('mi'), name: 'White Rice', calories: 206, protein_g: 4.3, carbs_g: 45, fat_g: 0.4, fiber_g: 0.6, quantity: 1, unit: 'cup', is_estimate: true },
-    { id: generateNutritionId('mi'), name: 'Mixed Vegetables', calories: 45, protein_g: 2, carbs_g: 8, fat_g: 0.5, fiber_g: 3, quantity: 1, unit: 'cup', is_estimate: true },
-  ];
-}
 
 export default function PhotoReviewScreen() {
   const router = useRouter();
@@ -34,8 +27,20 @@ export default function PhotoReviewScreen() {
   const { colors, spacing, radius, typography } = useTheme();
   const { logMeal } = useMealLog();
 
-  const [items, setItems] = useState<MealItemEntry[]>(generateMockPhotoItems());
+  const [items, setItems] = useState<MealItemEntry[]>([]);
   const [mealName, setMealName] = useState('Photo Meal');
+  const [isAnalyzing, setIsAnalyzing] = useState(true);
+
+  useEffect(() => {
+    if (!imageUri) {
+      setIsAnalyzing(false);
+      return;
+    }
+    const decodedUri = decodeURIComponent(imageUri);
+    analyzePhotoMeal(decodedUri)
+      .then((result) => setItems(result))
+      .finally(() => setIsAnalyzing(false));
+  }, [imageUri]);
 
   const updateItem = (itemId: string, field: keyof MealItemEntry, value: string) => {
     setItems(
@@ -119,13 +124,22 @@ export default function PhotoReviewScreen() {
             />
           )}
 
-          {/* Estimate Warning */}
-          <View style={[styles.warning, { backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.base }]}>
-            <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
-            <Text style={[typography.bodySmall, { color: colors.warning, marginLeft: spacing.sm, flex: 1 }]}>
-              Estimated values — please review and adjust before saving
-            </Text>
-          </View>
+          {/* Loading / Estimate Warning */}
+          {isAnalyzing ? (
+            <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
+                Analyzing your meal...
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.warning, { backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.base }]}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
+              <Text style={[typography.bodySmall, { color: colors.warning, marginLeft: spacing.sm, flex: 1 }]}>
+                Estimated values — please review and adjust before saving
+              </Text>
+            </View>
+          )}
 
           {/* Meal Name */}
           <TextInput

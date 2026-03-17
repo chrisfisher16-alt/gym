@@ -18,6 +18,7 @@ import {
   ErrorState,
 } from '../../src/components/ui';
 import { CoachFAB } from '../../src/components/CoachFAB';
+import { InNutritionCoach } from '../../src/components/InNutritionCoach';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
 import { UpgradeBanner } from '../../src/components/UpgradeBanner';
@@ -55,6 +56,7 @@ export default function NutritionTab() {
   const { waterIntake, waterTarget, glasses, targetGlasses, addGlass } = useWaterTracking();
   const { activeSupplements, isSupplementTaken, logSupplement, unlogSupplement } = useSupplements();
   const [showSupplements, setShowSupplements] = useState(false);
+  const [showNutritionCoach, setShowNutritionCoach] = useState(false);
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
   const [mealUsage, setMealUsage] = useState<UsageCheck | null>(null);
@@ -421,8 +423,38 @@ export default function NutritionTab() {
         )}
       </View>
 
-      {/* Ask Coach */}
-      <CoachFAB context="nutrition" label="Ask Coach" prefilledMessage="Help with my nutrition" />
+      {/* Ask Nutrition Coach (inline) */}
+      <TouchableOpacity
+        onPress={() => setShowNutritionCoach(true)}
+        activeOpacity={0.8}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          alignSelf: 'flex-start',
+          backgroundColor: colors.primary,
+          borderRadius: 20,
+          paddingHorizontal: spacing.base,
+          paddingVertical: spacing.sm,
+        }}
+      >
+        <Ionicons name="chatbubble-ellipses" size={18} color={colors.textInverse} />
+        <Text
+          style={{
+            color: colors.textInverse,
+            fontSize: 13,
+            fontWeight: '600',
+            marginLeft: spacing.xs,
+          }}
+        >
+          Ask Coach
+        </Text>
+      </TouchableOpacity>
+
+      {/* Inline Nutrition Coach */}
+      <InNutritionCoach
+        visible={showNutritionCoach}
+        onClose={() => setShowNutritionCoach(false)}
+      />
 
       {/* Spacer for FAB */}
       <View style={{ height: 80 }} />

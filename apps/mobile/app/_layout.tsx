@@ -66,10 +66,12 @@ export default function RootLayout() {
         <Stack.Screen name="workout" />
         <Stack.Screen name="nutrition" />
         <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings', presentation: 'modal' }} />
+        <Stack.Screen name="profile" options={{ headerShown: true, title: 'Profile', presentation: 'modal' }} />
         <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications', presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="health-connect" options={{ headerShown: true, title: 'Connect Health', presentation: 'modal' }} />
         <Stack.Screen name="health-settings" options={{ headerShown: true, title: 'Health Integrations', presentation: 'modal' }} />
+        <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI Settings', presentation: 'modal' }} />
         <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy', presentation: 'modal' }} />
         <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal' }} />
       </Stack>

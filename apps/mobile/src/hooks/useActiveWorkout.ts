@@ -25,8 +25,14 @@ export function useActiveWorkout() {
   const cancelWorkout = useWorkoutStore((s) => s.cancelWorkout);
   const createSuperset = useWorkoutStore((s) => s.createSuperset);
   const removeSuperset = useWorkoutStore((s) => s.removeSuperset);
+  const createSupersetGroup = useWorkoutStore((s) => s.createSupersetGroup);
+  const removeSupersetGroup = useWorkoutStore((s) => s.removeSupersetGroup);
+  const replaceExercise = useWorkoutStore((s) => s.replaceExercise);
+  const logTimedSet = useWorkoutStore((s) => s.logTimedSet);
   const startRestTimer = useWorkoutStore((s) => s.startRestTimer);
   const clearRestTimer = useWorkoutStore((s) => s.clearRestTimer);
+  const defaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
+  const setDefaultRestSeconds = useWorkoutStore((s) => s.setDefaultRestSeconds);
   const updateSessionNotes = useWorkoutStore((s) => s.updateSessionNotes);
   const updateSessionMood = useWorkoutStore((s) => s.updateSessionMood);
   const updateSessionName = useWorkoutStore((s) => s.updateSessionName);
@@ -153,9 +159,19 @@ export function useActiveWorkout() {
     // Superset
     createSuperset,
     removeSuperset,
+    createSupersetGroup,
+    removeSupersetGroup,
+
+    // Exercise replacement
+    replaceExercise,
+
+    // Timed sets
+    logTimedSet,
 
     // Rest timer
     startRestTimer,
     clearRestTimer,
+    defaultRestSeconds,
+    setDefaultRestSeconds,
   };
 }

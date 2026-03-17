@@ -29,7 +29,10 @@ export interface ExerciseLibraryEntry {
   secondaryMuscles: string[];
   equipment: Equipment;
   instructions: string[];
+  tips?: string[];
   isCustom: boolean;
+  isTimeBased?: boolean;
+  defaultDurationSeconds?: number;
   defaultSets: number;
   defaultReps: string; // e.g. "8-12"
   defaultRestSeconds: number;
@@ -86,6 +89,7 @@ export interface ActiveWorkoutSession {
   currentExerciseIndex: number;
   notes: string;
   mood?: number; // 1-5
+  defaultRestSeconds?: number;
 }
 
 export interface ActiveExercise {
@@ -94,6 +98,8 @@ export interface ActiveExercise {
   exerciseName: string;
   sets: ActiveSet[];
   supersetGroupId?: string;
+  isTimeBased?: boolean;
+  defaultDurationSeconds?: number;
   isSkipped: boolean;
   order: number;
   notes?: string;
@@ -105,6 +111,7 @@ export interface ActiveSet {
   setType: SetType;
   weight?: number; // in user's preferred unit (lbs or kg)
   reps?: number;
+  durationSeconds?: number; // for time-based exercises
   rpe?: number; // 6-10
   isCompleted: boolean;
   isPR: boolean;
@@ -142,6 +149,7 @@ export interface CompletedSet {
   setType: SetType;
   weight?: number;
   reps?: number;
+  durationSeconds?: number; // for time-based exercises
   rpe?: number;
   isPR: boolean;
   completedAt: string;
@@ -158,9 +166,12 @@ export interface PersonalRecord {
 
 // ── Superset ────────────────────────────────────────────────────────
 
+export type SupersetLabel = 'Superset' | 'Tri-Set';
+
 export interface SupersetGroup {
   id: string;
-  exerciseIds: string[]; // active exercise instance ids
+  exerciseIds: string[]; // active exercise instance ids (2-3)
+  label: SupersetLabel;
 }
 
 // ── Suggested Load ──────────────────────────────────────────────────

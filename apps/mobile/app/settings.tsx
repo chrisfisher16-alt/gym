@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
 import { Card, ScreenContainer, Badge, Divider } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/auth-store';
+import { useProfileStore } from '../src/stores/profile-store';
 import { useNotificationStore } from '../src/stores/notification-store';
 import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useEntitlement } from '../src/hooks/useEntitlement';
@@ -18,6 +19,7 @@ export default function SettingsScreen() {
   const logoutSubscription = useSubscriptionStore((s) => s.logout);
   const notificationStatus = useNotificationStore((s) => s.preferences.permissionStatus);
   const { tier, tierName, isSubscribed, isTrial } = useEntitlement();
+  const profileData = useProfileStore((s) => s.profile);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -37,27 +39,54 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer edges={[]}>
       {/* Profile Section */}
-      <Card style={{ marginTop: spacing.base, marginBottom: spacing.base }}>
-        <View style={styles.profileRow}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: colors.primaryMuted, borderRadius: radius.full },
-            ]}
-          >
-            <Ionicons name="person" size={28} color={colors.primary} />
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => router.push('/profile')}
+      >
+        <Card style={{ marginTop: spacing.base, marginBottom: spacing.base }}>
+          <View style={styles.profileRow}>
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: colors.primaryMuted, borderRadius: radius.full },
+              ]}
+            >
+              <Ionicons name="person" size={28} color={colors.primary} />
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={[typography.h3, { color: colors.text }]}>
+                {profile?.display_name ?? 'User'}
+              </Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                {user?.email ?? ''}
+              </Text>
+              {(profileData.heightCm || profileData.weightKg) && (
+                <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: 2 }]}>
+                  {[
+                    profileData.heightCm
+                      ? profileData.unitPreference === 'imperial'
+                        ? `${Math.floor(profileData.heightCm / 2.54 / 12)}' ${Math.round(profileData.heightCm / 2.54 % 12)}"`
+                        : `${profileData.heightCm} cm`
+                      : null,
+                    profileData.weightKg
+                      ? profileData.unitPreference === 'imperial'
+                        ? `${Math.round(profileData.weightKg * 2.205)} lbs`
+                        : `${profileData.weightKg} kg`
+                      : null,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+              )}
+            </View>
+            <Badge label={tierName} variant={isSubscribed ? 'pro' : 'default'} />
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.textTertiary}
+              style={{ marginLeft: spacing.sm }}
+            />
           </View>
-          <View style={styles.profileInfo}>
-            <Text style={[typography.h3, { color: colors.text }]}>
-              {profile?.display_name ?? 'User'}
-            </Text>
-            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-              {user?.email ?? ''}
-            </Text>
-          </View>
-          <Badge label={tierName} variant={isSubscribed ? 'pro' : 'default'} />
-        </View>
-      </Card>
+        </Card>
+      </TouchableOpacity>
 
       {/* Preferences */}
       <Text style={[typography.labelSmall, { color: colors.textTertiary, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
@@ -170,6 +199,17 @@ export default function SettingsScreen() {
           spacing={spacing}
           showChevron
           onPress={() => router.push('/health-settings')}
+        />
+        <Divider />
+        <SettingRow
+          icon="hardware-chip-outline"
+          label="AI Settings"
+          value="Configure coach AI"
+          colors={colors}
+          typography={typography}
+          spacing={spacing}
+          showChevron
+          onPress={() => router.push('/ai-settings')}
         />
         <Divider />
         <SettingRow
