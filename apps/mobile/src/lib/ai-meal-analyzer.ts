@@ -1,4 +1,5 @@
 import { readAsStringAsync } from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 import { getAIConfig, getProviderDefaults } from './ai-provider';
 import { parseMealText } from './meal-parser';
 import { generateNutritionId } from './nutrition-utils';
@@ -23,6 +24,15 @@ interface RawAIItem {
   fiber_g?: number;
   quantity?: number;
   unit?: string;
+}
+
+const CLAUDE_WEB_PROXY_URL = 'http://localhost:3001/api/anthropic';
+
+function getClaudeUrl(configBaseUrl: string, defaultBaseUrl: string): string {
+  if (Platform.OS === 'web') {
+    return CLAUDE_WEB_PROXY_URL;
+  }
+  return configBaseUrl || defaultBaseUrl;
 }
 
 function parseAIResponse(text: string): MealItemEntry[] {
@@ -68,7 +78,7 @@ export async function analyzeMealText(description: string): Promise<MealItemEntr
   try {
     const config = await getAIConfig();
     const defaults = getProviderDefaults('claude');
-    const baseUrl = config.baseUrl || defaults.baseUrl;
+    const baseUrl = getClaudeUrl(config.baseUrl || '', defaults.baseUrl);
     const model = config.model || defaults.model;
 
     const response = await fetch(baseUrl, {
@@ -117,7 +127,7 @@ export async function analyzePhotoMeal(imageUri: string): Promise<MealItemEntry[
 
     const config = await getAIConfig();
     const defaults = getProviderDefaults('claude');
-    const baseUrl = config.baseUrl || defaults.baseUrl;
+    const baseUrl = getClaudeUrl(config.baseUrl || '', defaults.baseUrl);
     const model = config.model || defaults.model;
 
     const response = await fetch(baseUrl, {

@@ -1185,18 +1185,13 @@ export default function ActiveWorkoutScreen() {
   const [editingRest, setEditingRest] = useState(false);
   const [restInput, setRestInput] = useState('');
 
-  useEffect(() => {
-    if (!isActive && !showSummary) {
-      router.replace('/(tabs)/workout');
-    }
-  }, [isActive, showSummary, router]);
-
   const doFinish = () => {
+    setShowSummary(true);  // Set FIRST to prevent premature navigation
     const result = completeWorkout();
     if (result) {
       setCompletedSession(result);
-      setShowSummary(true);
     } else {
+      setShowSummary(false);
       router.replace('/(tabs)/workout');
     }
   };
@@ -1256,6 +1251,43 @@ export default function ActiveWorkoutScreen() {
   };
 
   const [showCoach, setShowCoach] = useState(false);
+  const exerciseLibrary = useWorkoutStore((s) => s.exercises);
+  const addSet = useWorkoutStore((s) => s.addSet);
+  const removeSet = useWorkoutStore((s) => s.removeSet);
+
+  const handleCoachReplaceExercise = useCallback(
+    (exerciseInstanceId: string, newExerciseName: string) => {
+      const libEntry = exerciseLibrary.find(
+        (e) => e.name.toLowerCase() === newExerciseName.toLowerCase(),
+      );
+      if (libEntry) {
+        replaceExercise(exerciseInstanceId, libEntry);
+      }
+    },
+    [exerciseLibrary, replaceExercise],
+  );
+
+  const handleCoachAdjustSets = useCallback(
+    (exerciseInstanceId: string, targetSets?: number, _reps?: string) => {
+      if (!activeSession || targetSets == null) return;
+      const exercise = activeSession.exercises.find((e) => e.id === exerciseInstanceId);
+      if (!exercise) return;
+      const currentSets = exercise.sets.length;
+      if (targetSets > currentSets) {
+        for (let i = 0; i < targetSets - currentSets; i++) {
+          addSet(exerciseInstanceId, 'working');
+        }
+      } else if (targetSets < currentSets) {
+        // Remove from the end (uncompleted sets first)
+        const uncompleted = [...exercise.sets].reverse().filter((s) => !s.isCompleted);
+        const toRemove = Math.min(currentSets - targetSets, uncompleted.length);
+        for (let i = 0; i < toRemove; i++) {
+          removeSet(exerciseInstanceId, uncompleted[i].id);
+        }
+      }
+    },
+    [activeSession, addSet, removeSet],
+  );
 
   const handleAddExercise = () => {
     router.push('/workout/exercises');
@@ -1299,6 +1331,13 @@ export default function ActiveWorkoutScreen() {
     },
     [activeSession, reorderExercises],
   );
+
+  // Redirect if no active session and not showing summary
+  useEffect(() => {
+    if (!activeSession && !showSummary) {
+      router.replace('/(tabs)/workout');
+    }
+  }, [activeSession, showSummary, router]);
 
   if (!activeSession) {
     // Show summary modal even after activeSession is cleared
@@ -1624,9 +1663,10 @@ export default function ActiveWorkoutScreen() {
         <InWorkoutCoach
           visible={showCoach}
           onClose={() => setShowCoach(false)}
-          exerciseName={
-            activeSession.exercises[activeSession.currentExerciseIndex]?.exerciseName
-          }
+          activeSession={activeSession}
+          exerciseLibrary={exerciseLibrary}
+          onReplaceExercise={handleCoachReplaceExercise}
+          onAdjustSets={handleCoachAdjustSets}
         />
 
         {/* Superset Selection Modal */}

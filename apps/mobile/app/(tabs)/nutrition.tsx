@@ -1,8 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Dimensions, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
+
+import { useToast } from '../../src/components/Toast';
+
+// Lazy-load haptics (crashes on web)
+let Haptics: typeof import('expo-haptics') | null = null;
+if (Platform.OS !== 'web') {
+  try { Haptics = require('expo-haptics'); } catch {}
+}
 import { useNutritionStore } from '../../src/stores/nutrition-store';
 import { useNutritionDashboard } from '../../src/hooks/useNutritionDashboard';
 import { useWaterTracking } from '../../src/hooks/useWaterTracking';
@@ -12,10 +20,10 @@ import {
   Card,
   ScreenContainer,
   MacroBar,
-  ProgressBar,
   Badge,
   LoadingSpinner,
   ErrorState,
+  EmptyState,
 } from '../../src/components/ui';
 import { CoachFAB } from '../../src/components/CoachFAB';
 import { InNutritionCoach } from '../../src/components/InNutritionCoach';
@@ -53,10 +61,13 @@ export default function NutritionTab() {
     meals,
     supplementsTaken,
   } = useNutritionDashboard();
-  const { waterIntake, waterTarget, glasses, targetGlasses, addGlass } = useWaterTracking();
+  const { waterIntake, waterTarget, glasses, targetGlasses, addGlass, add8oz, add16oz, addCustom } = useWaterTracking();
+  const [showCustomWater, setShowCustomWater] = useState(false);
+  const [customWaterAmount, setCustomWaterAmount] = useState('');
   const { activeSupplements, isSupplementTaken, logSupplement, unlogSupplement } = useSupplements();
   const [showSupplements, setShowSupplements] = useState(false);
   const [showNutritionCoach, setShowNutritionCoach] = useState(false);
+  const { showToast } = useToast();
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
   const [mealUsage, setMealUsage] = useState<UsageCheck | null>(null);
@@ -215,41 +226,179 @@ export default function NutritionTab() {
         </View>
       </Card>
 
-      {/* Water Tracker */}
+      {/* Hydration Tracker */}
       <Card style={{ marginBottom: spacing.base }}>
         <View style={styles.waterHeader}>
           <View style={styles.waterLeft}>
-            <Ionicons name="water-outline" size={20} color={colors.info} />
+            <Ionicons name="water" size={20} color="#3B82F6" />
             <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm }]}>
-              Water
+              Hydration
             </Text>
           </View>
           <Text style={[typography.body, { color: colors.textSecondary }]}>
             {glasses}/{targetGlasses} glasses
           </Text>
         </View>
-        <ProgressBar
-          progress={Math.min(waterIntake / waterTarget, 1)}
-          color={colors.info}
-          height={8}
-          style={{ marginTop: spacing.sm, marginBottom: spacing.md }}
-        />
-        <View style={styles.waterActions}>
-          <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
-            {waterIntake}ml / {waterTarget}ml
-          </Text>
+
+        {/* Water Progress Ring */}
+        <View style={styles.waterRingContainer}>
+          <View style={[styles.waterRing, { width: 100, height: 100 }]}>
+            <View
+              style={[
+                styles.waterRingTrack,
+                {
+                  width: 100,
+                  height: 100,
+                  borderRadius: 50,
+                  borderWidth: 8,
+                  borderColor: colors.surfaceSecondary,
+                },
+              ]}
+            />
+            {(() => {
+              const waterProgress = Math.min(waterIntake / waterTarget, 1);
+              return (
+                <View
+                  style={[
+                    styles.waterRingProgress,
+                    {
+                      width: 100,
+                      height: 100,
+                      borderRadius: 50,
+                      borderWidth: 8,
+                      borderColor: waterProgress >= 1 ? '#22C55E' : '#3B82F6',
+                      borderTopColor: waterProgress >= 0.25 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
+                      borderRightColor: waterProgress >= 0.5 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
+                      borderBottomColor: waterProgress >= 0.75 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
+                      borderLeftColor: waterProgress > 0 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
+                      transform: [{ rotate: '-90deg' }],
+                    },
+                  ]}
+                />
+              );
+            })()}
+            <View style={styles.waterRingCenter}>
+              <Ionicons name="water" size={18} color="#3B82F6" />
+              <Text style={[typography.labelSmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                {Math.round((waterIntake / waterTarget) * 100)}%
+              </Text>
+            </View>
+          </View>
+          <View style={{ marginLeft: spacing.lg, flex: 1 }}>
+            <Text style={[typography.h2, { color: colors.text }]}>
+              {waterIntake}ml
+            </Text>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+              of {waterTarget}ml goal
+            </Text>
+            <Text style={[typography.caption, { color: colors.textTertiary, marginTop: 4 }]}>
+              {Math.round(waterIntake / 29.574)}oz / {Math.round(waterTarget / 29.574)}oz
+            </Text>
+          </View>
+        </View>
+
+        {/* Quick-Add Buttons */}
+        <View style={[styles.waterQuickActions, { marginTop: spacing.md }]}>
           <TouchableOpacity
-            style={[styles.waterButton, { backgroundColor: colors.infoLight, borderRadius: radius.md }]}
-            onPress={addGlass}
+            style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
+            onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add8oz(); showToast('+8oz water logged', 'info', 1500); }}
             activeOpacity={0.7}
           >
-            <Ionicons name="add" size={18} color={colors.info} />
-            <Text style={[typography.label, { color: colors.info, marginLeft: 4 }]}>
-              Glass
-            </Text>
+            <Ionicons name="water-outline" size={16} color="#3B82F6" />
+            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 4 }]}>8oz</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
+            onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add16oz(); showToast('+16oz water logged', 'info', 1500); }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="water" size={16} color="#3B82F6" />
+            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 4 }]}>16oz</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
+            onPress={() => setShowCustomWater(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="pencil-outline" size={16} color="#3B82F6" />
+            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 4 }]}>Custom</Text>
           </TouchableOpacity>
         </View>
       </Card>
+
+      {/* Custom Water Modal */}
+      <Modal
+        visible={showCustomWater}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCustomWater(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCustomWater(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={[styles.customWaterModal, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
+              <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
+                Add Water
+              </Text>
+              <TextInput
+                style={[
+                  styles.customWaterInput,
+                  {
+                    backgroundColor: colors.surfaceSecondary,
+                    borderRadius: radius.md,
+                    color: colors.text,
+                    ...typography.h2,
+                  },
+                ]}
+                value={customWaterAmount}
+                onChangeText={setCustomWaterAmount}
+                keyboardType="numeric"
+                placeholder="Amount in ml"
+                placeholderTextColor={colors.textTertiary}
+                autoFocus
+              />
+              <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>
+                {customWaterAmount ? `${Math.round(parseInt(customWaterAmount) / 29.574)}oz` : 'Enter amount in milliliters'}
+              </Text>
+              <View style={[styles.customWaterButtons, { marginTop: spacing.lg }]}>
+                <TouchableOpacity
+                  style={[styles.customWaterCancel, { borderRadius: radius.md }]}
+                  onPress={() => {
+                    setShowCustomWater(false);
+                    setCustomWaterAmount('');
+                  }}
+                >
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.customWaterConfirm,
+                    {
+                      backgroundColor: '#3B82F6',
+                      borderRadius: radius.md,
+                      opacity: customWaterAmount && parseInt(customWaterAmount) > 0 ? 1 : 0.5,
+                    },
+                  ]}
+                  onPress={() => {
+                    const ml = parseInt(customWaterAmount);
+                    if (ml > 0) {
+                      addCustom(ml);
+                      setShowCustomWater(false);
+                      setCustomWaterAmount('');
+                    }
+                  }}
+                  disabled={!customWaterAmount || parseInt(customWaterAmount) <= 0}
+                >
+                  <Text style={[typography.label, { color: '#FFFFFF' }]}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Today's Meals */}
       <View style={{ marginBottom: spacing.base }}>
@@ -264,12 +413,13 @@ export default function NutritionTab() {
 
         {meals.length === 0 ? (
           <Card>
-            <View style={styles.emptyMeals}>
-              <Ionicons name="restaurant-outline" size={32} color={colors.textTertiary} />
-              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>
-                No meals logged yet
-              </Text>
-            </View>
+            <EmptyState
+              icon="restaurant-outline"
+              title="No Meals Logged"
+              description={formatDateDisplay(selectedDate) === 'Today' ? 'Start tracking your nutrition by logging your first meal.' : 'No meals were logged on this day.'}
+              actionLabel={formatDateDisplay(selectedDate) === 'Today' ? 'Log Your First Meal' : undefined}
+              onAction={formatDateDisplay(selectedDate) === 'Today' ? handleLogMeal : undefined}
+            />
           </Card>
         ) : (
           meals
@@ -359,7 +509,7 @@ export default function NutritionTab() {
                         marginBottom: spacing.md,
                       },
                     ]}
-                    onPress={() => taken ? unlogSupplement(supp.id) : logSupplement(supp.id)}
+                    onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); taken ? unlogSupplement(supp.id) : logSupplement(supp.id); }}
                     activeOpacity={0.7}
                   >
                     <Ionicons
@@ -410,6 +560,14 @@ export default function NutritionTab() {
         >
           <Ionicons name="book-outline" size={24} color={colors.primary} />
           <Text style={[typography.label, { color: colors.text, marginTop: spacing.xs }]}>Recipes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.quickLink, { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderLight }]}
+          onPress={() => router.push('/nutrition/grocery-list')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="cart-outline" size={24} color={colors.primary} />
+          <Text style={[typography.label, { color: colors.text, marginTop: spacing.xs }]}>Grocery List</Text>
         </TouchableOpacity>
         {activeSupplements.length === 0 && (
           <TouchableOpacity
@@ -462,7 +620,7 @@ export default function NutritionTab() {
       {/* FAB - Log Meal */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary, bottom: spacing['2xl'] }]}
-        onPress={handleLogMeal}
+        onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Medium); handleLogMeal(); }}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color={colors.textInverse} />
@@ -515,16 +673,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  waterActions: {
+
+  waterRingContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  waterRing: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waterRingTrack: {
+    position: 'absolute',
+  },
+  waterRingProgress: {
+    position: 'absolute',
+  },
+  waterRingCenter: {
     alignItems: 'center',
   },
-  waterButton: {
+  waterQuickActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  waterQuickButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customWaterModal: {
+    width: 300,
+    padding: 24,
+  },
+  customWaterInput: {
+    textAlign: 'center',
+    paddingVertical: 12,
+    minHeight: 52,
+  },
+  customWaterButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  customWaterCancel: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  customWaterConfirm: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
   },
   sectionHeader: {
     flexDirection: 'row',

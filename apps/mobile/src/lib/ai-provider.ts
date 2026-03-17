@@ -2,6 +2,7 @@
 // Supports multiple LLM providers from the mobile app directly.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -82,6 +83,17 @@ export function getProviderDefaults(provider: string): { baseUrl: string; model:
   return PROVIDER_DEFAULTS[provider] ?? PROVIDER_DEFAULTS.openai;
 }
 
+// ── Web CORS Proxy ──────────────────────────────────────────────────
+
+const CLAUDE_WEB_PROXY_URL = 'http://localhost:3001/api/anthropic';
+
+function getClaudeBaseUrl(configBaseUrl?: string): string {
+  if (Platform.OS === 'web') {
+    return CLAUDE_WEB_PROXY_URL;
+  }
+  return configBaseUrl || PROVIDER_DEFAULTS.claude.baseUrl;
+}
+
 // ── OpenAI-Compatible API Call ───────────────────────────────────────
 
 export async function callOpenAICompatible(
@@ -149,7 +161,7 @@ export async function callClaudeAPI(
   config: AIConfig,
 ): Promise<AIProviderResponse> {
   const defaults = getProviderDefaults('claude');
-  const baseUrl = config.baseUrl || defaults.baseUrl;
+  const baseUrl = getClaudeBaseUrl(config.baseUrl);
   const model = config.model || defaults.model;
 
   // Extract system message (Anthropic API uses a top-level `system` field)

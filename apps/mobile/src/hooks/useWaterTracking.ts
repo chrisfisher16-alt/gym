@@ -1,7 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useNutritionStore } from '../stores/nutrition-store';
 
+let Haptics: typeof import('expo-haptics') | null = null;
+try { Haptics = require('expo-haptics'); } catch {}
+
 const GLASS_ML = 250;
+const OZ_8_ML = 237;
+const OZ_16_ML = 473;
 
 export function useWaterTracking() {
   const logWater = useNutritionStore((s) => s.logWater);
@@ -25,9 +30,34 @@ export function useWaterTracking() {
 
   const progress = waterTarget > 0 ? waterIntake / waterTarget : 0;
 
-  const addGlass = () => logWater(GLASS_ML);
-  const removeGlass = () => setWater(Math.max(0, waterIntake - GLASS_ML));
-  const addCustom = (ml: number) => logWater(ml);
+  const hapticFeedback = useCallback(() => {
+    Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const addGlass = useCallback(() => {
+    logWater(GLASS_ML);
+    hapticFeedback();
+  }, [logWater, hapticFeedback]);
+
+  const add8oz = useCallback(() => {
+    logWater(OZ_8_ML);
+    hapticFeedback();
+  }, [logWater, hapticFeedback]);
+
+  const add16oz = useCallback(() => {
+    logWater(OZ_16_ML);
+    hapticFeedback();
+  }, [logWater, hapticFeedback]);
+
+  const addCustom = useCallback((ml: number) => {
+    logWater(ml);
+    hapticFeedback();
+  }, [logWater, hapticFeedback]);
+
+  const removeGlass = useCallback(() => {
+    setWater(Math.max(0, waterIntake - GLASS_ML));
+    hapticFeedback();
+  }, [setWater, waterIntake, hapticFeedback]);
 
   return {
     waterIntake,
@@ -36,8 +66,12 @@ export function useWaterTracking() {
     targetGlasses,
     progress,
     addGlass,
+    add8oz,
+    add16oz,
     removeGlass,
     addCustom,
     GLASS_ML,
+    OZ_8_ML,
+    OZ_16_ML,
   };
 }

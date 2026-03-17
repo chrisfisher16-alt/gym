@@ -14,48 +14,139 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { sendWorkoutQuickMessage } from '../lib/coach-api';
+import {
+  requestExerciseAdjustment,
+  type ExerciseAdjustment,
+} from '../lib/coach-api';
+import type { ActiveWorkoutSession, ExerciseLibraryEntry } from '../types/workout';
+
+// ── Types ──────────────────────────────────────────────────────────────
 
 interface InWorkoutCoachProps {
   visible: boolean;
   onClose: () => void;
+  /** @deprecated Pass activeSession instead for full context. */
   exerciseName?: string;
+  /** The full active workout session – enables exercise adjustment features. */
+  activeSession?: ActiveWorkoutSession | null;
+  /** Available exercises from the library (needed for AI-powered replacements). */
+  exerciseLibrary?: ExerciseLibraryEntry[];
+  /** Called when the user applies an AI-suggested exercise replacement. */
+  onReplaceExercise?: (exerciseInstanceId: string, newExerciseName: string) => void;
+  /** Called when the user applies an AI-suggested set/rep adjustment. */
+  onAdjustSets?: (exerciseInstanceId: string, sets?: number, reps?: string) => void;
 }
 
-export function InWorkoutCoach({ visible, onClose, exerciseName }: InWorkoutCoachProps) {
+// ── Adjustment prompt keywords ─────────────────────────────────────────
+
+const ADJUSTMENT_KEYWORDS = [
+  'replace', 'swap', 'alternative', 'substitute', 'instead',
+  'easier', 'harder', 'home', 'bodyweight', 'no equipment',
+  'adjust', 'modify', 'change', 'make it',
+];
+
+function isAdjustmentRequest(message: string): boolean {
+  const lower = message.toLowerCase();
+  return ADJUSTMENT_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// ── Component ──────────────────────────────────────────────────────────
+
+export function InWorkoutCoach({
+  visible,
+  onClose,
+  exerciseName,
+  activeSession,
+  exerciseLibrary,
+  onReplaceExercise,
+  onAdjustSets,
+}: InWorkoutCoachProps) {
   const { colors, spacing, radius, typography } = useTheme();
   const [customInput, setCustomInput] = useState('');
   const [response, setResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [adjustment, setAdjustment] = useState<ExerciseAdjustment | null>(null);
+  const [applied, setApplied] = useState(false);
+
+  // Derive current exercise name from session or prop
+  const currentExercise = activeSession
+    ? activeSession.exercises[activeSession.currentExerciseIndex]
+    : null;
+  const currentExerciseName = currentExercise?.exerciseName ?? exerciseName;
+  const currentExerciseInstanceId = currentExercise?.id;
 
   const handleSend = useCallback(
     async (message: string) => {
       if (!message.trim() || isLoading) return;
       setIsLoading(true);
       setResponse('');
+      setAdjustment(null);
+      setApplied(false);
       setCustomInput('');
+
       try {
-        const result = await sendWorkoutQuickMessage(message, exerciseName);
-        setResponse(result.content);
+        // Determine if this is an adjustment request with a known exercise
+        const shouldUseAdjustment =
+          currentExerciseName &&
+          exerciseLibrary &&
+          exerciseLibrary.length > 0 &&
+          isAdjustmentRequest(message);
+
+        if (shouldUseAdjustment) {
+          const result = await requestExerciseAdjustment(
+            currentExerciseName!,
+            exerciseLibrary!.map((e) => e.name),
+            message,
+          );
+          setResponse(result.content);
+          setAdjustment(result.adjustment);
+        } else {
+          const result = await sendWorkoutQuickMessage(message, currentExerciseName);
+          setResponse(result.content);
+        }
       } catch {
         setResponse('Sorry, I could not get a response right now. Try again in a moment.');
       } finally {
         setIsLoading(false);
       }
     },
-    [exerciseName, isLoading],
+    [currentExerciseName, exerciseLibrary, isLoading],
   );
 
-  const quickPrompts = [
-    exerciseName
-      ? `Suggest a replacement for ${exerciseName}`
-      : 'Suggest an alternative exercise',
-    'Mix up remaining exercises',
-    exerciseName ? `Form tips for ${exerciseName}` : 'General form tips',
-  ];
+  const handleApplyAdjustment = useCallback(() => {
+    if (!adjustment || !currentExerciseInstanceId) return;
+
+    if (adjustment.action === 'replace' && onReplaceExercise) {
+      onReplaceExercise(currentExerciseInstanceId, adjustment.exerciseName);
+      setApplied(true);
+    } else if (adjustment.action === 'adjust_sets' && onAdjustSets) {
+      onAdjustSets(currentExerciseInstanceId, adjustment.sets, adjustment.reps);
+      setApplied(true);
+    }
+  }, [adjustment, currentExerciseInstanceId, onReplaceExercise, onAdjustSets]);
+
+  const handleDismissAdjustment = useCallback(() => {
+    setAdjustment(null);
+  }, []);
+
+  // ── Quick prompts ─────────────────────────────────────────────────
+  const quickPrompts: string[] = [];
+
+  if (currentExerciseName) {
+    quickPrompts.push(`Replace ${currentExerciseName} with a home alternative`);
+    quickPrompts.push(`Make ${currentExerciseName} easier`);
+    quickPrompts.push(`Make ${currentExerciseName} harder`);
+    quickPrompts.push(`Form tips for ${currentExerciseName}`);
+  } else {
+    quickPrompts.push('Suggest an alternative exercise');
+    quickPrompts.push('General form tips');
+  }
 
   const handleClose = () => {
     setResponse('');
     setCustomInput('');
+    setAdjustment(null);
+    setApplied(false);
     onClose();
   };
 
@@ -96,7 +187,7 @@ export function InWorkoutCoach({ visible, onClose, exerciseName }: InWorkoutCoac
             </TouchableOpacity>
           </View>
 
-          {exerciseName && (
+          {currentExerciseName && (
             <Text
               style={[
                 typography.bodySmall,
@@ -107,7 +198,7 @@ export function InWorkoutCoach({ visible, onClose, exerciseName }: InWorkoutCoac
                 },
               ]}
             >
-              Currently doing: {exerciseName}
+              Currently doing: {currentExerciseName}
             </Text>
           )}
 
@@ -170,6 +261,120 @@ export function InWorkoutCoach({ visible, onClose, exerciseName }: InWorkoutCoac
                 </Text>
               )}
             </ScrollView>
+          )}
+
+          {/* ── Adjustment Suggestion Card ──────────────────────────── */}
+          {adjustment && !applied && (
+            <View
+              style={[
+                styles.adjustmentCard,
+                {
+                  backgroundColor: colors.surfaceSecondary,
+                  borderRadius: radius.lg,
+                  marginHorizontal: spacing.base,
+                  marginBottom: spacing.md,
+                  padding: spacing.md,
+                  borderWidth: 1,
+                  borderColor: colors.primary,
+                },
+              ]}
+            >
+              {adjustment.action === 'replace' ? (
+                <>
+                  <View style={styles.adjustmentHeader}>
+                    <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
+                    <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                      Replace Exercise
+                    </Text>
+                  </View>
+                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                    {currentExerciseName}  →  {adjustment.exerciseName}
+                  </Text>
+                  {adjustment.reason ? (
+                    <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
+                      {adjustment.reason}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <View style={styles.adjustmentHeader}>
+                    <Ionicons name="options" size={18} color={colors.primary} />
+                    <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                      Adjust Sets/Reps
+                    </Text>
+                  </View>
+                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                    {adjustment.sets != null ? `${adjustment.sets} sets` : ''}
+                    {adjustment.sets != null && adjustment.reps ? ' × ' : ''}
+                    {adjustment.reps ? `${adjustment.reps} reps` : ''}
+                  </Text>
+                  {adjustment.reason ? (
+                    <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
+                      {adjustment.reason}
+                    </Text>
+                  ) : null}
+                </>
+              )}
+
+              {/* Action buttons */}
+              <View style={[styles.adjustmentActions, { marginTop: spacing.md }]}>
+                <TouchableOpacity
+                  onPress={handleDismissAdjustment}
+                  style={[
+                    styles.adjustmentBtn,
+                    {
+                      backgroundColor: colors.surface,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      marginRight: spacing.sm,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>Dismiss</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleApplyAdjustment}
+                  style={[
+                    styles.adjustmentBtn,
+                    {
+                      backgroundColor: colors.success,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="checkmark-circle" size={16} color="#fff" style={{ marginRight: 4 }} />
+                  <Text style={[typography.label, { color: '#fff' }]}>Apply Change</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* ── Success Message ─────────────────────────────────────── */}
+          {applied && (
+            <View
+              style={[
+                styles.successBanner,
+                {
+                  backgroundColor: colors.successLight,
+                  borderRadius: radius.lg,
+                  marginHorizontal: spacing.base,
+                  marginBottom: spacing.md,
+                  padding: spacing.md,
+                },
+              ]}
+            >
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>
+                Change applied!
+              </Text>
+            </View>
           )}
 
           {/* Custom input */}
@@ -264,5 +469,23 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  adjustmentCard: {},
+  adjustmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  adjustmentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  adjustmentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

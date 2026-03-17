@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "proxy": "node scripts/cors-proxy.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -43,6 +44,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "typescript": "~5.9.2"
   },
   "private": true

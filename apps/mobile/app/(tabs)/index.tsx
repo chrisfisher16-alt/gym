@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -12,7 +12,9 @@ import { useNutritionDashboard } from '../../src/hooks/useNutritionDashboard';
 import { useWorkoutPrograms } from '../../src/hooks/useWorkoutPrograms';
 import { getHealthProviderName } from '../../src/lib/health';
 import { CoachFAB } from '../../src/components/CoachFAB';
+import { WeeklyCheckInCard } from '../../src/components/WeeklyCheckInCard';
 import { isDemoMode, DEMO_STREAK, DEMO_HEALTH_DATA, getDemoTodayNutrition, DEMO_NUTRITION_TARGETS } from '../../src/lib/demo-mode';
+import { generateDailyBriefing, getCachedBriefing, cacheBriefing } from '../../src/lib/daily-briefing';
 
 export default function TodayTab() {
   const { colors, spacing, typography, radius } = useTheme();
@@ -78,6 +80,36 @@ export default function TodayTab() {
     return count;
   }, [demo, totalWorkouts, weeklyVolume, recentWorkouts]);
 
+  // ── Daily Briefing State ──────────────────────────────────────────
+  const [briefing, setBriefing] = useState<string | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingError, setBriefingError] = useState(false);
+
+  const loadBriefing = useCallback(async (forceRefresh = false) => {
+    setBriefingLoading(true);
+    setBriefingError(false);
+    try {
+      if (forceRefresh) {
+        // Clear cache for today so it regenerates
+        const today = new Date().toISOString().split('T')[0];
+        await cacheBriefing(today, ''); // clear
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        await AsyncStorage.removeItem(`@briefing/${today}`);
+      }
+      const text = await generateDailyBriefing();
+      setBriefing(text);
+    } catch {
+      setBriefingError(true);
+    } finally {
+      setBriefingLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBriefing();
+  }, [loadBriefing]);
+
+  // ── Today's Workout ──────────────────────────────────────────────
   const todayWorkout = activeProgram ? getTodayWorkout() : null;
   const displayPRs = demo
     ? [
@@ -122,6 +154,49 @@ export default function TodayTab() {
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Weekly Check-in (shows at start of new week) */}
+      <WeeklyCheckInCard />
+
+      {/* Daily Briefing */}
+      <Card style={{ marginBottom: spacing.base }}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="sparkles" size={20} color={colors.primary} />
+          <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+            Daily Briefing
+          </Text>
+          <TouchableOpacity
+            onPress={() => loadBriefing(true)}
+            disabled={briefingLoading}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="refresh"
+              size={18}
+              color={briefingLoading ? colors.textTertiary : colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <View style={{ marginTop: spacing.sm }}>
+          {briefingLoading ? (
+            <View style={styles.briefingLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>
+                Generating your briefing...
+              </Text>
+            </View>
+          ) : briefingError ? (
+            <Text style={[typography.body, { color: colors.textSecondary }]}>
+              New day, new opportunity. Stay consistent with your training and nutrition — that&apos;s where real results come from. You&apos;ve got this!
+            </Text>
+          ) : (
+            <Text style={[typography.body, { color: colors.text }]}>
+              {briefing}
+            </Text>
+          )}
+        </View>
+      </Card>
 
       {/* Streak Counter */}
       {streak > 0 && (
@@ -525,5 +600,10 @@ const styles = StyleSheet.create({
   emptyRecent: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  briefingLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
   },
 });

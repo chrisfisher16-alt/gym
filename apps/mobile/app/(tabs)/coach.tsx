@@ -223,16 +223,31 @@ export default function CoachTab() {
 
       {/* Error banner */}
       {error && (
-        <TouchableOpacity
+        <View
           style={[styles.errorBanner, { backgroundColor: colors.errorLight, padding: spacing.sm }]}
-          onPress={clearError}
         >
           <Ionicons name="alert-circle" size={16} color={colors.error} />
-          <Text style={[typography.bodySmall, { color: colors.error, marginLeft: spacing.xs, flex: 1 }]}>
+          <Text style={[typography.bodySmall, { color: colors.error, marginLeft: spacing.xs, flex: 1 }]} numberOfLines={2}>
             {error}
           </Text>
-          <Ionicons name="close" size={16} color={colors.error} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              clearError();
+              const lastUserMsg = [...currentMessages].reverse().find((m) => m.role === 'user');
+              if (lastUserMsg) sendMessage(lastUserMsg.content);
+            }}
+            style={{ marginRight: spacing.sm }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[typography.label, { color: colors.error }]}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={clearError}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close" size={16} color={colors.error} />
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Suggested prompts inline (when there are messages but user might want suggestions) */}

@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native';
+import { ToastProvider } from '../src/components/Toast';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,6 +59,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+    <ToastProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
@@ -69,6 +71,7 @@ export default function RootLayout() {
         <Stack.Screen name="profile" options={{ headerShown: true, title: 'Profile', presentation: 'modal' }} />
         <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications', presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="progress" options={{ headerShown: false }} />
         <Stack.Screen name="health-connect" options={{ headerShown: true, title: 'Connect Health', presentation: 'modal' }} />
         <Stack.Screen name="health-settings" options={{ headerShown: true, title: 'Health Integrations', presentation: 'modal' }} />
         <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI Settings', presentation: 'modal' }} />
@@ -76,6 +79,7 @@ export default function RootLayout() {
         <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal' }} />
       </Stack>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+    </ToastProvider>
     </QueryClientProvider>
   );
 }

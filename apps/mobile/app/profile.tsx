@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
 import { Card, Button, Input, ScreenContainer, Divider } from '../src/components/ui';
 import { useProfileStore, type UserProfile } from '../src/stores/profile-store';
+import { useToast } from '../src/components/Toast';
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export default function ProfileScreen() {
   const { colors, spacing, typography, radius } = useTheme();
   const storedProfile = useProfileStore((s) => s.profile);
   const updateProfile = useProfileStore((s) => s.updateProfile);
+  const { showToast } = useToast();
 
   // Local form state
   const [displayName, setDisplayName] = useState(storedProfile.displayName);
@@ -162,9 +164,8 @@ export default function ProfileScreen() {
       dietaryRestrictions: dietary || undefined,
     });
 
-    Alert.alert('Saved', 'Your profile has been updated.', [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+    showToast('Profile saved successfully', 'success');
+    router.back();
   };
 
   const toggleEquipment = (item: string) => {

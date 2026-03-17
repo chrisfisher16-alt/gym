@@ -13,6 +13,7 @@ export default function NutritionLayout() {
       <Stack.Screen name="supplements" />
       <Stack.Screen name="recipes" />
       <Stack.Screen name="targets" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="grocery-list" />
     </Stack>
   );
 }
