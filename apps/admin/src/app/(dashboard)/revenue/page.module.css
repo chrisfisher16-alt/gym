@@ -1,0 +1,21 @@
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.chartRow {
+  max-width: 500px;
+  margin-bottom: var(--space-6);
+}
+
+.tableSection {
+  margin-top: var(--space-2);
+}
+
+.tableTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}

@@ -1,0 +1,18 @@
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.chartsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .chartsGrid {
+    grid-template-columns: 1fr;
+  }
+}

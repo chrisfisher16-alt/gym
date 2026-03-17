@@ -1,0 +1,29 @@
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.chartsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.section {
+  margin-bottom: var(--space-6);
+}
+
+.sectionTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .chartsGrid {
+    grid-template-columns: 1fr;
+  }
+}

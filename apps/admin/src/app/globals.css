@@ -1,33 +1,97 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Colors - Professional admin palette */
+  --color-bg: #f8f9fb;
+  --color-bg-card: #ffffff;
+  --color-bg-sidebar: #1a1d23;
+  --color-bg-sidebar-hover: #2a2d35;
+  --color-bg-sidebar-active: #33363f;
+  --color-bg-input: #ffffff;
+  --color-bg-badge: #f0f1f3;
+  --color-bg-hover: #f3f4f6;
+
+  --color-text: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-text-sidebar: #a1a7b3;
+  --color-text-sidebar-active: #ffffff;
+  --color-text-on-primary: #ffffff;
+
+  --color-border: #e5e7eb;
+  --color-border-light: #f3f4f6;
+
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-light: #eef2ff;
+
+  --color-success: #059669;
+  --color-success-light: #ecfdf5;
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-light: #fef2f2;
+  --color-info: #2563eb;
+  --color-info-light: #eff6ff;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --topbar-height: 56px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+html {
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.5;
 }
 
 a {
@@ -35,8 +99,90 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* Utility classes */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-body {
+  padding: var(--space-5);
+}
+
+/* Table styles */
+.table-container {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  font-size: var(--text-sm);
+}
+
+.data-table th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  background: var(--color-bg);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-bg-hover);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }

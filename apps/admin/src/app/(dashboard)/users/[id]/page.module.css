@@ -1,0 +1,128 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.profileCard {
+  padding: var(--space-5);
+}
+
+.profileHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--text-lg);
+  flex-shrink: 0;
+}
+
+.profileName {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.profileEmail {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.profileMeta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.sectionTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
+.infoList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.infoLabel {
+  color: var(--color-text-secondary);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.activityCard {
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.timelineItem {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.timelineDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.timelineContent {
+  display: flex;
+  flex-direction: column;
+}
+
+.timelineDesc {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.timelineTime {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.notesCard {
+  margin-top: 0;
+}
+
+.placeholder {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
