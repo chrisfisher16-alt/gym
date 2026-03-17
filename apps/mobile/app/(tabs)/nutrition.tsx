@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Dimensions, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Dimensions, Alert, Platform, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -71,6 +71,16 @@ export default function NutritionTab() {
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
   const [mealUsage, setMealUsage] = useState<UsageCheck | null>(null);
+  const waterRipple = React.useRef(new Animated.Value(0)).current;
+
+  const playWaterRipple = () => {
+    waterRipple.setValue(0);
+    Animated.timing(waterRipple, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  };
 
   useEffect(() => {
     if (!isInitialized) {
@@ -298,30 +308,43 @@ export default function NutritionTab() {
         </View>
 
         {/* Quick-Add Buttons */}
+        {/* Water ripple overlay */}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: '#3B82F6',
+            borderRadius: radius.lg,
+            opacity: waterRipple.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.15, 0.08, 0] }),
+            transform: [{ scale: waterRipple.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.02] }) }],
+          }}
+        />
+
         <View style={[styles.waterQuickActions, { marginTop: spacing.md }]}>
           <TouchableOpacity
             style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
-            onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add8oz(); showToast('+8oz water logged', 'info', 1500); }}
+            onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add8oz(); playWaterRipple(); showToast('+8oz water logged', 'info', 1500); }}
             activeOpacity={0.7}
           >
-            <Ionicons name="water-outline" size={16} color="#3B82F6" />
-            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 4 }]}>8oz</Text>
+            <Ionicons name="water-outline" size={18} color="#3B82F6" />
+            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 6 }]}>8oz</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
-            onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add16oz(); showToast('+16oz water logged', 'info', 1500); }}
+            onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add16oz(); playWaterRipple(); showToast('+16oz water logged', 'info', 1500); }}
             activeOpacity={0.7}
           >
-            <Ionicons name="water" size={16} color="#3B82F6" />
-            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 4 }]}>16oz</Text>
+            <Ionicons name="water" size={18} color="#3B82F6" />
+            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 6 }]}>16oz</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
             onPress={() => setShowCustomWater(true)}
             activeOpacity={0.7}
           >
-            <Ionicons name="pencil-outline" size={16} color="#3B82F6" />
-            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 4 }]}>Custom</Text>
+            <Ionicons name="pencil-outline" size={18} color="#3B82F6" />
+            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 6 }]}>Custom</Text>
           </TouchableOpacity>
         </View>
       </Card>
@@ -701,8 +724,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    minHeight: 48,
   },
   modalOverlay: {
     flex: 1,
@@ -737,7 +761,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    marginTop: 8,
   },
   emptyMeals: {
     alignItems: 'center',

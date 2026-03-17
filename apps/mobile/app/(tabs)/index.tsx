@@ -1,39 +1,50 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
-import { Card, ScreenContainer, MacroBar, ProgressBar, LoadingSpinner, EmptyState } from '../../src/components/ui';
+import { Card, ScreenContainer, ProgressBar, LoadingSpinner } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
-import { useHealthStore } from '../../src/stores/health-store';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
-import { usePersonalRecords } from '../../src/hooks/usePersonalRecords';
 import { useNutritionDashboard } from '../../src/hooks/useNutritionDashboard';
 import { useWorkoutPrograms } from '../../src/hooks/useWorkoutPrograms';
-import { getHealthProviderName } from '../../src/lib/health';
 import { CoachFAB } from '../../src/components/CoachFAB';
-import { WeeklyCheckInCard } from '../../src/components/WeeklyCheckInCard';
-import { isDemoMode, DEMO_STREAK, DEMO_HEALTH_DATA, getDemoTodayNutrition, DEMO_NUTRITION_TARGETS } from '../../src/lib/demo-mode';
-import { generateDailyBriefing, getCachedBriefing, cacheBriefing } from '../../src/lib/daily-briefing';
+import {
+  isDemoMode,
+  DEMO_STREAK,
+  getDemoTodayNutrition,
+  DEMO_NUTRITION_TARGETS,
+} from '../../src/lib/demo-mode';
+import { generateDailyBriefing, cacheBriefing } from '../../src/lib/daily-briefing';
+
+// ── AI Insight type ───────────────────────────────────────────────────
+interface AIInsight {
+  id: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  message: string;
+}
 
 export default function TodayTab() {
-  const { colors, spacing, typography, radius } = useTheme();
+  const { colors, spacing, typography, radius, dark } = useTheme();
   const profile = useAuthStore((s) => s.profile);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const isHealthConnected = useHealthStore((s) => s.isConnected);
-  const todaySteps = useHealthStore((s) => s.todaySteps);
-  const todayActiveEnergy = useHealthStore((s) => s.todayActiveEnergy);
-  const lastSleepHours = useHealthStore((s) => s.lastSleepHours);
-  const syncEnabled = useHealthStore((s) => s.syncEnabled);
 
-  const { recentWorkouts, totalWorkouts, weeklyVolume } = useWorkoutHistory();
-  const { recentPRs } = usePersonalRecords();
-  const { targets, consumed, progress } = useNutritionDashboard();
-  const { activeProgram, getTodayWorkout } = useWorkoutPrograms();
+  const { recentWorkouts, totalWorkouts, weeklyVolume, history } = useWorkoutHistory();
+  const { targets, consumed, progress, waterIntake } = useNutritionDashboard();
+  const { activeProgram, getTodayWorkout, programs } = useWorkoutPrograms();
 
   const demo = isDemoMode();
   const demoNutrition = useMemo(() => (demo ? getDemoTodayNutrition() : null), [demo]);
 
+  // ── Date & greeting ─────────────────────────────────────────────────
   const now = new Date();
   const greeting =
     now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
@@ -43,23 +54,19 @@ export default function TodayTab() {
     day: 'numeric',
   });
 
-  const providerLabel = getHealthProviderName();
-  const showHealthData = (isHealthConnected && Platform.OS !== 'web') || demo;
-
-  const displaySteps = demo ? DEMO_HEALTH_DATA.todaySteps : todaySteps;
-  const displayActiveEnergy = demo ? DEMO_HEALTH_DATA.todayActiveEnergy : todayActiveEnergy;
-  const displaySleepHours = demo ? DEMO_HEALTH_DATA.lastSleepHours : lastSleepHours;
-
+  // ── Nutrition display values ────────────────────────────────────────
   const displayConsumed = demo && demoNutrition ? demoNutrition.consumed : consumed;
   const displayTargets = demo ? DEMO_NUTRITION_TARGETS : targets;
-  const calProgress =
-    displayTargets.calories > 0 ? displayConsumed.calories / displayTargets.calories : 0;
+  const displayWater = demo ? 1800 : waterIntake;
 
-  // Streak calculation
+  const calProgress = displayTargets.calories > 0 ? displayConsumed.calories / displayTargets.calories : 0;
+  const proteinProgress = displayTargets.protein_g > 0 ? displayConsumed.protein_g / displayTargets.protein_g : 0;
+  const waterProgress = displayTargets.water_ml > 0 ? displayWater / displayTargets.water_ml : 0;
+
+  // ── Streak calculation ──────────────────────────────────────────────
   const streak = useMemo(() => {
     if (demo) return DEMO_STREAK.currentStreak;
     if (totalWorkouts === 0) return 0;
-    // Simple streak: count consecutive days with workouts going back from today
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     let count = 0;
@@ -80,26 +87,39 @@ export default function TodayTab() {
     return count;
   }, [demo, totalWorkouts, weeklyVolume, recentWorkouts]);
 
-  // ── Daily Briefing State ──────────────────────────────────────────
+  // ── Workouts this week ──────────────────────────────────────────────
+  const workoutsThisWeek = useMemo(() => {
+    if (demo) return 5;
+    const startOfWeek = new Date();
+    const day = startOfWeek.getDay();
+    startOfWeek.setDate(startOfWeek.getDate() - (day === 0 ? 6 : day - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+    return history.filter((w) => new Date(w.completedAt) >= startOfWeek).length;
+  }, [demo, history]);
+
+  // ── Completed programs count ────────────────────────────────────────
+  const completedPrograms = useMemo(() => {
+    if (demo) return 2;
+    return programs.filter((p) => !p.isActive).length;
+  }, [demo, programs]);
+
+  // ── Daily Briefing ──────────────────────────────────────────────────
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
-  const [briefingError, setBriefingError] = useState(false);
 
   const loadBriefing = useCallback(async (forceRefresh = false) => {
     setBriefingLoading(true);
-    setBriefingError(false);
     try {
       if (forceRefresh) {
-        // Clear cache for today so it regenerates
         const today = new Date().toISOString().split('T')[0];
-        await cacheBriefing(today, ''); // clear
+        await cacheBriefing(today, '');
         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
         await AsyncStorage.removeItem(`@briefing/${today}`);
       }
       const text = await generateDailyBriefing();
       setBriefing(text);
     } catch {
-      setBriefingError(true);
+      setBriefing(null);
     } finally {
       setBriefingLoading(false);
     }
@@ -109,23 +129,93 @@ export default function TodayTab() {
     loadBriefing();
   }, [loadBriefing]);
 
-  // ── Today's Workout ──────────────────────────────────────────────
+  // ── Today's Workout State ───────────────────────────────────────────
   const todayWorkout = activeProgram ? getTodayWorkout() : null;
-  const displayPRs = demo
-    ? [
-        { exerciseId: 'bench-press', type: 'weight' as const, value: 82.5, date: new Date().toISOString() },
-        { exerciseId: 'squat', type: 'weight' as const, value: 120, date: new Date().toISOString() },
-        { exerciseId: 'deadlift', type: 'weight' as const, value: 140, date: new Date().toISOString() },
-      ]
-    : recentPRs.slice(0, 3);
 
-  const exerciseNames: Record<string, string> = {
-    'bench-press': 'Bench Press',
-    squat: 'Barbell Squat',
-    deadlift: 'Deadlift',
-    'overhead-press': 'Overhead Press',
-  };
+  const todayCompletedWorkout = useMemo(() => {
+    if (demo) return null; // demo shows scheduled workout
+    const todayStr = new Date().toISOString().split('T')[0];
+    return history.find(
+      (w) => new Date(w.completedAt).toISOString().split('T')[0] === todayStr,
+    ) ?? null;
+  }, [demo, history]);
 
+  // ── AI Insights ─────────────────────────────────────────────────────
+  const [dismissedInsights, setDismissedInsights] = useState<Set<string>>(new Set());
+
+  const insights: AIInsight[] = useMemo(() => {
+    const items: AIInsight[] = [];
+
+    // Check protein under target for multiple days
+    if (demo || proteinProgress < 0.7) {
+      items.push({
+        id: 'protein-low',
+        icon: 'alert-circle-outline',
+        iconColor: colors.warning,
+        message:
+          demo
+            ? "You've been under on protein 3 days in a row. Try adding a shake post-workout."
+            : `Protein is at ${Math.round(proteinProgress * 100)}% today. Aim for at least a shake or chicken breast to close the gap.`,
+      });
+    }
+
+    // Check workout streak / consecutive training
+    if (streak >= 4) {
+      items.push({
+        id: 'recovery-hint',
+        icon: 'leaf-outline',
+        iconColor: colors.success,
+        message: `${streak} days training straight — impressive! Consider stretching or a rest day soon to let muscles recover.`,
+      });
+    }
+
+    // Volume trend
+    if (demo) {
+      items.push({
+        id: 'volume-up',
+        icon: 'trending-up-outline',
+        iconColor: colors.info,
+        message: 'Your bench press is up 15% this month. Progressive overload is working!',
+      });
+    } else if (totalWorkouts >= 4) {
+      const recentVolume = history.slice(0, 3).reduce((sum, w) => sum + w.totalVolume, 0);
+      const olderVolume = history.slice(3, 6).reduce((sum, w) => sum + w.totalVolume, 0);
+      if (olderVolume > 0 && recentVolume > olderVolume * 1.1) {
+        items.push({
+          id: 'volume-up',
+          icon: 'trending-up-outline',
+          iconColor: colors.info,
+          message: `Training volume is up ${Math.round(((recentVolume - olderVolume) / olderVolume) * 100)}% recently. Great progress!`,
+        });
+      }
+    }
+
+    // Hydration nudge
+    if (waterProgress < 0.5 && now.getHours() >= 14) {
+      items.push({
+        id: 'hydration',
+        icon: 'water-outline',
+        iconColor: colors.info,
+        message: `You're only at ${Math.round(waterProgress * 100)}% of your water goal. Time to hydrate!`,
+      });
+    }
+
+    return items.filter((i) => !dismissedInsights.has(i.id)).slice(0, 3);
+  }, [
+    demo, proteinProgress, streak, totalWorkouts, history,
+    waterProgress, now, dismissedInsights, colors,
+  ]);
+
+  const dismissInsight = useCallback((id: string) => {
+    setDismissedInsights((prev) => new Set(prev).add(id));
+  }, []);
+
+  // ── Gradient colors ─────────────────────────────────────────────────
+  const heroGradient = dark
+    ? [colors.primaryMuted, colors.surface] as const
+    : [colors.primaryMuted, colors.background] as const;
+
+  // ── Loading state ───────────────────────────────────────────────────
   if (isLoading) {
     return (
       <ScreenContainer>
@@ -134,476 +224,581 @@ export default function TodayTab() {
     );
   }
 
+  const displayName = profile?.display_name ?? 'there';
+
   return (
-    <ScreenContainer>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: spacing.base, paddingBottom: spacing.lg }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[typography.h1, { color: colors.text }]}>
-            {greeting}, {profile?.display_name ?? 'there'}
-          </Text>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-            {dateStr}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={() => router.push('/settings')} activeOpacity={0.7}>
-          <View
-            style={[styles.avatar, { backgroundColor: colors.primaryMuted, borderRadius: radius.full }]}
-          >
-            <Ionicons name="person" size={20} color={colors.primary} />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Weekly Check-in (shows at start of new week) */}
-      <WeeklyCheckInCard />
-
-      {/* Daily Briefing */}
-      <Card style={{ marginBottom: spacing.base }}>
-        <View style={styles.cardHeader}>
-          <Ionicons name="sparkles" size={20} color={colors.primary} />
-          <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-            Daily Briefing
-          </Text>
-          <TouchableOpacity
-            onPress={() => loadBriefing(true)}
-            disabled={briefingLoading}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="refresh"
-              size={18}
-              color={briefingLoading ? colors.textTertiary : colors.primary}
-            />
-          </TouchableOpacity>
-        </View>
-        <View style={{ marginTop: spacing.sm }}>
-          {briefingLoading ? (
-            <View style={styles.briefingLoading}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>
-                Generating your briefing...
-              </Text>
-            </View>
-          ) : briefingError ? (
-            <Text style={[typography.body, { color: colors.textSecondary }]}>
-              New day, new opportunity. Stay consistent with your training and nutrition — that&apos;s where real results come from. You&apos;ve got this!
-            </Text>
-          ) : (
-            <Text style={[typography.body, { color: colors.text }]}>
-              {briefing}
-            </Text>
-          )}
-        </View>
-      </Card>
-
-      {/* Streak Counter */}
-      {streak > 0 && (
-        <Card style={{ marginBottom: spacing.base }}>
-          <View style={styles.streakRow}>
-            <View style={[styles.streakIcon, { backgroundColor: colors.warningLight, borderRadius: radius.md }]}>
-              <Ionicons name="flame" size={24} color={colors.warning} />
-            </View>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.h2, { color: colors.text }]}>{streak} Day Streak</Text>
+    <ScreenContainer padded={false}>
+      {/* ── Hero Coaching Statement ──────────────────────────────────── */}
+      <LinearGradient colors={heroGradient} style={styles.heroGradient}>
+        <View style={[styles.heroContent, { paddingHorizontal: spacing.base }]}>
+          {/* Top row: greeting + settings */}
+          <View style={styles.heroTopRow}>
+            <View style={{ flex: 1 }}>
               <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                Keep it going! Consistency is key.
+                {dateStr}
+              </Text>
+              <Text style={[typography.h1, { color: colors.text, marginTop: spacing.xs }]}>
+                {greeting}, {displayName}
               </Text>
             </View>
-            <Text style={[typography.displayMedium, { color: colors.warning }]}>🔥</Text>
-          </View>
-        </Card>
-      )}
-
-      {/* Health Activity Summary */}
-      {showHealthData && (demo || syncEnabled.steps || syncEnabled.activeEnergy || syncEnabled.sleep) && (
-        <Card style={{ marginBottom: spacing.base }}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="heart-outline" size={20} color={colors.primary} />
-            <Text
-              style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}
+            <TouchableOpacity
+              onPress={() => router.push('/settings')}
+              activeOpacity={0.7}
+              style={[styles.avatarBtn, { backgroundColor: colors.surface, borderRadius: radius.full }]}
             >
-              Today&apos;s Activity
-            </Text>
-            {providerLabel && !demo && (
-              <Text style={[typography.caption, { color: colors.textTertiary }]}>
-                via {providerLabel}
+              <Ionicons name="person" size={18} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* AI Coaching Message */}
+          <View style={[styles.coachingCard, {
+            backgroundColor: dark ? colors.surface : colors.surface,
+            borderRadius: radius.lg,
+            marginTop: spacing.lg,
+            padding: spacing.base,
+            shadowColor: colors.shadow,
+          }]}>
+            <View style={styles.coachingHeader}>
+              <View style={[styles.sparkleIcon, { backgroundColor: colors.primaryMuted, borderRadius: radius.md }]}>
+                <Ionicons name="sparkles" size={16} color={colors.primary} />
+              </View>
+              <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.sm, flex: 1 }]}>
+                YOUR DAILY COACHING
+              </Text>
+              <TouchableOpacity
+                onPress={() => loadBriefing(true)}
+                disabled={briefingLoading}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={16}
+                  color={briefingLoading ? colors.textTertiary : colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+            {briefingLoading ? (
+              <View style={[styles.briefingLoading, { marginTop: spacing.md }]}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>
+                  Generating your briefing...
+                </Text>
+              </View>
+            ) : (
+              <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]}>
+                {briefing ??
+                  "New day, new opportunity. Stay consistent with your training and nutrition — that's where real results come from."}
               </Text>
             )}
           </View>
-          <View style={[styles.healthGrid, { marginTop: spacing.md, gap: spacing.md }]}>
-            {(demo || syncEnabled.steps) && (
-              <View
-                style={[
-                  styles.healthStat,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
-                ]}
-              >
-                <Ionicons name="footsteps-outline" size={18} color={colors.primary} />
-                <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
-                  {displaySteps.toLocaleString()}
-                </Text>
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>Steps</Text>
+        </View>
+      </LinearGradient>
+
+      <View style={{ paddingHorizontal: spacing.base }}>
+        {/* ── Today's Action Card ──────────────────────────────────────── */}
+        {todayCompletedWorkout ? (
+          /* Completed workout state */
+          <Card style={{ marginTop: spacing.base }}>
+            <View style={styles.actionCardHeader}>
+              <View style={[styles.actionIconCircle, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="trophy" size={24} color={colors.success} />
               </View>
-            )}
-            {(demo || syncEnabled.activeEnergy) && (
-              <View
-                style={[
-                  styles.healthStat,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
-                ]}
-              >
-                <Ionicons name="flame-outline" size={18} color={colors.warning} />
-                <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
-                  {displayActiveEnergy.toLocaleString()}
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>
+                  WORKOUT COMPLETE
                 </Text>
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>Active Cal</Text>
-              </View>
-            )}
-            {(demo || syncEnabled.sleep) && displaySleepHours !== null && (
-              <View
-                style={[
-                  styles.healthStat,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
-                ]}
-              >
-                <Ionicons name="moon-outline" size={18} color={colors.info} />
-                <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
-                  {displaySleepHours}h
+                <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>
+                  {todayCompletedWorkout.name}
                 </Text>
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>Sleep</Text>
               </View>
-            )}
+            </View>
+            <View style={[styles.completedStats, { marginTop: spacing.base, gap: spacing.base }]}>
+              <View style={styles.completedStatItem}>
+                <Text style={[typography.h2, { color: colors.text }]}>
+                  {Math.round(todayCompletedWorkout.durationSeconds / 60)}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>minutes</Text>
+              </View>
+              <View style={[styles.completedStatDivider, { backgroundColor: colors.borderLight }]} />
+              <View style={styles.completedStatItem}>
+                <Text style={[typography.h2, { color: colors.text }]}>
+                  {Math.round(todayCompletedWorkout.totalVolume).toLocaleString()}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>kg volume</Text>
+              </View>
+              <View style={[styles.completedStatDivider, { backgroundColor: colors.borderLight }]} />
+              <View style={styles.completedStatItem}>
+                <Text style={[typography.h2, { color: colors.text }]}>
+                  {todayCompletedWorkout.totalSets}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>sets</Text>
+              </View>
+            </View>
+          </Card>
+        ) : todayWorkout ? (
+          /* Scheduled workout state */
+          <Card style={{ marginTop: spacing.base }}>
+            <View style={styles.actionCardHeader}>
+              <View style={[styles.actionIconCircle, { backgroundColor: colors.primaryMuted }]}>
+                <Ionicons name="barbell" size={24} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.labelSmall, { color: colors.primary, textTransform: 'uppercase', letterSpacing: 1 }]}>
+                  TODAY&apos;S WORKOUT
+                </Text>
+                <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>
+                  {todayWorkout.name}
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                  {todayWorkout.exercises.length} exercises
+                  {activeProgram ? ` · ${activeProgram.name}` : ''}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.startWorkoutBtn, {
+                backgroundColor: colors.primary,
+                borderRadius: radius.md,
+                marginTop: spacing.base,
+                paddingVertical: spacing.md,
+              }]}
+              onPress={() => router.push('/(tabs)/workout')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="play" size={18} color={colors.textInverse} />
+              <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>
+                Start Workout
+              </Text>
+            </TouchableOpacity>
+          </Card>
+        ) : (
+          /* Rest day / no workout state */
+          <Card style={{ marginTop: spacing.base }}>
+            <View style={styles.actionCardHeader}>
+              <View style={[styles.actionIconCircle, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="leaf" size={24} color={colors.success} />
+              </View>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>
+                  REST DAY
+                </Text>
+                <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>
+                  Active Recovery
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                  Stretch, walk, or light mobility work
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.startWorkoutBtn, {
+                backgroundColor: colors.surface,
+                borderRadius: radius.md,
+                marginTop: spacing.base,
+                paddingVertical: spacing.md,
+                borderWidth: 1,
+                borderColor: colors.primary,
+              }]}
+              onPress={() => router.push('/(tabs)/workout')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={18} color={colors.primary} />
+              <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm }]}>
+                Start a Workout Anyway
+              </Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* ── Nutrition Dashboard Strip ────────────────────────────────── */}
+        <Card style={{ marginTop: spacing.base }}>
+          <View style={styles.nutritionHeader}>
+            <Text style={[typography.labelLarge, { color: colors.text }]}>Nutrition</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/nutrition')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Text style={[typography.labelSmall, { color: colors.primary }]}>See All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Macro strips */}
+          <View style={[styles.macroStrip, { marginTop: spacing.md, gap: spacing.md }]}>
+            {/* Calories */}
+            <View style={styles.macroItem}>
+              <View style={styles.macroLabelRow}>
+                <View style={[styles.macroDot, { backgroundColor: colors.calories }]} />
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Calories</Text>
+              </View>
+              <Text style={[typography.h3, { color: colors.text }]}>
+                {Math.round(displayConsumed.calories).toLocaleString()}
+                <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                  {' '}/ {displayTargets.calories.toLocaleString()}
+                </Text>
+              </Text>
+              <ProgressBar
+                progress={Math.min(calProgress, 1)}
+                color={calProgress > 1 ? colors.warning : colors.calories}
+                height={4}
+                style={{ marginTop: spacing.xs }}
+              />
+            </View>
+
+            {/* Protein */}
+            <View style={styles.macroItem}>
+              <View style={styles.macroLabelRow}>
+                <View style={[styles.macroDot, { backgroundColor: colors.protein }]} />
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Protein</Text>
+              </View>
+              <Text style={[typography.h3, { color: colors.text }]}>
+                {Math.round(displayConsumed.protein_g)}
+                <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                  {' '}/ {displayTargets.protein_g}g
+                </Text>
+              </Text>
+              <ProgressBar
+                progress={Math.min(proteinProgress, 1)}
+                color={proteinProgress > 1 ? colors.warning : colors.protein}
+                height={4}
+                style={{ marginTop: spacing.xs }}
+              />
+            </View>
+
+            {/* Water */}
+            <View style={styles.macroItem}>
+              <View style={styles.macroLabelRow}>
+                <View style={[styles.macroDot, { backgroundColor: colors.info }]} />
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Water</Text>
+              </View>
+              <Text style={[typography.h3, { color: colors.text }]}>
+                {(displayWater / 1000).toFixed(1)}
+                <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                  {' '}/ {(displayTargets.water_ml / 1000).toFixed(1)}L
+                </Text>
+              </Text>
+              <ProgressBar
+                progress={Math.min(waterProgress, 1)}
+                color={colors.info}
+                height={4}
+                style={{ marginTop: spacing.xs }}
+              />
+            </View>
+          </View>
+
+          {/* Quick-add buttons */}
+          <View style={[styles.nutritionActions, { marginTop: spacing.md, gap: spacing.sm }]}>
+            <TouchableOpacity
+              style={[styles.nutritionActionBtn, {
+                backgroundColor: colors.surfaceSecondary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.md,
+              }]}
+              onPress={() => router.push('/(tabs)/nutrition')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+              <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>
+                Log Meal
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.nutritionActionBtn, {
+                backgroundColor: colors.surfaceSecondary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.md,
+              }]}
+              onPress={() => router.push('/(tabs)/nutrition')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="water-outline" size={16} color={colors.info} />
+              <Text style={[typography.labelSmall, { color: colors.info, marginLeft: spacing.xs }]}>
+                Log Water
+              </Text>
+            </TouchableOpacity>
           </View>
         </Card>
-      )}
 
-      {/* Today's Workout */}
-      <Card style={{ marginBottom: spacing.base }}>
-        <View style={styles.cardHeader}>
-          <Ionicons name="barbell-outline" size={20} color={colors.primary} />
-          <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm }]}>
-            Today&apos;s Workout
-          </Text>
-        </View>
-        {todayWorkout ? (
-          <View style={{ marginTop: spacing.sm }}>
-            <Text style={[typography.label, { color: colors.text }]}>{todayWorkout.name}</Text>
-            <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
-              {todayWorkout.exercises.length} exercises
+        {/* ── AI Insights ──────────────────────────────────────────────── */}
+        {insights.length > 0 && (
+          <View style={{ marginTop: spacing.base }}>
+            <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>
+              Insights
             </Text>
-            <TouchableOpacity
-              style={[styles.cardAction, { marginTop: spacing.md }]}
-              onPress={() => router.push('/(tabs)/workout')}
-              activeOpacity={0.7}
-            >
-              <Text style={[typography.label, { color: colors.primary }]}>Start Workout</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={{ marginTop: spacing.sm }}>
-            <Text style={[typography.body, { color: colors.textSecondary }]}>
-              {demo ? 'Rest day — recovery is important!' : 'No workout scheduled for today.'}
-            </Text>
-            <TouchableOpacity
-              style={[styles.cardAction, { marginTop: spacing.md }]}
-              onPress={() => router.push('/(tabs)/workout')}
-              activeOpacity={0.7}
-            >
-              <Text style={[typography.label, { color: colors.primary }]}>Start a workout</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-            </TouchableOpacity>
+            {insights.map((insight) => (
+              <View
+                key={insight.id}
+                style={[styles.insightCard, {
+                  backgroundColor: colors.surface,
+                  borderRadius: radius.lg,
+                  padding: spacing.md,
+                  marginBottom: spacing.sm,
+                  borderColor: colors.borderLight,
+                  shadowColor: colors.shadow,
+                }]}
+              >
+                <View style={[styles.insightIcon, { backgroundColor: `${insight.iconColor}15`, borderRadius: radius.md }]}>
+                  <Ionicons name={insight.icon} size={18} color={insight.iconColor} />
+                </View>
+                <Text style={[typography.body, { color: colors.text, flex: 1, marginLeft: spacing.md }]}>
+                  {insight.message}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => dismissInsight(insight.id)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  style={{ marginLeft: spacing.sm }}
+                >
+                  <Ionicons name="close" size={16} color={colors.textTertiary} />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
         )}
-      </Card>
 
-      {/* Nutrition Progress Card */}
-      <Card style={{ marginBottom: spacing.base }}>
-        <View style={styles.cardHeader}>
-          <Ionicons name="nutrition-outline" size={20} color={colors.primary} />
-          <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm }]}>
-            Nutrition
-          </Text>
-        </View>
-        <View style={{ marginTop: spacing.md, gap: spacing.md }}>
-          <View style={styles.calorieRow}>
-            <Text style={[typography.displayMedium, { color: colors.text }]}>
-              {Math.round(displayConsumed.calories).toLocaleString()}
-            </Text>
-            <Text style={[typography.body, { color: colors.textSecondary }]}>
-              {' '}
-              / {displayTargets.calories.toLocaleString()} cal
+        {/* ── Stats Strip ──────────────────────────────────────────────── */}
+        <View style={[styles.statsStrip, {
+          marginTop: spacing.base,
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          padding: spacing.base,
+          borderColor: colors.borderLight,
+          shadowColor: colors.shadow,
+        }]}>
+          <View style={styles.statItem}>
+            <View style={styles.statValueRow}>
+              <Ionicons name="flame" size={18} color={colors.warning} />
+              <Text style={[typography.h2, { color: colors.text, marginLeft: spacing.xs }]}>
+                {streak}
+              </Text>
+            </View>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+              Day Streak
             </Text>
           </View>
-          <ProgressBar
-            progress={Math.min(calProgress, 1)}
-            color={calProgress > 1 ? colors.warning : colors.calories}
-            height={8}
-          />
-          <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
-            <MacroBar
-              label="Protein"
-              current={Math.round(displayConsumed.protein_g)}
-              target={displayTargets.protein_g}
-              color={colors.protein}
-            />
-            <MacroBar
-              label="Carbs"
-              current={Math.round(displayConsumed.carbs_g)}
-              target={displayTargets.carbs_g}
-              color={colors.carbs}
-            />
-            <MacroBar
-              label="Fat"
-              current={Math.round(displayConsumed.fat_g)}
-              target={displayTargets.fat_g}
-              color={colors.fat}
-            />
+
+          <View style={[styles.statDivider, { backgroundColor: colors.borderLight }]} />
+
+          <View style={styles.statItem}>
+            <View style={styles.statValueRow}>
+              <Ionicons name="barbell-outline" size={18} color={colors.primary} />
+              <Text style={[typography.h2, { color: colors.text, marginLeft: spacing.xs }]}>
+                {workoutsThisWeek}
+              </Text>
+            </View>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+              This Week
+            </Text>
+          </View>
+
+          <View style={[styles.statDivider, { backgroundColor: colors.borderLight }]} />
+
+          <View style={styles.statItem}>
+            <View style={styles.statValueRow}>
+              <Ionicons name="ribbon-outline" size={18} color={colors.success} />
+              <Text style={[typography.h2, { color: colors.text, marginLeft: spacing.xs }]}>
+                {completedPrograms}
+              </Text>
+            </View>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+              Programs
+            </Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.cardAction, { marginTop: spacing.md }]}
-          onPress={() => router.push('/(tabs)/nutrition')}
-          activeOpacity={0.7}
-        >
-          <Text style={[typography.label, { color: colors.primary }]}>View Details</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-        </TouchableOpacity>
-      </Card>
 
-      {/* Coach Tip / Weekly Insight */}
-      <TouchableOpacity onPress={() => router.push('/(tabs)/coach')} activeOpacity={0.7}>
-        <Card style={{ marginBottom: spacing.base, backgroundColor: colors.primaryMuted }}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="bulb-outline" size={20} color={colors.primary} />
-            <Text
-              style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm, flex: 1 }]}
+        {/* ── Quick Actions ────────────────────────────────────────────── */}
+        <View style={[styles.quickActionsRow, { marginTop: spacing.lg, marginBottom: spacing['2xl'] }]}>
+          {([
+            { icon: 'barbell-outline' as const, label: 'Workout', route: '/(tabs)/workout' as const, color: colors.primary },
+            { icon: 'restaurant-outline' as const, label: 'Log Meal', route: '/(tabs)/nutrition' as const, color: colors.calories },
+            { icon: 'chatbubble-outline' as const, label: 'Coach', route: '/(tabs)/coach' as const, color: colors.success },
+            { icon: 'scale-outline' as const, label: 'Weight', route: '/(tabs)/nutrition' as const, color: colors.info },
+          ]).map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              onPress={() => router.push(action.route)}
+              activeOpacity={0.7}
+              style={styles.quickActionItem}
             >
-              Coach Tip
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-          </View>
-          <Text style={[typography.body, { color: colors.text, marginTop: spacing.sm }]}>
-            {demo
-              ? "Great consistency this week, Alex! You've hit 5 workouts and your protein intake is improving. Consider adding a deload week soon."
-              : 'Stay consistent with your workouts and nutrition tracking. Small daily habits lead to big results over time.'}
-          </Text>
-          <Text style={[typography.bodySmall, { color: colors.primary, marginTop: spacing.sm }]}>
-            Ask Coach for personalized advice
-          </Text>
-        </Card>
-      </TouchableOpacity>
-
-      {/* Quick Actions */}
-      <View style={[styles.quickActions, { marginBottom: spacing.base, gap: spacing.sm }]}>
-        {[
-          {
-            icon: 'barbell-outline' as const,
-            label: 'Log Workout',
-            route: '/(tabs)/workout' as const,
-          },
-          {
-            icon: 'restaurant-outline' as const,
-            label: 'Log Meal',
-            route: '/(tabs)/nutrition' as const,
-          },
-          {
-            icon: 'chatbubble-outline' as const,
-            label: 'Ask Coach',
-            route: '/(tabs)/coach' as const,
-          },
-        ].map((action) => (
-          <TouchableOpacity
-            key={action.label}
-            onPress={() => router.push(action.route)}
-            activeOpacity={0.7}
-            style={[
-              styles.quickActionBtn,
-              {
-                backgroundColor: colors.surface,
-                borderRadius: radius.lg,
-                borderColor: colors.borderLight,
-                padding: spacing.md,
-              },
-            ]}
-          >
-            <Ionicons name={action.icon} size={24} color={colors.primary} />
-            <Text style={[typography.labelSmall, { color: colors.text, marginTop: spacing.xs }]}>
-              {action.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Recent PRs */}
-      {displayPRs.length > 0 && (
-        <View style={{ marginBottom: spacing.base }}>
-          <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
-            Recent PRs 🏆
-          </Text>
-          {displayPRs.map((pr) => (
-            <Card key={`${pr.exerciseId}-${pr.type}`} style={{ marginBottom: spacing.sm }}>
-              <View style={styles.prRow}>
-                <View
-                  style={[
-                    styles.prIcon,
-                    { backgroundColor: colors.warningLight, borderRadius: radius.md },
-                  ]}
-                >
-                  <Ionicons name="trophy" size={16} color={colors.warning} />
-                </View>
-                <View style={{ flex: 1, marginLeft: spacing.sm }}>
-                  <Text style={[typography.label, { color: colors.text }]}>
-                    {exerciseNames[pr.exerciseId] ?? pr.exerciseId}
-                  </Text>
-                  <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                    {pr.value} kg — New {pr.type} PR
-                  </Text>
-                </View>
+              <View style={[styles.quickActionCircle, {
+                backgroundColor: `${action.color}15`,
+                borderRadius: radius.full,
+              }]}>
+                <Ionicons name={action.icon} size={22} color={action.color} />
               </View>
-            </Card>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' }]}>
+                {action.label}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
-      )}
-
-      {/* Recent Activity */}
-      <View style={{ marginBottom: spacing['2xl'] }}>
-        <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
-          Recent Activity
-        </Text>
-        {recentWorkouts.length === 0 && !demo ? (
-          <View
-            style={[
-              styles.emptyRecent,
-              {
-                backgroundColor: colors.surfaceSecondary,
-                borderRadius: radius.lg,
-                padding: spacing['2xl'],
-              },
-            ]}
-          >
-            <Ionicons name="time-outline" size={32} color={colors.textTertiary} />
-            <Text style={[typography.body, { color: colors.textTertiary, marginTop: spacing.sm }]}>
-              No recent activity yet
-            </Text>
-          </View>
-        ) : (
-          (demo
-            ? [
-                { id: '1', name: 'Push Day — Chest & Shoulders', totalVolume: 12400, durationSeconds: 4200, completedAt: new Date().toISOString() },
-                { id: '2', name: 'Pull Day — Back & Biceps', totalVolume: 10800, durationSeconds: 3900, completedAt: new Date(Date.now() - 86400000).toISOString() },
-              ]
-            : recentWorkouts.slice(0, 2)
-          ).map((session) => (
-            <Card key={session.id} style={{ marginBottom: spacing.sm }}>
-              <View style={styles.activityRow}>
-                <View
-                  style={[
-                    styles.activityIcon,
-                    { backgroundColor: colors.primaryMuted, borderRadius: radius.md },
-                  ]}
-                >
-                  <Ionicons name="barbell" size={16} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1, marginLeft: spacing.sm }}>
-                  <Text style={[typography.label, { color: colors.text }]}>{session.name}</Text>
-                  <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                    {Math.round(session.totalVolume).toLocaleString()} kg •{' '}
-                    {Math.round(session.durationSeconds / 60)} min
-                  </Text>
-                </View>
-              </View>
-            </Card>
-          ))
-        )}
       </View>
+
       <CoachFAB context="general" />
     </ScreenContainer>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  header: {
+  // Hero
+  heroGradient: {
+    paddingBottom: 4,
+  },
+  heroContent: {
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  heroTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  streakRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  streakIcon: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  calorieRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  healthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  healthStat: {
-    flex: 1,
-    alignItems: 'center',
-    minWidth: 90,
-  },
-  quickActions: {
-    flexDirection: 'row',
-  },
-  quickActionBtn: {
-    flex: 1,
-    alignItems: 'center',
-    borderWidth: 1,
-    minHeight: 72,
-    justifyContent: 'center',
-  },
-  prRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prIcon: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activityIcon: {
+  avatarBtn: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyRecent: {
+  coachingCard: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  coachingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sparkleIcon: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
   briefingLoading: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
+  },
+
+  // Action Card
+  actionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startWorkoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  completedStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  completedStatDivider: {
+    width: 1,
+    height: 32,
+  },
+
+  // Nutrition
+  nutritionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  macroStrip: {
+    flexDirection: 'row',
+  },
+  macroItem: {
+    flex: 1,
+  },
+  macroLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  macroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 4,
+  },
+  nutritionActions: {
+    flexDirection: 'row',
+  },
+  nutritionActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // Insights
+  insightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  insightIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Stats Strip
+  statsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+  },
+
+  // Quick Actions
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  quickActionItem: {
+    alignItems: 'center',
+  },
+  quickActionCircle: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

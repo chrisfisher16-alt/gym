@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,16 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { Badge } from './ui';
-import type { ActiveWorkoutSession, ActiveExercise, ActiveSet } from '../types/workout';
+import { useWorkoutStore } from '../stores/workout-store';
+import { useProfileStore } from '../stores/profile-store';
+import { getSuggestedLoad } from '../lib/suggested-load';
+import type { ActiveWorkoutSession, ActiveExercise, ActiveSet, MuscleGroup, Equipment } from '../types/workout';
+import { ExerciseIllustration } from './ExerciseIllustration';
 
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
@@ -73,10 +78,37 @@ export function FocusedWorkoutView({
   const currentIndex = activeSession.currentExerciseIndex;
   const exercise = activeSession.exercises[currentIndex];
 
+  // ── Exercise library entry for illustration ───────────────────────
+  const allExercises = useWorkoutStore((s) => s.exercises);
+  const exerciseLib = useMemo(
+    () => allExercises.find((e) => e.id === exercise.exerciseId),
+    [allExercises, exercise.exerciseId],
+  );
+
+  // ── Suggestion engine ───────────────────────────────────────────────
+  const history = useWorkoutStore((s) => s.history);
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const isMetric = unitPref === 'metric';
+  const unit = isMetric ? 'kg' : 'lbs';
+
+  const suggestion = useMemo(
+    () => getSuggestedLoad(exercise.exerciseId, '8-12', exercise.sets.length, history, isMetric),
+    [exercise.exerciseId, exercise.sets.length, history, isMetric],
+  );
+
   // ── Current set tracking ───────────────────────────────────────────
   const currentSet = useMemo(() => findNextIncompleteSet(exercise), [exercise]);
   const completedCount = useMemo(() => exercise.sets.filter((s) => s.isCompleted).length, [exercise]);
   const totalSets = exercise.sets.length;
+
+  const handleUseSuggestion = useCallback(() => {
+    if (!suggestion || !currentSet) return;
+    const w = suggestion.suggestedWeight;
+    const r = suggestion.suggestedReps;
+    setLocalWeight(w.toString());
+    setLocalReps(r.toString());
+    logSet(exercise.id, currentSet.id, w, r);
+  }, [suggestion, currentSet, exercise.id, logSet]);
 
   // ── Local weight / reps state (mirrors current set) ────────────────
   const [localWeight, setLocalWeight] = useState('');
@@ -124,6 +156,10 @@ export function FocusedWorkoutView({
     [],
   );
 
+  // ── Animations ────────────────────────────────────────────────────
+  const logBtnScale = useRef(new Animated.Value(1)).current;
+  const flashAnim = useRef(new Animated.Value(0)).current;
+
   // ── Log Set handler ────────────────────────────────────────────────
   const handleLogSet = useCallback(() => {
     if (!currentSet) return;
@@ -132,10 +168,20 @@ export function FocusedWorkoutView({
     const r = parseInt(localReps, 10);
     if (isNaN(w) || isNaN(r)) return;
 
+    // Button scale animation
+    Animated.sequence([
+      Animated.timing(logBtnScale, { toValue: 0.92, duration: 80, useNativeDriver: true }),
+      Animated.spring(logBtnScale, { toValue: 1, friction: 3, useNativeDriver: true }),
+    ]).start();
+
+    // Green flash
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start();
+
     // 1. Log weight/reps then complete the set
     logSet(exercise.id, currentSet.id, w, r);
     completeSet(exercise.id, currentSet.id);
-    Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     // 2. Auto-fill: if the next incomplete set has empty weight/reps, pre-populate it
     const nextIncomplete = exercise.sets.find(
@@ -153,8 +199,9 @@ export function FocusedWorkoutView({
 
       // Check if we just completed a full round (cycled back to first member)
       if (nextMemberIdx === 0) {
-        // Full round done - start rest timer
-        startRestTimer(90);
+        // Full round done - start rest timer using per-exercise override or session default
+        const restTime = exercise.restSeconds ?? activeSession.defaultRestSeconds ?? 90;
+        startRestTimer(restTime);
       }
 
       // Navigate to the next superset member
@@ -163,8 +210,9 @@ export function FocusedWorkoutView({
         setCurrentExerciseIndex(globalIdx);
       }
     } else {
-      // Not in a superset - start rest timer immediately
-      startRestTimer(90);
+      // Not in a superset - start rest timer using per-exercise override or session default
+      const restTime = exercise.restSeconds ?? activeSession.defaultRestSeconds ?? 90;
+      startRestTimer(restTime);
     }
   }, [
     currentSet,
@@ -206,6 +254,19 @@ export function FocusedWorkoutView({
             <Text style={[typography.label, { color: colors.primary, marginLeft: spacing.sm }]}>
               Exercise {supersetPosition} of {supersetMembers.length}
             </Text>
+          </View>
+        )}
+
+        {/* Exercise illustration */}
+        {exerciseLib && (
+          <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
+            <ExerciseIllustration
+              exerciseId={exercise.exerciseId}
+              category={exerciseLib.category}
+              equipment={exerciseLib.equipment}
+              primaryMuscles={exerciseLib.primaryMuscles}
+              size="medium"
+            />
           </View>
         )}
 
@@ -264,31 +325,65 @@ export function FocusedWorkoutView({
 
       {/* ── Input Section (only if there's an incomplete set) ──────── */}
       {currentSet ? (
-        <View style={[styles.inputSection, { paddingHorizontal: spacing.xl }]}>
-          {/* Weight */}
+        <View style={[styles.inputSection, { paddingHorizontal: spacing.base }]}>
+          {/* Green flash overlay for the entire section */}
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: colors.success,
+                opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.15] }),
+              },
+            ]}
+          />
+
+          {/* Suggestion banner */}
+          {suggestion && (
+            <View style={[styles.suggestionCard, { backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md }]}>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+                Based on your last workout, try:
+              </Text>
+              <Text style={[typography.h2, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, textAlign: 'center' }]}>
+                {suggestion.suggestedWeight} {unit} × {suggestion.suggestedReps} reps
+              </Text>
+              <TouchableOpacity
+                onPress={handleUseSuggestion}
+                style={[styles.useSuggestionBtn, { backgroundColor: suggestion.confidence === 'high' ? colors.success : colors.primary, borderRadius: radius.md, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.base }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="flash" size={16} color={colors.textInverse} />
+                <Text style={[typography.labelSmall, { color: colors.textInverse, marginLeft: spacing.xs }]}>Use Suggestion</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Weight - Scoreboard style */}
           <View style={styles.inputBlock}>
-            <Text style={[typography.labelSmall, { color: colors.textSecondary, marginBottom: spacing.xs, textAlign: 'center' }]}>
-              WEIGHT (lbs)
+            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+              WEIGHT ({unit})
             </Text>
             <View style={styles.inputRow}>
               <TouchableOpacity
                 onPress={() => incrementWeight(-5)}
                 style={[
                   styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                 ]}
               >
-                <Text style={[typography.h2, { color: colors.text }]}>−</Text>
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
               </TouchableOpacity>
               <TextInput
                 style={[
                   styles.bigInput,
-                  typography.displayLarge,
                   {
                     color: colors.text,
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                     borderRadius: radius.lg,
+                    fontSize: 48,
+                    fontWeight: '700',
+                    letterSpacing: -1,
                   },
                 ]}
                 value={localWeight}
@@ -302,17 +397,17 @@ export function FocusedWorkoutView({
                 onPress={() => incrementWeight(5)}
                 style={[
                   styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                 ]}
               >
-                <Text style={[typography.h2, { color: colors.text }]}>+</Text>
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Reps */}
-          <View style={[styles.inputBlock, { marginTop: spacing.lg }]}>
-            <Text style={[typography.labelSmall, { color: colors.textSecondary, marginBottom: spacing.xs, textAlign: 'center' }]}>
+          {/* Reps - Scoreboard style */}
+          <View style={[styles.inputBlock, { marginTop: spacing.xl }]}>
+            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
               REPS
             </Text>
             <View style={styles.inputRow}>
@@ -320,20 +415,22 @@ export function FocusedWorkoutView({
                 onPress={() => incrementReps(-1)}
                 style={[
                   styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                 ]}
               >
-                <Text style={[typography.h2, { color: colors.text }]}>−</Text>
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
               </TouchableOpacity>
               <TextInput
                 style={[
                   styles.bigInput,
-                  typography.displayLarge,
                   {
                     color: colors.text,
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                     borderRadius: radius.lg,
+                    fontSize: 48,
+                    fontWeight: '700',
+                    letterSpacing: -1,
                   },
                 ]}
                 value={localReps}
@@ -347,38 +444,44 @@ export function FocusedWorkoutView({
                 onPress={() => incrementReps(1)}
                 style={[
                   styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                 ]}
               >
-                <Text style={[typography.h2, { color: colors.text }]}>+</Text>
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Log Set button */}
-          <TouchableOpacity
-            onPress={handleLogSet}
-            style={[
-              styles.logSetBtn,
-              {
-                backgroundColor: colors.success,
-                borderRadius: radius.lg,
-                marginTop: spacing.xl,
-                paddingVertical: spacing.base,
-              },
-            ]}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="checkmark-circle" size={24} color={colors.textInverse} />
-            <Text
+          {/* Log Set button - MASSIVE */}
+          <Animated.View style={{ transform: [{ scale: logBtnScale }], marginTop: spacing['2xl'] }}>
+            <TouchableOpacity
+              onPress={handleLogSet}
               style={[
-                typography.h2,
-                { color: colors.textInverse, marginLeft: spacing.sm },
+                styles.logSetBtn,
+                {
+                  backgroundColor: colors.success,
+                  borderRadius: radius.xl,
+                  paddingVertical: 22,
+                  shadowColor: colors.success,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 12,
+                  elevation: 8,
+                },
               ]}
+              activeOpacity={0.8}
             >
-              Log Set
-            </Text>
-          </TouchableOpacity>
+              <Ionicons name="checkmark-circle" size={32} color={colors.textInverse} />
+              <Text
+                style={[
+                  typography.h1,
+                  { color: colors.textInverse, marginLeft: spacing.md, fontSize: 22 },
+                ]}
+              >
+                LOG SET
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Completed sets summary */}
           {completedCount > 0 && (
@@ -485,17 +588,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigIncBtn: {
-    width: 52,
-    height: 52,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bigInput: {
     flex: 1,
     textAlign: 'center',
-    borderWidth: 1,
-    minHeight: 60,
-    marginHorizontal: 12,
+    borderWidth: 2,
+    minHeight: 80,
+    marginHorizontal: 14,
     paddingHorizontal: 8,
   },
   logSetBtn: {
@@ -515,4 +618,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   completedSetChip: {},
+  suggestionCard: {
+    alignItems: 'center',
+  },
+  useSuggestionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

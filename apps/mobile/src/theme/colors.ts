@@ -21,14 +21,23 @@ export const lightColors = {
   borderLight: '#F3F4F6',
 
   // Status
-  success: '#10B981',
+  success: '#059669',
   successLight: '#D1FAE5',
+  successVibrant: '#10B981',
   warning: '#F59E0B',
   warningLight: '#FEF3C7',
   error: '#EF4444',
   errorLight: '#FEE2E2',
   info: '#3B82F6',
   infoLight: '#DBEAFE',
+
+  // PR / Achievements
+  gold: '#D97706',
+  goldLight: '#FEF3C7',
+
+  // Disabled
+  disabled: '#D1D5DB',
+  disabledText: '#9CA3AF',
 
   // Macros
   protein: '#EF4444',
@@ -67,14 +76,23 @@ export const darkColors: typeof lightColors = {
   borderLight: '#1E293B',
 
   // Status
-  success: '#34D399',
+  success: '#10B981',
   successLight: '#064E3B',
+  successVibrant: '#34D399',
   warning: '#FBBF24',
   warningLight: '#78350F',
   error: '#F87171',
   errorLight: '#7F1D1D',
   info: '#60A5FA',
   infoLight: '#1E3A5F',
+
+  // PR / Achievements
+  gold: '#FBBF24',
+  goldLight: '#78350F',
+
+  // Disabled
+  disabled: '#475569',
+  disabledText: '#64748B',
 
   // Macros
   protein: '#F87171',

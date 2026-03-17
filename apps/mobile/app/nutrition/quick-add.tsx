@@ -110,6 +110,46 @@ export default function QuickAddScreen() {
               keyboardType="numeric"
               autoFocus
             />
+
+            {/* Quick preset buttons */}
+            <View style={[styles.presetRow, { marginTop: spacing.md }]}>
+              {[100, 200, 300, 500].map((preset) => (
+                <TouchableOpacity
+                  key={preset}
+                  style={[
+                    styles.presetBtn,
+                    {
+                      backgroundColor: calories === preset.toString() ? colors.calories : colors.surfaceSecondary,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: calories === preset.toString() ? colors.calories : colors.border,
+                    },
+                  ]}
+                  onPress={() => setCalories(preset.toString())}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      typography.label,
+                      {
+                        color: calories === preset.toString() ? '#FFFFFF' : colors.text,
+                        fontWeight: '600',
+                      },
+                    ]}
+                  >
+                    {preset}
+                  </Text>
+                  <Text
+                    style={[
+                      typography.caption,
+                      { color: calories === preset.toString() ? 'rgba(255,255,255,0.8)' : colors.textTertiary },
+                    ]}
+                  >
+                    cal
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Macros */}
@@ -224,5 +264,16 @@ const styles = StyleSheet.create({
   },
   macroCol: {
     flex: 1,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  presetBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    minHeight: 48,
   },
 });

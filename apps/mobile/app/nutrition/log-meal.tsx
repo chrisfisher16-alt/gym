@@ -47,7 +47,7 @@ export default function LogMealScreen() {
 
       {/* Meal Type Selector */}
       <View style={{ marginBottom: spacing.lg }}>
-        <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+        <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.md }]}>
           Meal Type
         </Text>
         <View style={styles.mealTypeRow}>
@@ -58,18 +58,26 @@ export default function LogMealScreen() {
                 styles.mealTypeChip,
                 {
                   backgroundColor: selectedType === type ? colors.primary : colors.surfaceSecondary,
-                  borderRadius: radius.full,
-                  paddingHorizontal: spacing.base,
-                  paddingVertical: spacing.sm,
+                  borderRadius: radius.lg,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                  borderWidth: selectedType === type ? 0 : 1,
+                  borderColor: colors.border,
                 },
               ]}
               onPress={() => setSelectedType(type)}
               activeOpacity={0.7}
             >
+              <Ionicons
+                name={type === 'breakfast' ? 'sunny-outline' : type === 'lunch' ? 'restaurant-outline' : type === 'dinner' ? 'moon-outline' : 'cafe-outline'}
+                size={18}
+                color={selectedType === type ? colors.textInverse : colors.textSecondary}
+                style={{ marginBottom: 4 }}
+              />
               <Text
                 style={[
                   typography.label,
-                  { color: selectedType === type ? colors.textInverse : colors.text },
+                  { color: selectedType === type ? colors.textInverse : colors.text, fontWeight: '600' },
                 ]}
               >
                 {getMealTypeLabel(type)}
@@ -164,7 +172,13 @@ const styles = StyleSheet.create({
   },
   mealTypeRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
+  },
+  mealTypeChip: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 60,
   },
   methodGrid: {
     flexDirection: 'row',

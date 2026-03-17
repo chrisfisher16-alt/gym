@@ -9,6 +9,7 @@ import {
   TextInput,
   Image,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -20,6 +21,7 @@ import {
   type ProgressPhoto,
 } from '../../src/stores/measurements-store';
 import { useProfileStore } from '../../src/stores/profile-store';
+import { estimateBodyMeasurements } from '../../src/lib/ai-body-analyzer';
 
 // ── Unit Conversion Helpers ────────────────────────────────────────
 
@@ -84,16 +86,57 @@ export default function MeasurementsScreen() {
 
   const [activeTab, setActiveTab] = useState<Tab>('log');
 
+  const profileGender = useProfileStore((s) => s.profile.gender);
+  const profileHeightCm = useProfileStore((s) => s.profile.heightCm);
+
   // Form state
   const [weight, setWeight] = useState('');
+  const [heightFeet, setHeightFeet] = useState('');
+  const [heightInches, setHeightInches] = useState('');
+  const [heightCmInput, setHeightCmInput] = useState('');
   const [formFields, setFormFields] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
+  const [estimatedFields, setEstimatedFields] = useState<Set<string>>(new Set());
+  const [isEstimating, setIsEstimating] = useState(false);
 
   useEffect(() => {
     if (!isInitialized) {
       initialize();
     }
   }, [isInitialized, initialize]);
+
+  // Pre-fill form from last measurement when switching to log tab
+  useEffect(() => {
+    if (activeTab !== 'log' || measurements.length === 0) return;
+    const last = measurements[0]; // sorted by date desc
+    if (last.weightKg != null) setWeight(displayWeight(last.weightKg, imperial));
+    if (last.heightCm != null) {
+      if (imperial) {
+        const totalInches = last.heightCm / IN_TO_CM;
+        setHeightFeet(Math.floor(totalInches / 12).toString());
+        setHeightInches(Math.round(totalInches % 12).toString());
+      } else {
+        setHeightCmInput(last.heightCm.toFixed(1));
+      }
+    } else if (profileHeightCm) {
+      if (imperial) {
+        const totalInches = profileHeightCm / IN_TO_CM;
+        setHeightFeet(Math.floor(totalInches / 12).toString());
+        setHeightInches(Math.round(totalInches % 12).toString());
+      } else {
+        setHeightCmInput(profileHeightCm.toFixed(1));
+      }
+    }
+    const fields: Record<string, string> = {};
+    for (const field of MEASUREMENT_FIELDS) {
+      const val = (last as any)[field.key];
+      if (val != null) {
+        fields[field.key] = displayLength(val, imperial);
+      }
+    }
+    setFormFields(fields);
+    if (last.notes) setNotes(last.notes);
+  }, [activeTab, measurements.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Weight Chart Data ────────────────────────────────────────────
 
@@ -108,8 +151,25 @@ export default function MeasurementsScreen() {
 
   // ── Form Submit ──────────────────────────────────────────────────
 
+  // Parse height from form inputs
+  const getHeightCm = useCallback((): number | undefined => {
+    if (imperial) {
+      const ft = parseInt(heightFeet, 10);
+      const inches = parseInt(heightInches, 10);
+      if (isNaN(ft) && isNaN(inches)) return undefined;
+      const totalInches = (isNaN(ft) ? 0 : ft) * 12 + (isNaN(inches) ? 0 : inches);
+      if (totalInches <= 0) return undefined;
+      return totalInches * IN_TO_CM;
+    } else {
+      const cm = parseFloat(heightCmInput);
+      if (isNaN(cm) || cm <= 0) return undefined;
+      return cm;
+    }
+  }, [imperial, heightFeet, heightInches, heightCmInput]);
+
   const handleSave = useCallback(() => {
     const weightKg = parseWeight(weight, imperial);
+    const heightCm = getHeightCm();
     const parsed: Partial<BodyMeasurement> = {};
 
     for (const field of MEASUREMENT_FIELDS) {
@@ -119,7 +179,7 @@ export default function MeasurementsScreen() {
       }
     }
 
-    if (!weightKg && Object.values(parsed).every((v) => v == null) && !notes) {
+    if (!weightKg && !heightCm && Object.values(parsed).every((v) => v == null) && !notes) {
       Alert.alert('Empty', 'Please enter at least one measurement.');
       return;
     }
@@ -127,16 +187,84 @@ export default function MeasurementsScreen() {
     addMeasurement({
       date: new Date().toISOString(),
       weightKg,
+      heightCm,
       ...parsed,
       notes: notes || undefined,
     });
 
     // Reset form
     setWeight('');
+    setHeightFeet('');
+    setHeightInches('');
+    setHeightCmInput('');
     setFormFields({});
     setNotes('');
+    setEstimatedFields(new Set());
     Alert.alert('Saved', 'Measurement recorded successfully.');
-  }, [weight, formFields, notes, imperial, addMeasurement]);
+  }, [weight, formFields, notes, imperial, addMeasurement, getHeightCm]);
+
+  // AI estimation
+  const handleAISuggest = useCallback(async () => {
+    const waistVal = formFields['waistCm'];
+    if (!waistVal) {
+      Alert.alert('Waist Required', 'Please enter your waist measurement first.');
+      return;
+    }
+    const waistCm = parseLength(waistVal, imperial);
+    if (!waistCm) {
+      Alert.alert('Invalid', 'Please enter a valid waist measurement.');
+      return;
+    }
+
+    const heightCm = getHeightCm() ?? profileHeightCm;
+    if (!heightCm) {
+      Alert.alert('Height Required', 'Please enter your height to use AI suggestions.');
+      return;
+    }
+
+    const weightKg = parseWeight(weight, imperial);
+    if (!weightKg) {
+      Alert.alert('Weight Required', 'Please enter your weight to use AI suggestions.');
+      return;
+    }
+
+    setIsEstimating(true);
+    try {
+      const result = await estimateBodyMeasurements({
+        heightCm,
+        weightKg,
+        gender: profileGender,
+        waistCm,
+      });
+
+      const newFields = { ...formFields };
+      const newEstimated = new Set(estimatedFields);
+
+      const fieldMap: Record<string, keyof typeof result> = {
+        chestCm: 'chestCm',
+        hipsCm: 'hipsCm',
+        leftArmCm: 'leftArmCm',
+        rightArmCm: 'rightArmCm',
+        leftThighCm: 'leftThighCm',
+        rightThighCm: 'rightThighCm',
+      };
+
+      for (const [key, resultKey] of Object.entries(fieldMap)) {
+        if (!newFields[key]) {
+          const cmVal = result[resultKey];
+          newFields[key] = displayLength(cmVal, imperial);
+          newEstimated.add(key);
+        }
+      }
+
+      setFormFields(newFields);
+      setEstimatedFields(newEstimated);
+    } catch (error) {
+      Alert.alert('Error', 'Could not estimate measurements. Please try again.');
+    } finally {
+      setIsEstimating(false);
+    }
+  }, [formFields, imperial, weight, getHeightCm, profileHeightCm, profileGender, estimatedFields]);
 
   // ── Photo Picker ─────────────────────────────────────────────────
 
@@ -383,6 +511,73 @@ export default function MeasurementsScreen() {
               keyboardType="decimal-pad"
             />
 
+            {/* Height */}
+            <Text style={[typography.label, { color: colors.text, marginTop: spacing.md, marginBottom: spacing.xs }]}>
+              Height {imperial ? '(ft / in)' : '(cm)'}
+            </Text>
+            {imperial ? (
+              <View style={styles.heightRow}>
+                <TextInput
+                  style={[
+                    styles.heightInput,
+                    {
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      paddingHorizontal: spacing.md,
+                    },
+                    typography.body,
+                  ]}
+                  value={heightFeet}
+                  onChangeText={setHeightFeet}
+                  placeholder="5"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="number-pad"
+                />
+                <Text style={[typography.label, { color: colors.textSecondary, marginHorizontal: spacing.xs }]}>ft</Text>
+                <TextInput
+                  style={[
+                    styles.heightInput,
+                    {
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      paddingHorizontal: spacing.md,
+                    },
+                    typography.body,
+                  ]}
+                  value={heightInches}
+                  onChangeText={setHeightInches}
+                  placeholder="10"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="number-pad"
+                />
+                <Text style={[typography.label, { color: colors.textSecondary, marginLeft: spacing.xs }]}>in</Text>
+              </View>
+            ) : (
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    color: colors.text,
+                    backgroundColor: colors.surface,
+                    paddingHorizontal: spacing.md,
+                    marginBottom: spacing.md,
+                  },
+                  typography.body,
+                ]}
+                value={heightCmInput}
+                onChangeText={setHeightCmInput}
+                placeholder="e.g. 178"
+                placeholderTextColor={colors.textTertiary}
+                keyboardType="decimal-pad"
+              />
+            )}
+
             <Divider />
 
             {/* Body Part Fields */}
@@ -397,27 +592,42 @@ export default function MeasurementsScreen() {
             <View style={styles.fieldGrid}>
               {MEASUREMENT_FIELDS.map((field) => (
                 <View key={field.key} style={styles.fieldItem}>
-                  <Text
-                    style={[typography.caption, { color: colors.textSecondary, marginBottom: 2 }]}
-                  >
-                    {field.label}
-                  </Text>
+                  <View style={styles.fieldLabelRow}>
+                    <Text
+                      style={[typography.caption, { color: colors.textSecondary, marginBottom: 2 }]}
+                    >
+                      {field.label}
+                    </Text>
+                    {estimatedFields.has(field.key) && (
+                      <View style={styles.estimatedBadge}>
+                        <Ionicons name="sparkles" size={10} color={colors.primary} />
+                        <Text style={[typography.caption, { color: colors.primary, fontSize: 9, marginLeft: 2 }]}>
+                          est.
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <TextInput
                     style={[
                       styles.smallInput,
                       {
-                        borderColor: colors.border,
+                        borderColor: estimatedFields.has(field.key) ? colors.primary : colors.border,
                         borderRadius: radius.sm,
-                        color: colors.text,
+                        color: estimatedFields.has(field.key) ? colors.primary : colors.text,
                         backgroundColor: colors.surface,
                         paddingHorizontal: spacing.sm,
                       },
                       typography.bodySmall,
                     ]}
                     value={formFields[field.key] ?? ''}
-                    onChangeText={(v) =>
-                      setFormFields((prev) => ({ ...prev, [field.key]: v }))
-                    }
+                    onChangeText={(v) => {
+                      setFormFields((prev) => ({ ...prev, [field.key]: v }));
+                      setEstimatedFields((prev) => {
+                        const next = new Set(prev);
+                        next.delete(field.key);
+                        return next;
+                      });
+                    }}
                     keyboardType="decimal-pad"
                     placeholderTextColor={colors.textTertiary}
                     placeholder="—"
@@ -425,6 +635,33 @@ export default function MeasurementsScreen() {
                 </View>
               ))}
             </View>
+
+            {/* AI Suggest Button */}
+            {formFields['waistCm'] && (
+              <TouchableOpacity
+                onPress={handleAISuggest}
+                disabled={isEstimating}
+                style={[
+                  styles.aiSuggestBtn,
+                  {
+                    backgroundColor: colors.primaryMuted,
+                    borderRadius: radius.md,
+                    padding: spacing.sm,
+                    marginBottom: spacing.md,
+                  },
+                ]}
+                activeOpacity={0.7}
+              >
+                {isEstimating ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="sparkles" size={16} color={colors.primary} />
+                )}
+                <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>
+                  {isEstimating ? 'Estimating...' : 'Suggest with AI'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <Divider />
 
@@ -502,6 +739,18 @@ export default function MeasurementsScreen() {
                       </Text>
                       <Text style={[typography.label, { color: colors.text }]}>
                         {displayWeight(m.weightKg, imperial)} {weightUnit}
+                      </Text>
+                    </View>
+                  )}
+                  {m.heightCm != null && (
+                    <View style={styles.historyItem}>
+                      <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                        Height
+                      </Text>
+                      <Text style={[typography.label, { color: colors.text }]}>
+                        {imperial
+                          ? `${Math.floor(m.heightCm / 2.54 / 12)}'${Math.round((m.heightCm / 2.54) % 12)}"`
+                          : `${m.heightCm.toFixed(1)} cm`}
                       </Text>
                     </View>
                   )}
@@ -728,5 +977,32 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 160,
     resizeMode: 'cover',
+  },
+  heightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  heightInput: {
+    borderWidth: 1,
+    minHeight: 44,
+    paddingVertical: 10,
+    width: 60,
+    textAlign: 'center',
+  },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  estimatedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aiSuggestBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -78,12 +78,14 @@ export async function sendNutritionQuickMessage(
 
 export interface ExerciseAdjustmentReplace {
   action: 'replace';
+  currentExercise: string;
   exerciseName: string;
   reason: string;
 }
 
 export interface ExerciseAdjustmentSets {
   action: 'adjust_sets';
+  currentExercise: string;
   sets?: number;
   reps?: string;
   reason: string;
@@ -93,48 +95,81 @@ export type ExerciseAdjustment = ExerciseAdjustmentReplace | ExerciseAdjustmentS
 
 export interface ExerciseAdjustmentResponse {
   content: string;
+  /** @deprecated Use adjustments array instead. */
   adjustment: ExerciseAdjustment | null;
+  /** Array of all proposed adjustments (may be 1 or more). */
+  adjustments: ExerciseAdjustment[];
   model: string;
   isDemo: boolean;
 }
 
 /**
- * Parse a structured JSON adjustment block from AI response text.
- * Looks for ```json ... ``` fenced blocks or bare JSON objects.
+ * Parse a single adjustment object into a typed ExerciseAdjustment.
  */
-function parseAdjustmentFromResponse(text: string): ExerciseAdjustment | null {
+function parseSingleAdjustment(obj: Record<string, unknown>, fallbackCurrentExercise?: string): ExerciseAdjustment | null {
+  const currentExercise = (obj.currentExercise as string) ?? fallbackCurrentExercise ?? '';
+  if (obj.action === 'replace' && obj.exerciseName) {
+    return {
+      action: 'replace',
+      currentExercise,
+      exerciseName: obj.exerciseName as string,
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'adjust_sets') {
+    return {
+      action: 'adjust_sets',
+      currentExercise,
+      sets: obj.sets as number | undefined,
+      reps: obj.reps as string | undefined,
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  return null;
+}
+
+/**
+ * Parse structured JSON adjustment block(s) from AI response text.
+ * Supports both the new {"adjustments":[...]} array format and the
+ * legacy single-object format for backwards compatibility.
+ */
+function parseAdjustmentsFromResponse(text: string, fallbackCurrentExercise?: string): ExerciseAdjustment[] {
   // Try fenced code block first
   const fencedMatch = text.match(/```json\s*\n?([\s\S]*?)\n?```/);
   const jsonStr = fencedMatch?.[1]?.trim();
 
-  if (!jsonStr) {
-    // Try bare JSON object on its own line
-    const bareMatch = text.match(/^(\{"action"[^}]+\})$/m);
-    if (!bareMatch) return null;
+  const tryParse = (str: string): ExerciseAdjustment[] => {
     try {
-      const parsed = JSON.parse(bareMatch[1]);
-      if (parsed.action === 'replace' && parsed.exerciseName) return parsed;
-      if (parsed.action === 'adjust_sets') return parsed;
-    } catch { /* ignore */ }
-    return null;
+      const parsed = JSON.parse(str);
+
+      // New array format: {"adjustments": [...]}
+      if (parsed.adjustments && Array.isArray(parsed.adjustments)) {
+        const results: ExerciseAdjustment[] = [];
+        for (const item of parsed.adjustments) {
+          const adj = parseSingleAdjustment(item, fallbackCurrentExercise);
+          if (adj) results.push(adj);
+        }
+        return results;
+      }
+
+      // Legacy single-object format: {"action": "replace", ...}
+      const single = parseSingleAdjustment(parsed, fallbackCurrentExercise);
+      return single ? [single] : [];
+    } catch { /* ignore parse errors */ }
+    return [];
+  };
+
+  if (jsonStr) {
+    return tryParse(jsonStr);
   }
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.action === 'replace' && parsed.exerciseName) {
-      return { action: 'replace', exerciseName: parsed.exerciseName, reason: parsed.reason ?? '' };
-    }
-    if (parsed.action === 'adjust_sets') {
-      return {
-        action: 'adjust_sets',
-        sets: parsed.sets,
-        reps: parsed.reps,
-        reason: parsed.reason ?? '',
-      };
-    }
-  } catch { /* ignore parse errors */ }
+  // Try bare JSON on its own line
+  const bareMatch = text.match(/^(\{["'](?:adjustments|action)[\s\S]*?\})$/m);
+  if (bareMatch) {
+    return tryParse(bareMatch[1]);
+  }
 
-  return null;
+  return [];
 }
 
 /**
@@ -150,27 +185,35 @@ function stripJsonBlock(text: string): string {
 
 /**
  * Request an exercise adjustment from the AI coach.
- * Returns both the human-readable text and a parsed adjustment action (if any).
+ * Returns both the human-readable text and parsed adjustment action(s).
+ *
+ * @param currentExerciseName - The exercise the user is currently focused on.
+ * @param availableExerciseNames - All exercises in the library.
+ * @param userRequest - The user's message.
+ * @param workoutExercises - All exercises in the current workout (for multi-adjust).
  */
 export async function requestExerciseAdjustment(
   currentExerciseName: string,
   availableExerciseNames: string[],
   userRequest: string,
+  workoutExercises?: Array<{ name: string; exerciseId: string }>,
 ): Promise<ExerciseAdjustmentResponse> {
   const response = await sendAIMessage(userRequest, {
     systemPrompt: buildExerciseAdjustmentSystemPrompt(
       currentExerciseName,
       availableExerciseNames,
+      workoutExercises,
     ),
     context: 'workout',
   });
 
-  const adjustment = parseAdjustmentFromResponse(response.content);
+  const adjustments = parseAdjustmentsFromResponse(response.content, currentExerciseName);
   const content = stripJsonBlock(response.content);
 
   return {
     content,
-    adjustment,
+    adjustment: adjustments[0] ?? null,
+    adjustments,
     model: response.model,
     isDemo: response.isDemo,
   };

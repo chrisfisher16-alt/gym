@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,13 +7,14 @@ import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
 import { useWorkoutPrograms } from '../../src/hooks/useWorkoutPrograms';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { useWorkoutStore } from '../../src/stores/workout-store';
-import { Button, Card, ScreenContainer, Badge, LoadingSpinner, ErrorState } from '../../src/components/ui';
+import { Button, Card, ScreenContainer, Badge, LoadingSpinner, ErrorState, ProgressBar } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume } from '../../src/lib/workout-utils';
 import { CoachFAB } from '../../src/components/CoachFAB';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
 import { UpgradeBanner } from '../../src/components/UpgradeBanner';
 import { checkWorkoutLogLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
+import { WorkoutMilestones } from '../../src/components/WorkoutMilestones';
 
 export default function WorkoutTab() {
   const router = useRouter();
@@ -21,9 +22,10 @@ export default function WorkoutTab() {
   const initialize = useWorkoutStore((s) => s.initialize);
   const isInitialized = useWorkoutStore((s) => s.isInitialized);
   const { isActive, startEmptyWorkout, activeSession } = useActiveWorkout();
-  const { activeProgram, getTodayWorkout } = useWorkoutPrograms();
+  const { activeProgram, programs, getTodayWorkout, setActiveProgram } = useWorkoutPrograms();
   const { recentWorkouts, weeklyVolume, totalWorkouts } = useWorkoutHistory();
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
+  const getProgramProgress = useWorkoutStore((s) => s.getProgramProgress);
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
   const [workoutUsage, setWorkoutUsage] = useState<UsageCheck | null>(null);
@@ -69,6 +71,35 @@ export default function WorkoutTab() {
   );
 
   const todayWorkout = activeProgram ? getTodayWorkout() : null;
+
+  // Program progress
+  const programProgress = useMemo(() => {
+    if (!activeProgram) return null;
+    return getProgramProgress(activeProgram.id);
+  }, [activeProgram, getProgramProgress]);
+
+  // Weekly day tracking: how many days done this week
+  const weeklyDayProgress = useMemo(() => {
+    if (!activeProgram) return { completedThisWeek: 0, totalDays: 0 };
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const dayOfWeek = now.getDay();
+    startOfWeek.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const history = useWorkoutStore.getState().history;
+    const completedThisWeek = history.filter((s) => {
+      if (s.programId !== activeProgram.id) return false;
+      return new Date(s.completedAt) >= startOfWeek;
+    }).length;
+
+    return { completedThisWeek, totalDays: activeProgram.daysPerWeek };
+  }, [activeProgram]);
+
+  const inactivePrograms = useMemo(
+    () => programs.filter((p) => !p.isActive),
+    [programs],
+  );
 
   const handleQuickStart = () => {
     if (isActive) {
@@ -194,6 +225,30 @@ export default function WorkoutTab() {
         </Card>
       )}
 
+      {/* Active Program Progress */}
+      {!isActive && activeProgram && programProgress && (
+        <Card style={{ marginBottom: spacing.base }}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="stats-chart-outline" size={20} color={colors.primary} />
+            <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+              {activeProgram.name}
+            </Text>
+            <Badge label={`${programProgress.percentComplete}%`} variant="default" />
+          </View>
+          <View style={{ marginTop: spacing.sm }}>
+            <ProgressBar progress={programProgress.percentComplete / 100} height={8} />
+          </View>
+          <View style={[styles.progressDetails, { marginTop: spacing.sm }]}>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+              Day {weeklyDayProgress.completedThisWeek} of {weeklyDayProgress.totalDays} this week
+            </Text>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+              {programProgress.completedDays}/{programProgress.totalDays} sessions done
+            </Text>
+          </View>
+        </Card>
+      )}
+
       {/* Quick Start */}
       {!isActive && (
         <Card style={{ marginBottom: spacing.base }}>
@@ -278,6 +333,42 @@ export default function WorkoutTab() {
         </Card>
       )}
 
+      {/* Milestones */}
+      <WorkoutMilestones />
+
+      {/* Choose a Program */}
+      {inactivePrograms.length > 0 && (
+        <View style={{ marginBottom: spacing.base }}>
+          <View style={styles.sectionHeader}>
+            <Text style={[typography.h3, { color: colors.text }]}>Choose a Program</Text>
+            <TouchableOpacity onPress={() => router.push('/workout/programs')}>
+              <Text style={[typography.label, { color: colors.primary }]}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          {inactivePrograms.slice(0, 3).map((program) => (
+            <TouchableOpacity
+              key={program.id}
+              activeOpacity={0.7}
+              onPress={() => {
+                setActiveProgram(program.id);
+              }}
+            >
+              <Card style={{ marginBottom: spacing.sm }}>
+                <View style={styles.historyRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.label, { color: colors.text }]}>{program.name}</Text>
+                    <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                      {program.daysPerWeek} days/week · {program.difficulty}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                </View>
+              </Card>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {/* Recent History */}
       <View style={{ marginBottom: spacing['2xl'] }}>
         <View style={styles.sectionHeader}>
@@ -344,6 +435,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   exercisePreview: {},
+  progressDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   navGrid: {
     flexDirection: 'row',
     gap: 12,

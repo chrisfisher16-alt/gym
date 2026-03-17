@@ -7,6 +7,7 @@ export interface BodyMeasurement {
   id: string;
   date: string; // ISO
   weightKg?: number;
+  heightCm?: number;
   chestCm?: number;
   waistCm?: number;
   hipsCm?: number;

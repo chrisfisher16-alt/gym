@@ -36,6 +36,7 @@ export interface ExerciseLibraryEntry {
   defaultSets: number;
   defaultReps: string; // e.g. "8-12"
   defaultRestSeconds: number;
+  illustrationUrl?: string; // URL to exercise illustration
 }
 
 // ── Workout Program ─────────────────────────────────────────────────
@@ -100,6 +101,7 @@ export interface ActiveExercise {
   supersetGroupId?: string;
   isTimeBased?: boolean;
   defaultDurationSeconds?: number;
+  restSeconds?: number; // per-exercise rest time override
   isSkipped: boolean;
   order: number;
   notes?: string;

@@ -12,6 +12,7 @@ import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../sr
 import { getExerciseHistory } from '../../src/lib/workout-db';
 import { useWorkoutStore } from '../../src/stores/workout-store';
 import { formatFullDate, formatWeight } from '../../src/lib/workout-utils';
+import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
 
 export default function ExerciseDetailScreen() {
   const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
@@ -44,7 +45,12 @@ export default function ExerciseDetailScreen() {
 
   const handleAddToWorkout = () => {
     addExerciseToSession(exercise);
-    router.back();
+    // Go back 2 screens: [exerciseId] -> exercises -> active
+    if (router.canDismiss()) {
+      router.dismiss(2);
+    } else {
+      router.replace('/workout/active');
+    }
   };
 
   const handleWatchTutorial = () => {
@@ -75,16 +81,16 @@ export default function ExerciseDetailScreen() {
           {exercise.isTimeBased && <Badge label="Timed" variant="default" />}
         </View>
 
-        {/* Exercise Illustration Placeholder */}
+        {/* Exercise Illustration */}
         <Card style={{ marginBottom: spacing.base }}>
           <View style={styles.illustrationPlaceholder}>
-            <View style={[styles.illustrationIcon, { backgroundColor: colors.primaryMuted }]}>
-              <Ionicons
-                name={(EQUIPMENT_ICONS[exercise.equipment] ?? 'barbell-outline') as keyof typeof Ionicons.glyphMap}
-                size={48}
-                color={colors.primary}
-              />
-            </View>
+            <ExerciseIllustration
+              exerciseId={exercise.id}
+              category={exercise.category}
+              equipment={exercise.equipment}
+              primaryMuscles={exercise.primaryMuscles}
+              size="large"
+            />
             <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.sm }]}>
               {exercise.name}
             </Text>

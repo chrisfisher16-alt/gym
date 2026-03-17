@@ -11,3 +11,4 @@ export { Divider } from './Divider';
 export { ProgressBar } from './ProgressBar';
 export { MacroBar } from './MacroBar';
 export { ImagePlaceholder } from './ImagePlaceholder';
+export { SkeletonCard } from '../SkeletonCard';

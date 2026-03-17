@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useWorkoutStore } from '../stores/workout-store';
+import { useProfileStore } from '../stores/profile-store';
 import { getSuggestedLoad, getLastPerformance } from '../lib/suggested-load';
 import type { LoadSuggestion } from '../types/workout';
 
@@ -9,9 +10,9 @@ export function useSuggestedLoad(
   targetSets: number = 3,
 ) {
   const history = useWorkoutStore((s) => s.history);
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
 
-  // TODO: Get from user preferences
-  const isMetric = false;
+  const isMetric = unitPref === 'metric';
   const unit = isMetric ? 'kg' : 'lbs';
 
   const suggestion: LoadSuggestion | null = useMemo(

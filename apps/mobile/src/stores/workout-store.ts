@@ -27,9 +27,17 @@ const STORAGE_KEYS = {
   EXERCISES: '@workout/exercises',
   PERSONAL_RECORDS: '@workout/personal_records',
   DEFAULT_REST_SECONDS: '@workout/default_rest_seconds',
+  PROGRAM_COMPLETIONS: '@workout/program_completions',
 } as const;
 
 // ── State ───────────────────────────────────────────────────────────
+
+export interface ProgramProgress {
+  totalDays: number;
+  completedDays: number;
+  completedDayIds: string[];
+  percentComplete: number;
+}
 
 interface WorkoutState {
   // Data
@@ -39,6 +47,7 @@ interface WorkoutState {
   exercises: ExerciseLibraryEntry[];
   personalRecords: Record<string, PersonalRecord>;
   defaultRestSeconds: number;
+  programCompletions: Record<string, string>; // programId → completionDate
   isInitialized: boolean;
 
   // Actions - Initialization
@@ -83,6 +92,9 @@ interface WorkoutState {
   // Actions - Exercise Replacement
   replaceExercise: (exerciseInstanceId: string, newExercise: ExerciseLibraryEntry) => void;
 
+  // Actions - Per-Exercise Rest Time
+  updateExerciseRestTime: (exerciseInstanceId: string, seconds: number) => void;
+
   // Actions - Timed Sets
   logTimedSet: (exerciseInstanceId: string, setId: string, durationSeconds: number) => void;
 
@@ -106,6 +118,10 @@ interface WorkoutState {
   updateSessionMood: (mood: number) => void;
   updateSessionName: (name: string) => void;
 
+  // Actions - Program Progress
+  getProgramProgress: (programId: string) => ProgramProgress;
+  markProgramCompleted: (programId: string) => void;
+
   // Actions - Custom Exercise
   addCustomExercise: (exercise: ExerciseLibraryEntry) => void;
 
@@ -122,6 +138,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   exercises: [],
   personalRecords: {},
   defaultRestSeconds: 90,
+  programCompletions: {},
   isInitialized: false,
 
   // ── Initialize ──────────────────────────────────────────────────
@@ -135,6 +152,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         storedExercises,
         storedRecords,
         storedDefaultRest,
+        storedProgramCompletions,
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION),
         AsyncStorage.getItem(STORAGE_KEYS.HISTORY),
@@ -142,6 +160,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         AsyncStorage.getItem(STORAGE_KEYS.EXERCISES),
         AsyncStorage.getItem(STORAGE_KEYS.PERSONAL_RECORDS),
         AsyncStorage.getItem(STORAGE_KEYS.DEFAULT_REST_SECONDS),
+        AsyncStorage.getItem(STORAGE_KEYS.PROGRAM_COMPLETIONS),
       ]);
 
       const baseExercises = [...EXERCISE_LIBRARY];
@@ -170,6 +189,10 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ? parseInt(storedDefaultRest, 10)
         : 90;
 
+      const programCompletions: Record<string, string> = storedProgramCompletions
+        ? JSON.parse(storedProgramCompletions)
+        : {};
+
       set({
         exercises: allExercises,
         programs,
@@ -177,6 +200,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         personalRecords,
         activeSession,
         defaultRestSeconds: isNaN(defaultRestSeconds) ? 90 : defaultRestSeconds,
+        programCompletions,
         isInitialized: true,
       });
 
@@ -191,6 +215,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         programs: getSeedPrograms('local_user'),
         history: [],
         personalRecords: {},
+        programCompletions: {},
         activeSession: null,
         isInitialized: true,
       });
@@ -261,6 +286,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           supersetGroupId: e.supersetGroupId,
           isTimeBased: libExercise?.isTimeBased,
           defaultDurationSeconds: libExercise?.defaultDurationSeconds,
+          restSeconds: e.restSeconds,
           isSkipped: false,
           order: index,
         };
@@ -521,6 +547,22 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     get().persistActiveSession();
   },
 
+  updateExerciseRestTime: (exerciseInstanceId, seconds) => {
+    const clamped = Math.max(5, Math.min(600, seconds));
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((e) =>
+        e.id === exerciseInstanceId ? { ...e, restSeconds: clamped } : e,
+      );
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
   replaceExercise: (exerciseInstanceId, newExercise) => {
     set((state) => {
       if (!state.activeSession) return state;
@@ -760,6 +802,49 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set((state) => {
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, name } };
+    });
+  },
+
+  // ── Program Progress ───────────────────────────────────────────
+
+  getProgramProgress: (programId) => {
+    const { programs, history } = get();
+    const program = programs.find((p) => p.id === programId);
+    if (!program) return { totalDays: 0, completedDays: 0, completedDayIds: [], percentComplete: 0 };
+
+    const totalDays = program.days.length;
+    const dayIds = new Set(program.days.map((d) => d.id));
+
+    // Find completed sessions that match this program's days
+    const completedDayIds = new Set<string>();
+    for (const session of history) {
+      if (session.programId === programId && session.dayId && dayIds.has(session.dayId)) {
+        completedDayIds.add(session.dayId);
+      }
+    }
+
+    const completedDays = completedDayIds.size;
+    const percentComplete = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+
+    return {
+      totalDays,
+      completedDays,
+      completedDayIds: Array.from(completedDayIds),
+      percentComplete,
+    };
+  },
+
+  markProgramCompleted: (programId) => {
+    set((state) => {
+      const programCompletions = {
+        ...state.programCompletions,
+        [programId]: new Date().toISOString(),
+      };
+      AsyncStorage.setItem(
+        STORAGE_KEYS.PROGRAM_COMPLETIONS,
+        JSON.stringify(programCompletions),
+      );
+      return { programCompletions };
     });
   },
 

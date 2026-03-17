@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,23 +12,26 @@ import {
   Modal,
   FlatList,
   Linking,
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
-import { useSuggestedLoad } from '../../src/hooks/useSuggestedLoad';
 import { useWorkoutStore } from '../../src/stores/workout-store';
+import { useProfileStore } from '../../src/stores/profile-store';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { formatTimerDisplay, formatWeight, formatDuration } from '../../src/lib/workout-utils';
-import { getLastPerformance } from '../../src/lib/suggested-load';
+import { getLastPerformance, getSuggestedLoad } from '../../src/lib/suggested-load';
 import { getSuggestedReplacements } from '../../src/lib/exercise-replacement';
 import { EQUIPMENT_LABELS } from '../../src/lib/exercise-data';
 import { REST_TIMER_PRESETS } from '../../src/types/workout';
 import type { ActiveExercise, ActiveSet, ExerciseLibraryEntry, CompletedSession } from '../../src/types/workout';
 import { InWorkoutCoach } from '../../src/components/InWorkoutCoach';
 import { FocusedWorkoutView } from '../../src/components/FocusedWorkoutView';
+import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
 
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
@@ -257,6 +260,9 @@ const SetRow = React.memo(function SetRow({
   const { colors, spacing, radius, typography } = useTheme();
   const [localWeight, setLocalWeight] = useState(set.weight?.toString() ?? '');
   const [localReps, setLocalReps] = useState(set.reps?.toString() ?? '');
+  const flashAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const prBounce = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (set.weight !== undefined) setLocalWeight(set.weight.toString());
@@ -269,8 +275,25 @@ const SetRow = React.memo(function SetRow({
   useEffect(() => {
     if (set.isPR && set.isCompleted) {
       Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // PR trophy bounce
+      Animated.sequence([
+        Animated.timing(prBounce, { toValue: 1.5, duration: 150, useNativeDriver: true }),
+        Animated.spring(prBounce, { toValue: 1, friction: 3, useNativeDriver: true }),
+      ]).start();
     }
   }, [set.isPR, set.isCompleted]);
+
+  // Green flash when set completes
+  useEffect(() => {
+    if (set.isCompleted) {
+      flashAnim.setValue(1);
+      Animated.timing(flashAnim, { toValue: 0, duration: 600, useNativeDriver: true }).start();
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.05, duration: 100, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [set.isCompleted]);
 
   const handleWeightChange = (text: string) => {
     setLocalWeight(text);
@@ -321,21 +344,35 @@ const SetRow = React.memo(function SetRow({
     set.setType === 'warmup' ? colors.warning : set.setType === 'drop' ? colors.info : colors.text;
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.setRow,
         {
           backgroundColor: set.isCompleted ? (set.isPR ? colors.warningLight : colors.successLight) : 'transparent',
           borderRadius: radius.md,
           paddingHorizontal: spacing.sm,
-          paddingVertical: spacing.sm,
-          marginBottom: 2,
+          paddingVertical: spacing.md,
+          marginBottom: 4,
+          transform: [{ scale: scaleAnim }],
         },
       ]}
     >
+      {/* Green flash overlay */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: colors.success,
+            borderRadius: radius.md,
+            opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.25] }),
+          },
+        ]}
+      />
+
       {/* Set number */}
       <View style={[styles.setNumber, { width: 28 }]}>
-        <Text style={[typography.labelSmall, { color: setTypeLabel ? setTypeColor : colors.textSecondary }]}>
+        <Text style={[typography.label, { color: setTypeLabel ? setTypeColor : colors.textSecondary, fontWeight: '600' }]}>
           {setTypeLabel || set.setNumber}
         </Text>
       </View>
@@ -344,20 +381,21 @@ const SetRow = React.memo(function SetRow({
       <View style={styles.inputGroup}>
         <TouchableOpacity
           onPress={() => incrementWeight(-5)}
-          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm }]}
-          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
         >
-          <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>-5</Text>
+          <Text style={[typography.label, { color: colors.text, fontWeight: '700' }]}>-5</Text>
         </TouchableOpacity>
         <TextInput
           style={[
             styles.numericInput,
-            typography.label,
+            typography.labelLarge,
             {
               color: colors.text,
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              borderRadius: radius.sm,
+              borderRadius: radius.md,
+              fontWeight: '700',
+              fontSize: 16,
             },
           ]}
           value={localWeight}
@@ -369,33 +407,33 @@ const SetRow = React.memo(function SetRow({
         />
         <TouchableOpacity
           onPress={() => incrementWeight(5)}
-          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm }]}
-          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
         >
-          <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>+5</Text>
+          <Text style={[typography.label, { color: colors.text, fontWeight: '700' }]}>+5</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={[typography.bodySmall, { color: colors.textTertiary, marginHorizontal: 2 }]}>×</Text>
+      <Text style={[typography.label, { color: colors.textTertiary, marginHorizontal: 4 }]}>×</Text>
 
       {/* Reps input with +/- */}
       <View style={styles.inputGroup}>
         <TouchableOpacity
           onPress={() => incrementReps(-1)}
-          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm }]}
-          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
         >
-          <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>-1</Text>
+          <Text style={[typography.label, { color: colors.text, fontWeight: '700' }]}>-1</Text>
         </TouchableOpacity>
         <TextInput
           style={[
             styles.numericInput,
-            typography.label,
+            typography.labelLarge,
             {
               color: colors.text,
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              borderRadius: radius.sm,
+              borderRadius: radius.md,
+              fontWeight: '700',
+              fontSize: 16,
             },
           ]}
           value={localReps}
@@ -407,10 +445,9 @@ const SetRow = React.memo(function SetRow({
         />
         <TouchableOpacity
           onPress={() => incrementReps(1)}
-          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm }]}
-          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
         >
-          <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>+1</Text>
+          <Text style={[typography.label, { color: colors.text, fontWeight: '700' }]}>+1</Text>
         </TouchableOpacity>
       </View>
 
@@ -422,25 +459,40 @@ const SetRow = React.memo(function SetRow({
           styles.checkBtn,
           {
             backgroundColor: set.isCompleted ? colors.success : colors.surfaceSecondary,
-            borderRadius: radius.sm,
+            borderRadius: radius.md,
           },
         ]}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Ionicons
           name={set.isCompleted ? 'checkmark' : 'checkmark-outline'}
-          size={20}
+          size={24}
           color={set.isCompleted ? colors.textInverse : colors.textTertiary}
         />
       </TouchableOpacity>
 
+      {/* Remove set button - only for incomplete sets */}
+      {!set.isCompleted && (
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert('Remove Set', 'Remove this set?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: () => onRemove(set.id) },
+            ]);
+          }}
+          style={[styles.removeBtn, { marginLeft: 4 }]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="trash-outline" size={16} color={colors.error} />
+        </TouchableOpacity>
+      )}
+
       {/* PR badge */}
       {set.isPR && (
-        <View style={styles.prBadge}>
-          <Ionicons name="trophy" size={14} color={colors.warning} />
-        </View>
+        <Animated.View style={[styles.prBadge, { transform: [{ scale: prBounce }] }]}>
+          <Ionicons name="trophy" size={16} color={colors.gold ?? colors.warning} />
+        </Animated.View>
       )}
-    </View>
+    </Animated.View>
   );
 });
 
@@ -663,6 +715,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
 }) {
   const { colors, spacing, radius, typography } = useTheme();
   const history = useWorkoutStore((s) => s.history);
+  const allExercises = useWorkoutStore((s) => s.exercises);
   const logSet = useWorkoutStore((s) => s.logSet);
   const completeSet = useWorkoutStore((s) => s.completeSet);
   const removeSet = useWorkoutStore((s) => s.removeSet);
@@ -671,9 +724,48 @@ const ExerciseCard = React.memo(function ExerciseCard({
   const logTimedSet = useWorkoutStore((s) => s.logTimedSet);
   const startRestTimer = useWorkoutStore((s) => s.startRestTimer);
   const defaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
+  const updateExerciseRestTime = useWorkoutStore((s) => s.updateExerciseRestTime);
 
-  const unit = 'lbs'; // TODO: from prefs
+  // Exercise library entry for illustration
+  const exerciseLib = useMemo(
+    () => allExercises.find((e) => e.id === exercise.exerciseId),
+    [allExercises, exercise.exerciseId],
+  );
+
+  // Per-exercise rest time state
+  const [editingRestTime, setEditingRestTime] = useState(false);
+  const [restTimeInput, setRestTimeInput] = useState('');
+  const REST_PRESETS = [30, 60, 90, 120, 180];
+
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const isMetric = unitPref === 'metric';
+  const unit = isMetric ? 'kg' : 'lbs';
   const lastPerf = getLastPerformance(exercise.exerciseId, history, unit);
+
+  // Suggestion engine
+  const suggestion = useMemo(
+    () => getSuggestedLoad(exercise.exerciseId, '8-12', exercise.sets.length, history, isMetric),
+    [exercise.exerciseId, exercise.sets.length, history, isMetric],
+  );
+
+  // Pre-fill empty sets with suggestion on mount
+  useEffect(() => {
+    if (!suggestion) return;
+    for (const set of exercise.sets) {
+      if (!set.isCompleted && set.weight === undefined && set.reps === undefined) {
+        logSet(exercise.id, set.id, suggestion.suggestedWeight, suggestion.suggestedReps);
+      }
+    }
+  }, [suggestion?.suggestedWeight, suggestion?.suggestedReps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleApplySuggestion = useCallback(() => {
+    if (!suggestion) return;
+    for (const set of exercise.sets) {
+      if (!set.isCompleted) {
+        logSet(exercise.id, set.id, suggestion.suggestedWeight, suggestion.suggestedReps);
+      }
+    }
+  }, [suggestion, exercise.sets, exercise.id, logSet]);
 
   const isTimeBased = !!exercise.isTimeBased;
   const defaultDuration = exercise.defaultDurationSeconds ?? 60;
@@ -699,12 +791,12 @@ const ExerciseCard = React.memo(function ExerciseCard({
     (setId: string) => {
       completeSet(exercise.id, setId);
       Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      // Auto-start rest timer using stored default, but only after last exercise in superset group
+      // Auto-start rest timer using per-exercise override or stored default
       if (!isInSuperset) {
-        startRestTimer(defaultRestSeconds);
+        startRestTimer(exercise.restSeconds ?? defaultRestSeconds);
       }
     },
-    [completeSet, exercise.id, startRestTimer, isInSuperset, defaultRestSeconds],
+    [completeSet, exercise.id, exercise.restSeconds, startRestTimer, isInSuperset, defaultRestSeconds],
   );
 
   const handleRemoveSet = useCallback(
@@ -721,9 +813,12 @@ const ExerciseCard = React.memo(function ExerciseCard({
     [updateSetRPE, exercise.id],
   );
 
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
   const handleYouTube = () => {
     const query = encodeURIComponent(`how to do ${exercise.exerciseName} proper form`);
     Linking.openURL(`https://www.youtube.com/results?search_query=${query}`);
+    setShowOverflowMenu(false);
   };
 
   if (exercise.isSkipped) return null;
@@ -755,23 +850,41 @@ const ExerciseCard = React.memo(function ExerciseCard({
             <Ionicons name="reorder-three" size={22} color={colors.textTertiary} />
           </View>
         )}
+        {/* Exercise illustration (small) */}
+        {exerciseLib && !isReorderMode && (
+          <ExerciseIllustration
+            exerciseId={exercise.exerciseId}
+            category={exerciseLib.category}
+            equipment={exerciseLib.equipment}
+            primaryMuscles={exerciseLib.primaryMuscles}
+            size="small"
+            style={{ marginRight: spacing.sm }}
+          />
+        )}
         <View style={{ flex: 1 }}>
           <View style={styles.exerciseNameRow}>
             <Text style={[typography.labelLarge, { color: colors.text, flex: 1 }]} numberOfLines={1}>
               {exercise.exerciseName}
             </Text>
-            {/* YouTube info icon */}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            {isInSuperset && !isReorderMode && (
+              <Badge label={supersetLabel} variant="info" />
+            )}
             {!isReorderMode && (
-              <TouchableOpacity onPress={handleYouTube} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 6 }}>
-                <Ionicons name="logo-youtube" size={18} color="#FF0000" />
+              <TouchableOpacity
+                onPress={() => {
+                  setRestTimeInput((exercise.restSeconds ?? defaultRestSeconds).toString());
+                  setEditingRestTime(true);
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text style={[typography.caption, { color: colors.primary }]}>
+                  Rest: {exercise.restSeconds ?? defaultRestSeconds}s
+                </Text>
               </TouchableOpacity>
             )}
           </View>
-          {isInSuperset && !isReorderMode && (
-            <View style={styles.supersetLabelRow}>
-              <Badge label={supersetLabel} variant="info" />
-            </View>
-          )}
         </View>
         {/* Reorder arrows */}
         {isReorderMode ? (
@@ -796,16 +909,138 @@ const ExerciseCard = React.memo(function ExerciseCard({
             )}
           </View>
         ) : (
-          /* Swap exercise button */
+          /* Overflow menu button - hides YouTube, swap, superset */
           <TouchableOpacity
-            onPress={() => onSwapPress(exercise)}
-            style={[styles.swapBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm }]}
+            onPress={() => setShowOverflowMenu(!showOverflowMenu)}
+            style={[styles.overflowBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Overflow menu items */}
+      {showOverflowMenu && !isReorderMode && (
+        <View style={[
+          styles.overflowMenu,
+          { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.sm, marginTop: spacing.sm },
+        ]}>
+          <TouchableOpacity
+            onPress={() => { onSwapPress(exercise); setShowOverflowMenu(false); }}
+            style={[styles.overflowMenuItem, { paddingVertical: spacing.sm }]}
+          >
+            <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
+            <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>Swap Exercise</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleYouTube} style={[styles.overflowMenuItem, { paddingVertical: spacing.sm }]}>
+            <Ionicons name="logo-youtube" size={16} color="#FF0000" />
+            <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>Watch Form Video</Text>
+          </TouchableOpacity>
+          {!isInSuperset ? (
+            <TouchableOpacity
+              onPress={() => { onSupersetPress(exercise.id); setShowOverflowMenu(false); }}
+              style={[styles.overflowMenuItem, { paddingVertical: spacing.sm }]}
+            >
+              <Ionicons name="git-merge-outline" size={16} color={colors.primary} />
+              <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>Create Superset</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => { onRemoveSupersetPress(exercise.supersetGroupId!); setShowOverflowMenu(false); }}
+              style={[styles.overflowMenuItem, { paddingVertical: spacing.sm }]}
+            >
+              <Ionicons name="git-merge-outline" size={16} color={colors.error} />
+              <Text style={[typography.label, { color: colors.error, marginLeft: spacing.sm }]}>Remove Superset</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Per-exercise rest time editor */}
+      {editingRestTime && !isReorderMode && (
+        <View style={[
+          styles.restTimeEditor,
+          { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.sm, marginTop: spacing.sm },
+        ]}>
+          <Text style={[typography.labelSmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Rest Time</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {REST_PRESETS.map((seconds) => (
+              <TouchableOpacity
+                key={seconds}
+                onPress={() => {
+                  updateExerciseRestTime(exercise.id, seconds);
+                  setEditingRestTime(false);
+                }}
+                style={[
+                  styles.restPresetChip,
+                  {
+                    backgroundColor: (exercise.restSeconds ?? defaultRestSeconds) === seconds
+                      ? colors.primary
+                      : colors.surface,
+                    borderRadius: radius.sm,
+                    borderWidth: 1,
+                    borderColor: (exercise.restSeconds ?? defaultRestSeconds) === seconds
+                      ? colors.primary
+                      : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    typography.labelSmall,
+                    {
+                      color: (exercise.restSeconds ?? defaultRestSeconds) === seconds
+                        ? colors.textInverse
+                        : colors.text,
+                    },
+                  ]}
+                >
+                  {seconds}s
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs, gap: 6 }}>
+            <TextInput
+              style={[
+                styles.restCustomInput,
+                typography.labelSmall,
+                {
+                  color: colors.text,
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: radius.sm,
+                },
+              ]}
+              value={restTimeInput}
+              onChangeText={setRestTimeInput}
+              keyboardType="number-pad"
+              placeholder="sec"
+              placeholderTextColor={colors.textTertiary}
+              selectTextOnFocus
+            />
+            <TouchableOpacity
+              onPress={() => {
+                const val = parseInt(restTimeInput, 10);
+                if (!isNaN(val) && val > 0) {
+                  updateExerciseRestTime(exercise.id, val);
+                }
+                setEditingRestTime(false);
+              }}
+              style={[
+                styles.restApplyBtn,
+                { backgroundColor: colors.primary, borderRadius: radius.sm },
+              ]}
+            >
+              <Text style={[typography.labelSmall, { color: colors.textInverse }]}>Set</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditingRestTime(false)}>
+              <Text style={[typography.labelSmall, { color: colors.textTertiary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* In reorder mode, hide the detailed content */}
       {isReorderMode ? (
@@ -814,32 +1049,40 @@ const ExerciseCard = React.memo(function ExerciseCard({
         </Text>
       ) : (
       <>
-      {/* Superset actions */}
-      <View style={styles.exerciseActionsRow}>
-        {!isInSuperset ? (
-          <TouchableOpacity
-            onPress={() => onSupersetPress(exercise.id)}
-            style={styles.addSetBtn}
-          >
-            <Ionicons name="git-merge-outline" size={14} color={colors.textSecondary} />
-            <Text style={[typography.caption, { color: colors.textSecondary, marginLeft: 3 }]}>Create Superset</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            onPress={() => onRemoveSupersetPress(exercise.supersetGroupId!)}
-            style={styles.addSetBtn}
-          >
-            <Ionicons name="git-merge-outline" size={14} color={colors.error} />
-            <Text style={[typography.caption, { color: colors.error, marginLeft: 3 }]}>Remove Superset</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
       {/* Previous performance */}
       {lastPerf && (
         <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: 2 }]}>
           Last: {lastPerf}
         </Text>
+      )}
+
+      {/* Suggestion banner */}
+      {suggestion && !isTimeBased && (
+        <TouchableOpacity
+          onPress={handleApplySuggestion}
+          activeOpacity={0.7}
+          style={[
+            styles.suggestionBanner,
+            {
+              backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted,
+              borderRadius: radius.md,
+              padding: spacing.sm,
+              marginTop: spacing.xs,
+            },
+          ]}
+        >
+          <View style={styles.suggestionRow}>
+            <Ionicons name="trending-up" size={14} color={suggestion.confidence === 'high' ? colors.success : colors.primary} />
+            <Text style={[typography.labelSmall, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, marginLeft: 4, flex: 1 }]}>
+              Suggested: {suggestion.suggestedWeight} {unit} × {suggestion.suggestedReps} reps
+            </Text>
+            <Ionicons name="arrow-forward-circle-outline" size={16} color={suggestion.confidence === 'high' ? colors.success : colors.primary} />
+          </View>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 18 }]} numberOfLines={1}>
+            {suggestion.explanation}
+          </Text>
+        </TouchableOpacity>
       )}
 
       {/* Time-based exercises */}
@@ -1186,12 +1429,12 @@ export default function ActiveWorkoutScreen() {
   const [restInput, setRestInput] = useState('');
 
   const doFinish = () => {
-    setShowSummary(true);  // Set FIRST to prevent premature navigation
     const result = completeWorkout();
     if (result) {
+      // Set both together - React batches these in event handlers
       setCompletedSession(result);
+      setShowSummary(true);
     } else {
-      setShowSummary(false);
       router.replace('/(tabs)/workout');
     }
   };
@@ -1256,15 +1499,28 @@ export default function ActiveWorkoutScreen() {
   const removeSet = useWorkoutStore((s) => s.removeSet);
 
   const handleCoachReplaceExercise = useCallback(
-    (exerciseInstanceId: string, newExerciseName: string) => {
+    (exerciseInstanceIdOrName: string, newExerciseName: string) => {
       const libEntry = exerciseLibrary.find(
         (e) => e.name.toLowerCase() === newExerciseName.toLowerCase(),
       );
-      if (libEntry) {
-        replaceExercise(exerciseInstanceId, libEntry);
+      if (!libEntry) return;
+
+      // Try direct ID match first
+      const directMatch = activeSession?.exercises.find((e) => e.id === exerciseInstanceIdOrName);
+      if (directMatch) {
+        replaceExercise(directMatch.id, libEntry);
+        return;
+      }
+
+      // Fall back to matching by exercise name (for multi-adjust where AI sends exercise name)
+      const nameMatch = activeSession?.exercises.find(
+        (e) => e.exerciseName.toLowerCase() === exerciseInstanceIdOrName.toLowerCase() && !e.isSkipped,
+      );
+      if (nameMatch) {
+        replaceExercise(nameMatch.id, libEntry);
       }
     },
-    [exerciseLibrary, replaceExercise],
+    [exerciseLibrary, replaceExercise, activeSession],
   );
 
   const handleCoachAdjustSets = useCallback(
@@ -1332,18 +1588,23 @@ export default function ActiveWorkoutScreen() {
     [activeSession, reorderExercises],
   );
 
-  // Redirect if no active session and not showing summary
-  useEffect(() => {
-    if (!activeSession && !showSummary) {
-      router.replace('/(tabs)/workout');
-    }
-  }, [activeSession, showSummary, router]);
-
   if (!activeSession) {
-    // Show summary modal even after activeSession is cleared
-    if (showSummary) {
-      return <WorkoutSummaryModal visible={showSummary} session={completedSession} onDone={handleSummaryDone} />;
+    if (showSummary && completedSession) {
+      return <WorkoutSummaryModal visible={true} session={completedSession} onDone={handleSummaryDone} />;
     }
+    // If we're in the process of finishing (showSummary true but no session yet), show loading
+    if (showSummary) {
+      return (
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[typography.label, { color: colors.textSecondary, marginTop: 16 }]}>Saving workout...</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    // Not in finish flow - navigate away
+    router.replace('/(tabs)/workout');
     return null;
   }
 
@@ -1718,6 +1979,7 @@ const styles = StyleSheet.create({
   },
   exerciseCard: {
     position: 'relative',
+    padding: 16,
   },
   supersetBar: {
     position: 'absolute',
@@ -1765,25 +2027,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   incBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    minWidth: 28,
+    width: 44,
+    height: 44,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   numericInput: {
     borderWidth: 1,
     textAlign: 'center',
     flex: 1,
-    minHeight: 36,
-    marginHorizontal: 2,
+    minHeight: 44,
+    marginHorizontal: 3,
     paddingHorizontal: 4,
   },
   checkBtn: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
+    marginLeft: 6,
+  },
+  overflowBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  overflowMenu: {
+    gap: 2,
+  },
+  overflowMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  removeBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   prBadge: {
     position: 'absolute',
@@ -1959,5 +2242,20 @@ const styles = StyleSheet.create({
   prSummaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  suggestionBanner: {},
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Per-exercise rest time editor
+  restTimeEditor: {},
+  restPresetChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  restApplyBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
 });

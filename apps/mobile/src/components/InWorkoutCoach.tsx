@@ -37,6 +37,15 @@ interface InWorkoutCoachProps {
   onAdjustSets?: (exerciseInstanceId: string, sets?: number, reps?: string) => void;
 }
 
+// ── Per-adjustment status tracking ─────────────────────────────────────
+
+type AdjustmentStatus = 'pending' | 'applied' | 'skipped';
+
+interface TrackedAdjustment {
+  adjustment: ExerciseAdjustment;
+  status: AdjustmentStatus;
+}
+
 // ── Adjustment prompt keywords ─────────────────────────────────────────
 
 const ADJUSTMENT_KEYWORDS = [
@@ -65,27 +74,43 @@ export function InWorkoutCoach({
   const [customInput, setCustomInput] = useState('');
   const [response, setResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [adjustment, setAdjustment] = useState<ExerciseAdjustment | null>(null);
-  const [applied, setApplied] = useState(false);
+  const [trackedAdjustments, setTrackedAdjustments] = useState<TrackedAdjustment[]>([]);
 
   // Derive current exercise name from session or prop
   const currentExercise = activeSession
     ? activeSession.exercises[activeSession.currentExerciseIndex]
     : null;
   const currentExerciseName = currentExercise?.exerciseName ?? exerciseName;
-  const currentExerciseInstanceId = currentExercise?.id;
+
+  // Resolve exerciseInstanceId from a currentExercise name in the adjustment
+  const resolveExerciseInstanceId = useCallback(
+    (adj: ExerciseAdjustment): string | null => {
+      if (!activeSession) return null;
+
+      // Try to match by name
+      const targetName = adj.currentExercise;
+      if (targetName) {
+        const match = activeSession.exercises.find(
+          (e) => e.exerciseName.toLowerCase() === targetName.toLowerCase() && !e.isSkipped,
+        );
+        if (match) return match.id;
+      }
+
+      // Fall back to current exercise
+      return currentExercise?.id ?? null;
+    },
+    [activeSession, currentExercise],
+  );
 
   const handleSend = useCallback(
     async (message: string) => {
       if (!message.trim() || isLoading) return;
       setIsLoading(true);
       setResponse('');
-      setAdjustment(null);
-      setApplied(false);
+      setTrackedAdjustments([]);
       setCustomInput('');
 
       try {
-        // Determine if this is an adjustment request with a known exercise
         const shouldUseAdjustment =
           currentExerciseName &&
           exerciseLibrary &&
@@ -93,13 +118,25 @@ export function InWorkoutCoach({
           isAdjustmentRequest(message);
 
         if (shouldUseAdjustment) {
+          // Build workout exercises list for multi-adjust context
+          const workoutExercises = activeSession
+            ? activeSession.exercises
+                .filter((e) => !e.isSkipped)
+                .map((e) => ({ name: e.exerciseName, exerciseId: e.exerciseId }))
+            : undefined;
+
           const result = await requestExerciseAdjustment(
             currentExerciseName!,
             exerciseLibrary!.map((e) => e.name),
             message,
+            workoutExercises,
           );
           setResponse(result.content);
-          setAdjustment(result.adjustment);
+          if (result.adjustments.length > 0) {
+            setTrackedAdjustments(
+              result.adjustments.map((adj) => ({ adjustment: adj, status: 'pending' })),
+            );
+          }
         } else {
           const result = await sendWorkoutQuickMessage(message, currentExerciseName);
           setResponse(result.content);
@@ -110,24 +147,62 @@ export function InWorkoutCoach({
         setIsLoading(false);
       }
     },
-    [currentExerciseName, exerciseLibrary, isLoading],
+    [currentExerciseName, exerciseLibrary, isLoading, activeSession],
   );
 
-  const handleApplyAdjustment = useCallback(() => {
-    if (!adjustment || !currentExerciseInstanceId) return;
+  const handleApplyAdjustment = useCallback(
+    (index: number) => {
+      const tracked = trackedAdjustments[index];
+      if (!tracked || tracked.status !== 'pending') return;
 
-    if (adjustment.action === 'replace' && onReplaceExercise) {
-      onReplaceExercise(currentExerciseInstanceId, adjustment.exerciseName);
-      setApplied(true);
-    } else if (adjustment.action === 'adjust_sets' && onAdjustSets) {
-      onAdjustSets(currentExerciseInstanceId, adjustment.sets, adjustment.reps);
-      setApplied(true);
-    }
-  }, [adjustment, currentExerciseInstanceId, onReplaceExercise, onAdjustSets]);
+      const adj = tracked.adjustment;
+      const instanceId = resolveExerciseInstanceId(adj);
+      if (!instanceId) return;
 
-  const handleDismissAdjustment = useCallback(() => {
-    setAdjustment(null);
+      if (adj.action === 'replace' && onReplaceExercise) {
+        onReplaceExercise(instanceId, adj.exerciseName);
+      } else if (adj.action === 'adjust_sets' && onAdjustSets) {
+        onAdjustSets(instanceId, adj.sets, adj.reps);
+      }
+
+      setTrackedAdjustments((prev) =>
+        prev.map((t, i) => (i === index ? { ...t, status: 'applied' } : t)),
+      );
+    },
+    [trackedAdjustments, resolveExerciseInstanceId, onReplaceExercise, onAdjustSets],
+  );
+
+  const handleSkipAdjustment = useCallback((index: number) => {
+    setTrackedAdjustments((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, status: 'skipped' } : t)),
+    );
   }, []);
+
+  const handleApplyAll = useCallback(() => {
+    trackedAdjustments.forEach((tracked, index) => {
+      if (tracked.status !== 'pending') return;
+      const adj = tracked.adjustment;
+      const instanceId = resolveExerciseInstanceId(adj);
+      if (!instanceId) return;
+
+      if (adj.action === 'replace' && onReplaceExercise) {
+        onReplaceExercise(instanceId, adj.exerciseName);
+      } else if (adj.action === 'adjust_sets' && onAdjustSets) {
+        onAdjustSets(instanceId, adj.sets, adj.reps);
+      }
+    });
+
+    setTrackedAdjustments((prev) =>
+      prev.map((t) => (t.status === 'pending' ? { ...t, status: 'applied' } : t)),
+    );
+  }, [trackedAdjustments, resolveExerciseInstanceId, onReplaceExercise, onAdjustSets]);
+
+  const handleDismissAdjustments = useCallback(() => {
+    setTrackedAdjustments([]);
+  }, []);
+
+  const pendingCount = trackedAdjustments.filter((t) => t.status === 'pending').length;
+  const allResolved = trackedAdjustments.length > 0 && pendingCount === 0;
 
   // ── Quick prompts ─────────────────────────────────────────────────
   const quickPrompts: string[] = [];
@@ -142,11 +217,14 @@ export function InWorkoutCoach({
     quickPrompts.push('General form tips');
   }
 
+  if (activeSession && activeSession.exercises.filter((e) => !e.isSkipped).length > 1) {
+    quickPrompts.push('Replace all dumbbell exercises with barbell');
+  }
+
   const handleClose = () => {
     setResponse('');
     setCustomInput('');
-    setAdjustment(null);
-    setApplied(false);
+    setTrackedAdjustments([]);
     onClose();
   };
 
@@ -263,118 +341,163 @@ export function InWorkoutCoach({
             </ScrollView>
           )}
 
-          {/* ── Adjustment Suggestion Card ──────────────────────────── */}
-          {adjustment && !applied && (
-            <View
-              style={[
-                styles.adjustmentCard,
-                {
-                  backgroundColor: colors.surfaceSecondary,
-                  borderRadius: radius.lg,
-                  marginHorizontal: spacing.base,
-                  marginBottom: spacing.md,
-                  padding: spacing.md,
-                  borderWidth: 1,
-                  borderColor: colors.primary,
-                },
-              ]}
+          {/* ── Multi-Adjustment List ─────────────────────────────── */}
+          {trackedAdjustments.length > 0 && (
+            <ScrollView
+              style={{ maxHeight: 280 }}
+              contentContainerStyle={{
+                paddingHorizontal: spacing.base,
+                paddingBottom: spacing.sm,
+              }}
             >
-              {adjustment.action === 'replace' ? (
-                <>
-                  <View style={styles.adjustmentHeader}>
-                    <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
-                    <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
-                      Replace Exercise
-                    </Text>
-                  </View>
-                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-                    {currentExerciseName}  →  {adjustment.exerciseName}
-                  </Text>
-                  {adjustment.reason ? (
-                    <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
-                      {adjustment.reason}
-                    </Text>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <View style={styles.adjustmentHeader}>
-                    <Ionicons name="options" size={18} color={colors.primary} />
-                    <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
-                      Adjust Sets/Reps
-                    </Text>
-                  </View>
-                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-                    {adjustment.sets != null ? `${adjustment.sets} sets` : ''}
-                    {adjustment.sets != null && adjustment.reps ? ' × ' : ''}
-                    {adjustment.reps ? `${adjustment.reps} reps` : ''}
-                  </Text>
-                  {adjustment.reason ? (
-                    <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
-                      {adjustment.reason}
-                    </Text>
-                  ) : null}
-                </>
-              )}
+              {trackedAdjustments.map((tracked, index) => {
+                const adj = tracked.adjustment;
+                const isApplied = tracked.status === 'applied';
+                const isSkipped = tracked.status === 'skipped';
+                const isPending = tracked.status === 'pending';
 
-              {/* Action buttons */}
-              <View style={[styles.adjustmentActions, { marginTop: spacing.md }]}>
+                return (
+                  <View
+                    key={index}
+                    style={[
+                      styles.adjustmentCard,
+                      {
+                        backgroundColor: isApplied
+                          ? colors.successLight
+                          : isSkipped
+                            ? colors.surfaceSecondary
+                            : colors.surfaceSecondary,
+                        borderRadius: radius.lg,
+                        marginBottom: spacing.sm,
+                        padding: spacing.md,
+                        borderWidth: isPending ? 1 : 0,
+                        borderColor: colors.primary,
+                        opacity: isSkipped ? 0.5 : 1,
+                      },
+                    ]}
+                  >
+                    {adj.action === 'replace' ? (
+                      <>
+                        <View style={styles.adjustmentHeader}>
+                          <Ionicons
+                            name={isApplied ? 'checkmark-circle' : 'swap-horizontal'}
+                            size={18}
+                            color={isApplied ? colors.success : colors.primary}
+                          />
+                          <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+                            {isApplied ? 'Replaced' : isSkipped ? 'Skipped' : 'Replace'}
+                          </Text>
+                        </View>
+                        <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                          {adj.currentExercise}  →  {adj.exerciseName}
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.adjustmentHeader}>
+                          <Ionicons
+                            name={isApplied ? 'checkmark-circle' : 'options'}
+                            size={18}
+                            color={isApplied ? colors.success : colors.primary}
+                          />
+                          <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+                            {isApplied ? 'Adjusted' : isSkipped ? 'Skipped' : 'Adjust'} {adj.currentExercise}
+                          </Text>
+                        </View>
+                        <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                          {adj.sets != null ? `${adj.sets} sets` : ''}
+                          {adj.sets != null && adj.reps ? ' × ' : ''}
+                          {adj.reps ? `${adj.reps} reps` : ''}
+                        </Text>
+                      </>
+                    )}
+
+                    {adj.reason ? (
+                      <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
+                        {adj.reason}
+                      </Text>
+                    ) : null}
+
+                    {/* Per-item action buttons */}
+                    {isPending && (
+                      <View style={[styles.adjustmentActions, { marginTop: spacing.sm }]}>
+                        <TouchableOpacity
+                          onPress={() => handleSkipAdjustment(index)}
+                          style={[
+                            styles.adjustmentBtn,
+                            {
+                              backgroundColor: colors.surface,
+                              borderRadius: radius.md,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                              paddingHorizontal: spacing.md,
+                              paddingVertical: spacing.xs,
+                              marginRight: spacing.sm,
+                            },
+                          ]}
+                        >
+                          <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>Skip</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleApplyAdjustment(index)}
+                          style={[
+                            styles.adjustmentBtn,
+                            {
+                              backgroundColor: colors.success,
+                              borderRadius: radius.md,
+                              paddingHorizontal: spacing.md,
+                              paddingVertical: spacing.xs,
+                              flex: 1,
+                            },
+                          ]}
+                        >
+                          <Ionicons name="checkmark" size={14} color="#fff" style={{ marginRight: 3 }} />
+                          <Text style={[typography.labelSmall, { color: '#fff' }]}>Apply</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+
+              {/* Apply All / Dismiss buttons */}
+              {pendingCount > 1 && (
                 <TouchableOpacity
-                  onPress={handleDismissAdjustment}
+                  onPress={handleApplyAll}
                   style={[
-                    styles.adjustmentBtn,
-                    {
-                      backgroundColor: colors.surface,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.sm,
-                      marginRight: spacing.sm,
-                    },
-                  ]}
-                >
-                  <Text style={[typography.label, { color: colors.textSecondary }]}>Dismiss</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleApplyAdjustment}
-                  style={[
-                    styles.adjustmentBtn,
+                    styles.applyAllBtn,
                     {
                       backgroundColor: colors.success,
                       borderRadius: radius.md,
-                      paddingHorizontal: spacing.md,
                       paddingVertical: spacing.sm,
-                      flex: 1,
+                      marginBottom: spacing.sm,
                     },
                   ]}
                 >
-                  <Ionicons name="checkmark-circle" size={16} color="#fff" style={{ marginRight: 4 }} />
-                  <Text style={[typography.label, { color: '#fff' }]}>Apply Change</Text>
+                  <Ionicons name="checkmark-done" size={18} color="#fff" style={{ marginRight: spacing.xs }} />
+                  <Text style={[typography.label, { color: '#fff' }]}>Apply All ({pendingCount})</Text>
                 </TouchableOpacity>
-              </View>
-            </View>
-          )}
+              )}
 
-          {/* ── Success Message ─────────────────────────────────────── */}
-          {applied && (
-            <View
-              style={[
-                styles.successBanner,
-                {
-                  backgroundColor: colors.successLight,
-                  borderRadius: radius.lg,
-                  marginHorizontal: spacing.base,
-                  marginBottom: spacing.md,
-                  padding: spacing.md,
-                },
-              ]}
-            >
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>
-                Change applied!
-              </Text>
-            </View>
+              {allResolved && (
+                <View
+                  style={[
+                    styles.successBanner,
+                    {
+                      backgroundColor: colors.successLight,
+                      borderRadius: radius.lg,
+                      marginBottom: spacing.sm,
+                      padding: spacing.md,
+                    },
+                  ]}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                  <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>
+                    All changes resolved!
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
           )}
 
           {/* Custom input */}
@@ -480,6 +603,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   adjustmentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

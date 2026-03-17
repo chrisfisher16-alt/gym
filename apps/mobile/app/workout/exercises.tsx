@@ -16,6 +16,7 @@ import { useExerciseLibrary } from '../../src/hooks/useExerciseLibrary';
 import { Badge, EmptyState } from '../../src/components/ui';
 import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import type { ExerciseLibraryEntry, MuscleGroup, Equipment } from '../../src/types/workout';
+import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
 
 const CATEGORIES: MuscleGroup[] = ['chest', 'back', 'shoulders', 'legs', 'arms', 'core', 'cardio', 'full_body'];
 const EQUIPMENT_LIST: Equipment[] = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band'];
@@ -51,13 +52,13 @@ export default function ExercisesScreen() {
         onPress={() => router.push(`/workout/${item.id}`)}
       >
         <View style={styles.exerciseRow}>
-          <View style={[styles.equipmentIcon, { backgroundColor: colors.primaryMuted }]}>
-            <Ionicons
-              name={(EQUIPMENT_ICONS[item.equipment] ?? 'barbell-outline') as keyof typeof Ionicons.glyphMap}
-              size={20}
-              color={colors.primary}
-            />
-          </View>
+          <ExerciseIllustration
+            exerciseId={item.id}
+            category={item.category}
+            equipment={item.equipment}
+            primaryMuscles={item.primaryMuscles}
+            size="small"
+          />
           <View style={styles.exerciseInfo}>
             <View style={styles.nameRow}>
               <Text

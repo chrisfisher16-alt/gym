@@ -239,35 +239,53 @@ Don't give lengthy explanations — the user is mid-workout.`;
  * Build a system prompt for exercise adjustment requests.
  * Instructs the AI to respond with a structured JSON block so the app can
  * programmatically apply the suggestion.
+ *
+ * Supports multi-exercise adjustments: the AI can return an array of changes
+ * when the user asks to modify multiple exercises at once.
  */
 export function buildExerciseAdjustmentSystemPrompt(
   currentExerciseName: string,
   availableExerciseNames: string[],
+  workoutExercises?: Array<{ name: string; exerciseId: string }>,
 ): string {
+  const workoutSection = workoutExercises && workoutExercises.length > 0
+    ? `\nExercises in the current workout:\n${workoutExercises.map((e) => `- ${e.name}`).join('\n')}`
+    : '';
+
   return `You are a concise fitness coach helping a user adjust their current workout.
-The user is currently doing: ${currentExerciseName}
+The user is currently focused on: ${currentExerciseName}
+${workoutSection}
 
 Available exercises in the library:
 ${availableExerciseNames.join(', ')}
 
-When the user asks to replace, swap, or find an alternative exercise, respond with:
+When the user asks to replace, swap, or find an alternative for a SINGLE exercise, respond with:
 1. A brief explanation (1-2 sentences) of why this is a good swap.
 2. A JSON block on its own line in this exact format:
 \`\`\`json
-{"action":"replace","exerciseName":"Exact Exercise Name From Library","reason":"Short reason"}
+{"adjustments":[{"action":"replace","currentExercise":"Name Of Exercise Being Replaced","exerciseName":"Exact Exercise Name From Library","reason":"Short reason"}]}
 \`\`\`
 
-When the user asks to adjust sets, reps, or weight, respond with:
+When the user asks to replace or modify MULTIPLE exercises (e.g. "replace all dumbbell exercises with barbell"), respond with:
+1. A brief explanation of the changes.
+2. A JSON block with multiple adjustments:
+\`\`\`json
+{"adjustments":[{"action":"replace","currentExercise":"Dumbbell Press","exerciseName":"Barbell Bench Press","reason":"..."},{"action":"replace","currentExercise":"Dumbbell Row","exerciseName":"Barbell Row","reason":"..."}]}
+\`\`\`
+
+When the user asks to adjust sets, reps, or weight for an exercise, respond with:
 1. A brief explanation of the adjustment.
 2. A JSON block:
 \`\`\`json
-{"action":"adjust_sets","sets":4,"reps":"8-10","reason":"Short reason"}
+{"adjustments":[{"action":"adjust_sets","currentExercise":"Exercise Name","sets":4,"reps":"8-10","reason":"Short reason"}]}
 \`\`\`
 
 IMPORTANT:
-- The exerciseName in your JSON MUST exactly match one of the available exercises listed above.
-- Only include the JSON block when you are making a concrete suggestion. For general advice, just respond normally.
-- Keep your text response very short — the user is mid-workout.`;
+- The exerciseName in replace actions MUST exactly match one of the available exercises listed above.
+- The currentExercise MUST exactly match one of the exercises in the current workout.
+- Only include the JSON block when you are making concrete suggestions. For general advice, just respond normally.
+- Keep your text response very short — the user is mid-workout.
+- Always wrap adjustments in the {"adjustments":[...]} format, even for a single change.`;
 }
 
 /**
