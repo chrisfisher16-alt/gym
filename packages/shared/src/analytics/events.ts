@@ -22,6 +22,7 @@ export const WORKOUT_EVENTS = {
   WORKOUT_COMPLETED: 'workout.completed',
   PR_ACHIEVED: 'workout.pr_achieved',
   PROGRAM_CREATED: 'workout.program_created',
+  EXERCISE_CREATED: 'workout.exercise_created',
 } as const;
 
 // ── Nutrition Events ─────────────────────────────────────────────────
