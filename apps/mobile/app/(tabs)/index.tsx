@@ -1,18 +1,28 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Card, ScreenContainer, MacroBar, ProgressBar } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { useHealthStore } from '../../src/stores/health-store';
+import { getHealthProviderName } from '../../src/lib/health';
 import { CoachFAB } from '../../src/components/CoachFAB';
 
 export default function TodayTab() {
   const { colors, spacing, typography, radius } = useTheme();
   const profile = useAuthStore((s) => s.profile);
+  const isHealthConnected = useHealthStore((s) => s.isConnected);
+  const todaySteps = useHealthStore((s) => s.todaySteps);
+  const todayActiveEnergy = useHealthStore((s) => s.todayActiveEnergy);
+  const lastSleepHours = useHealthStore((s) => s.lastSleepHours);
+  const syncEnabled = useHealthStore((s) => s.syncEnabled);
 
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const providerLabel = getHealthProviderName();
+  const showHealthData = isHealthConnected && Platform.OS !== 'web';
 
   return (
     <ScreenContainer>
@@ -33,6 +43,52 @@ export default function TodayTab() {
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Health Activity Summary */}
+      {showHealthData && (syncEnabled.steps || syncEnabled.activeEnergy || syncEnabled.sleep) && (
+        <Card style={{ marginBottom: spacing.base }}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="heart-outline" size={20} color={colors.primary} />
+            <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+              Today&apos;s Activity
+            </Text>
+            {providerLabel && (
+              <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                via {providerLabel}
+              </Text>
+            )}
+          </View>
+          <View style={[styles.healthGrid, { marginTop: spacing.md, gap: spacing.md }]}>
+            {syncEnabled.steps && (
+              <View style={[styles.healthStat, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md }]}>
+                <Ionicons name="footsteps-outline" size={18} color={colors.primary} />
+                <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
+                  {todaySteps.toLocaleString()}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Steps</Text>
+              </View>
+            )}
+            {syncEnabled.activeEnergy && (
+              <View style={[styles.healthStat, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md }]}>
+                <Ionicons name="flame-outline" size={18} color={colors.warning} />
+                <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
+                  {todayActiveEnergy.toLocaleString()}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Active Cal</Text>
+              </View>
+            )}
+            {syncEnabled.sleep && lastSleepHours !== null && (
+              <View style={[styles.healthStat, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md }]}>
+                <Ionicons name="moon-outline" size={18} color={colors.info} />
+                <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
+                  {lastSleepHours}h
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Sleep</Text>
+              </View>
+            )}
+          </View>
+        </Card>
+      )}
 
       {/* Today's Workout */}
       <Card style={{ marginBottom: spacing.base }}>
@@ -174,6 +230,15 @@ const styles = StyleSheet.create({
   calorieRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+  },
+  healthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  healthStat: {
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 90,
   },
   quickActions: {
     flexDirection: 'row',

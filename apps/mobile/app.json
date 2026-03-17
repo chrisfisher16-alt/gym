@@ -14,7 +14,17 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.healthcoach.mobile"
+      "bundleIdentifier": "app.healthcoach.mobile",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Health Coach uses your health data to provide personalized fitness and nutrition recommendations.",
+        "NSHealthUpdateUsageDescription": "Health Coach can save your workouts to Apple Health."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": [
+          "health-records"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +33,15 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "app.healthcoach.mobile"
+      "package": "app.healthcoach.mobile",
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.WRITE_EXERCISE"
+      ]
     },
     "web": {
       "bundler": "metro",

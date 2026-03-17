@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -7,6 +7,7 @@ import { useOnboardingStore } from '../../src/stores/onboarding-store';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { supabase } from '../../src/lib/supabase';
 import { useState } from 'react';
+import { isHealthPlatform } from '../../src/lib/health';
 
 export default function CompleteScreen() {
   const { colors, spacing, typography } = useTheme();
@@ -61,7 +62,13 @@ export default function CompleteScreen() {
       if (coachPrefs) setCoachPreferences(coachPrefs);
       setIsOnboarded(true);
       onboarding.reset();
-      router.replace('/(tabs)');
+
+      // Offer health connection on mobile before going to tabs
+      if (isHealthPlatform()) {
+        router.replace('/health-connect');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch {
       // Fallback: mark as onboarded anyway so user isn't stuck
       setIsOnboarded(true);
@@ -146,9 +153,9 @@ function SummaryRow({
 }: {
   label: string;
   value: string;
-  colors: ReturnType<typeof useTheme>['colors'];
-  typography: ReturnType<typeof useTheme>['typography'];
-  spacing: ReturnType<typeof useTheme>['spacing'];
+  colors: ReturnType<typeof import('../../src/theme').useTheme>['colors'];
+  typography: ReturnType<typeof import('../../src/theme').useTheme>['typography'];
+  spacing: ReturnType<typeof import('../../src/theme').useTheme>['spacing'];
 }) {
   return (
     <View style={[summaryStyles.row, { paddingVertical: sp.sm }]}>

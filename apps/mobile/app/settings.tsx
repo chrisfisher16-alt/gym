@@ -169,6 +169,7 @@ export default function SettingsScreen() {
           typography={typography}
           spacing={spacing}
           showChevron
+          onPress={() => router.push('/health-settings')}
         />
         <Divider />
         <SettingRow

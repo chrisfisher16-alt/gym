@@ -12,6 +12,7 @@ import { setupNotificationCategories, getRouteForNotificationType } from '../src
 import { useNotificationStore } from '../src/stores/notification-store';
 import type { NotificationData } from '../src/types/notifications';
 import { useSubscriptionStore } from '../src/stores/subscription-store';
+import { useHealthStore } from '../src/stores/health-store';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,6 +31,7 @@ export default function RootLayout() {
   const setSession = useAuthStore((s) => s.setSession);
   const isLoading = useAuthStore((s) => s.isLoading);
   const initSubscription = useSubscriptionStore((s) => s.initialize);
+  const initHealth = useHealthStore((s) => s.initialize);
   const checkPermission = useNotificationStore((s) => s.checkPermission);
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
   const notificationReceivedListener = useRef<Notifications.EventSubscription | null>(null);
@@ -38,6 +40,7 @@ export default function RootLayout() {
     initialize().then(() => {
       SplashScreen.hideAsync();
       initSubscription();
+      initHealth();
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -45,7 +48,7 @@ export default function RootLayout() {
     });
 
     return () => subscription.unsubscribe();
-  }, [initialize, setSession, initSubscription]);
+  }, [initialize, setSession, initSubscription, initHealth]);
 
   // Notification setup
   useEffect(() => {
@@ -126,6 +129,22 @@ export default function RootLayout() {
           name="paywall"
           options={{
             headerShown: false,
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="health-connect"
+          options={{
+            headerShown: true,
+            title: 'Connect Health',
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="health-settings"
+          options={{
+            headerShown: true,
+            title: 'Health Integrations',
             presentation: 'modal',
           }}
         />

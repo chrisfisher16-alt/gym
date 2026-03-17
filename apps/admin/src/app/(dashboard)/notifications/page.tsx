@@ -1,19 +1,16 @@
-'use client';
+export const dynamic = 'force-dynamic';
 
 import { KPICard } from '@/components/KPICard';
 import { PageHeader } from '@/components/PageHeader';
+import { getNotificationMetrics, getReminderPerformance } from '@/lib/queries/notifications';
 import styles from './page.module.css';
 
-const reminderTypes = [
-  { type: 'Workout Reminder', sent: 4200, opened: 2100, rate: '50%' },
-  { type: 'Meal Logging Reminder', sent: 3800, opened: 1520, rate: '40%' },
-  { type: 'Supplement Reminder', sent: 1200, opened: 720, rate: '60%' },
-  { type: 'Coach Tips', sent: 2600, opened: 1820, rate: '70%' },
-  { type: 'Progress Update', sent: 1800, opened: 1260, rate: '70%' },
-  { type: 'Streak Alert', sent: 900, opened: 630, rate: '70%' },
-];
+export default async function NotificationsPage() {
+  const [metrics, reminders] = await Promise.all([
+    getNotificationMetrics(),
+    getReminderPerformance(),
+  ]);
 
-export default function NotificationsPage() {
   return (
     <div>
       <PageHeader
@@ -22,9 +19,9 @@ export default function NotificationsPage() {
       />
 
       <div className={styles.kpiGrid}>
-        <KPICard label="Opt-in Rate" value="67%" trend={{ value: 2, direction: 'up' }} subtitle="vs last month" />
-        <KPICard label="Reminders Scheduled" value="14,500" subtitle="this week" />
-        <KPICard label="Overall Open Rate" value="54%" trend={{ value: 3, direction: 'up' }} subtitle="vs last month" />
+        <KPICard label="Opt-in Rate" value={`${metrics.optInRate}%`} subtitle="with push token" />
+        <KPICard label="Scheduled" value={metrics.scheduledCount.toLocaleString()} subtitle="pending delivery" />
+        <KPICard label="Overall Open Rate" value={`${metrics.overallOpenRate}%`} subtitle="last 7 days" />
       </div>
 
       <div className={styles.section}>
@@ -41,7 +38,9 @@ export default function NotificationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {reminderTypes.map((row) => (
+                {reminders.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem' }}>No notification data yet</td></tr>
+                ) : reminders.map((row) => (
                   <tr key={row.type}>
                     <td>{row.type}</td>
                     <td>{row.sent.toLocaleString()}</td>

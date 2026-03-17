@@ -42,11 +42,11 @@ export async function updateSession(request: NextRequest) {
   if (user && !isLoginPage) {
     const { data: adminUser } = await supabase
       .from('admin_users')
-      .select('id, is_active')
-      .eq('id', user.id)
+      .select('id, user_id')
+      .eq('user_id', user.id)
       .single();
 
-    if (!adminUser || !adminUser.is_active) {
+    if (!adminUser) {
       // Not an admin — sign out and redirect to login
       await supabase.auth.signOut();
       const url = request.nextUrl.clone();
