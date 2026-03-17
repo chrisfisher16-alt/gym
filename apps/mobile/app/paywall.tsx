@@ -420,7 +420,7 @@ export default function PaywallScreen() {
 
         {/* Legal */}
         <View style={[styles.legalLinks, { marginTop: spacing.lg, marginBottom: spacing['3xl'] }]}>
-          <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.termsUrl)}>
+          <TouchableOpacity onPress={() => router.push('/terms')}>
             <Text
               style={[
                 typography.caption,
@@ -433,7 +433,7 @@ export default function PaywallScreen() {
           <Text style={[typography.caption, { color: colors.textTertiary, marginHorizontal: spacing.sm }]}>
             ·
           </Text>
-          <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.privacyUrl)}>
+          <TouchableOpacity onPress={() => router.push('/privacy')}>
             <Text
               style={[
                 typography.caption,

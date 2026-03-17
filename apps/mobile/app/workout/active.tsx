@@ -26,7 +26,7 @@ import type { ActiveExercise, ActiveSet } from '../../src/types/workout';
 
 // ── Set Row Component ───────────────────────────────────────────────
 
-function SetRow({
+const SetRow = React.memo(function SetRow({
   set,
   exerciseInstanceId,
   onLog,
@@ -229,11 +229,11 @@ function SetRow({
       )}
     </View>
   );
-}
+});
 
 // ── Exercise Card Component ─────────────────────────────────────────
 
-function ExerciseCard({
+const ExerciseCard = React.memo(function ExerciseCard({
   exercise,
   isCurrent,
   isInSuperset,
@@ -363,7 +363,7 @@ function ExerciseCard({
       </View>
     </View>
   );
-}
+});
 
 // ── Rest Timer Modal ────────────────────────────────────────────────
 

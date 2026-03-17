@@ -14,6 +14,8 @@ import {
   MacroBar,
   ProgressBar,
   Badge,
+  LoadingSpinner,
+  ErrorState,
 } from '../../src/components/ui';
 import { CoachFAB } from '../../src/components/CoachFAB';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
@@ -101,6 +103,14 @@ export default function NutritionTab() {
 
   const calorieStroke = Math.min(progress.calories, 1) * RING_CIRCUMFERENCE;
   const calorieOffset = RING_CIRCUMFERENCE - calorieStroke;
+
+  if (!isInitialized) {
+    return (
+      <ScreenContainer>
+        <LoadingSpinner fullScreen message="Loading nutrition data..." />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>

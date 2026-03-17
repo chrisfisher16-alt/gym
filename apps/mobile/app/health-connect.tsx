@@ -73,7 +73,7 @@ export default function HealthConnectScreen() {
             style={[
               styles.iconCircle,
               {
-                backgroundColor: isIOS ? '#FFE5E5' : '#E8F5E9',
+                backgroundColor: isIOS ? colors.errorLight : colors.successLight,
                 borderRadius: radius.full,
               },
             ]}
@@ -81,7 +81,7 @@ export default function HealthConnectScreen() {
             <Ionicons
               name={isIOS ? 'heart' : 'fitness'}
               size={48}
-              color={isIOS ? '#FF3B30' : '#4CAF50'}
+              color={isIOS ? colors.error : colors.success}
             />
           </View>
 

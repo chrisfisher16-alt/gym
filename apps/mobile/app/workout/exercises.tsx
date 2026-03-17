@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme';
 import { useExerciseLibrary } from '../../src/hooks/useExerciseLibrary';
-import { Badge } from '../../src/components/ui';
+import { Badge, EmptyState } from '../../src/components/ui';
 import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import type { ExerciseLibraryEntry, MuscleGroup, Equipment } from '../../src/types/workout';
 
@@ -34,7 +34,7 @@ export default function ExercisesScreen() {
   } = useExerciseLibrary();
 
   const renderExercise = useCallback(
-    ({ item }: { item: ExerciseLibraryEntry }): React.ReactElement => (
+    ({ item }: { item: ExerciseLibraryEntry }): React.ReactElement | null => (
       <TouchableOpacity
         style={[
           styles.exerciseCard,
@@ -198,12 +198,13 @@ export default function ExercisesScreen() {
         contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="search-outline" size={48} color={colors.textTertiary} />
-            <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
-              No exercises found
-            </Text>
-          </View>
+          <EmptyState
+            icon="search-outline"
+            title="No exercises found"
+            description={searchQuery ? `No results for "${searchQuery}". Try a different search term.` : 'No exercises match your filters.'}
+            actionLabel={searchQuery || selectedCategory || selectedEquipment ? 'Clear Filters' : undefined}
+            onAction={searchQuery || selectedCategory || selectedEquipment ? () => { setSearchQuery(''); setSelectedCategory(null); setSelectedEquipment(null); } : undefined}
+          />
         }
       />
     </SafeAreaView>

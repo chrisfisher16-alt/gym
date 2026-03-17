@@ -7,7 +7,7 @@ import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
 import { useWorkoutPrograms } from '../../src/hooks/useWorkoutPrograms';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { useWorkoutStore } from '../../src/stores/workout-store';
-import { Button, Card, ScreenContainer, Badge } from '../../src/components/ui';
+import { Button, Card, ScreenContainer, Badge, LoadingSpinner, ErrorState } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume } from '../../src/lib/workout-utils';
 import { CoachFAB } from '../../src/components/CoachFAB';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
@@ -110,6 +110,14 @@ export default function WorkoutTab() {
   // Simple weekly volume chart bars
   const maxVolume = Math.max(...weeklyVolume.map((d) => d.volume), 1);
   const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  if (!isInitialized) {
+    return (
+      <ScreenContainer>
+        <LoadingSpinner fullScreen message="Loading workouts..." />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>

@@ -158,7 +158,20 @@ export default function SignUpScreen() {
                     {value && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
                   </View>
                   <Text style={[typography.bodySmall, { color: colors.textSecondary, flex: 1 }]}>
-                    I agree to the Terms of Service and Privacy Policy
+                    I agree to the{' '}
+                    <Text
+                      style={{ color: colors.primary, textDecorationLine: 'underline' }}
+                      onPress={() => router.push('/terms')}
+                    >
+                      Terms of Service
+                    </Text>
+                    {' '}and{' '}
+                    <Text
+                      style={{ color: colors.primary, textDecorationLine: 'underline' }}
+                      onPress={() => router.push('/privacy')}
+                    >
+                      Privacy Policy
+                    </Text>
                   </Text>
                 </TouchableOpacity>
               )}

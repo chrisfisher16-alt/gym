@@ -189,6 +189,26 @@ export default function SettingsScreen() {
           typography={typography}
           spacing={spacing}
         />
+        <Divider />
+        <SettingRow
+          icon="document-text-outline"
+          label="Privacy Policy"
+          colors={colors}
+          typography={typography}
+          spacing={spacing}
+          showChevron
+          onPress={() => router.push('/privacy')}
+        />
+        <Divider />
+        <SettingRow
+          icon="reader-outline"
+          label="Terms of Service"
+          colors={colors}
+          typography={typography}
+          spacing={spacing}
+          showChevron
+          onPress={() => router.push('/terms')}
+        />
       </Card>
 
       {/* Sign Out */}
