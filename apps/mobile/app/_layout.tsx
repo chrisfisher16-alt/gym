@@ -1,29 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Platform, useColorScheme } from 'react-native';
-import * as SplashScreen from 'expo-splash-screen';
-import type * as NotificationsTypes from 'expo-notifications';
-import { router } from 'expo-router';
-import { supabase, isSupabaseConfigured } from '../src/lib/supabase';
-import { useAuthStore } from '../src/stores/auth-store';
-import { setupNotificationCategories, getRouteForNotificationType } from '../src/lib/notifications';
-import { useNotificationStore } from '../src/stores/notification-store';
-import type { NotificationData } from '../src/types/notifications';
-import { useSubscriptionStore } from '../src/stores/subscription-store';
-import { useHealthStore } from '../src/stores/health-store';
-
-// Lazy-load native module (crashes on web)
-let Notifications: typeof import('expo-notifications') | null = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {}
-}
-
-SplashScreen.preventAutoHideAsync();
+import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,79 +15,45 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const initialize = useAuthStore((s) => s.initialize);
-  const setSession = useAuthStore((s) => s.setSession);
-  const isLoading = useAuthStore((s) => s.isLoading);
-  const initSubscription = useSubscriptionStore((s) => s.initialize);
-  const initHealth = useHealthStore((s) => s.initialize);
-  const checkPermission = useNotificationStore((s) => s.checkPermission);
-  const notificationResponseListener = useRef<NotificationsTypes.EventSubscription | null>(null);
-  const notificationReceivedListener = useRef<NotificationsTypes.EventSubscription | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    initialize().then(() => {
-      SplashScreen.hideAsync();
-      initSubscription();
-      initHealth();
-    });
+    // On web, skip all native initialization and just render
+    if (Platform.OS === 'web') {
+      setReady(true);
+      return;
+    }
 
-    if (!isSupabaseConfigured) return;
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [initialize, setSession, initSubscription, initHealth]);
-
-  // Notification setup
-  useEffect(() => {
-    if (Platform.OS === 'web' || !Notifications) return;
-
-    // Setup notification categories (action buttons)
-    setupNotificationCategories();
-
-    // Check current permission status on mount
-    checkPermission();
-
-    // Handle notification received while app is in foreground
-    notificationReceivedListener.current = Notifications.addNotificationReceivedListener(
-      (_notification) => {
-        // Notification received in foreground — could track analytics here
-      },
-    );
-
-    // Handle notification tap (app opened from notification)
-    notificationResponseListener.current = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const data = response.notification.request.content.data as NotificationData | undefined;
-        if (!data?.type) return;
-
-        const route = data.route ?? getRouteForNotificationType(data.type);
-
-        // Small delay to ensure navigation is ready
-        setTimeout(() => {
-          try {
-            router.push(route as Parameters<typeof router.push>[0]);
-          } catch {
-            // Navigation not ready, silently fail
-          }
-        }, 500);
-      },
-    );
-
-    return () => {
-      if (notificationReceivedListener.current) {
-        Notifications!.removeNotificationSubscription(notificationReceivedListener.current);
+    // On native, do store initialization
+    async function init() {
+      try {
+        const { useAuthStore } = require('../src/stores/auth-store');
+        await useAuthStore.getState().initialize();
+      } catch (e) {
+        console.warn('Init failed:', e);
+      } finally {
+        setReady(true);
+        try {
+          const SplashScreen = require('expo-splash-screen');
+          SplashScreen.hideAsync();
+        } catch {}
       }
-      if (notificationResponseListener.current) {
-        Notifications!.removeNotificationSubscription(notificationResponseListener.current);
-      }
-    };
-  }, [checkPermission]);
+    }
+    
+    try {
+      const SplashScreen = require('expo-splash-screen');
+      SplashScreen.preventAutoHideAsync();
+    } catch {}
+    
+    init();
+  }, []);
 
-  if (isLoading) {
-    return null;
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#0891B2" />
+      </View>
+    );
   }
 
   return (
@@ -120,45 +65,13 @@ export default function RootLayout() {
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="workout" />
         <Stack.Screen name="nutrition" />
-        <Stack.Screen
-          name="settings"
-          options={{
-            headerShown: true,
-            title: 'Settings',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="notifications"
-          options={{
-            headerShown: true,
-            title: 'Notifications',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="paywall"
-          options={{
-            headerShown: false,
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="health-connect"
-          options={{
-            headerShown: true,
-            title: 'Connect Health',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="health-settings"
-          options={{
-            headerShown: true,
-            title: 'Health Integrations',
-            presentation: 'modal',
-          }}
-        />
+        <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings', presentation: 'modal' }} />
+        <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications', presentation: 'modal' }} />
+        <Stack.Screen name="paywall" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="health-connect" options={{ headerShown: true, title: 'Connect Health', presentation: 'modal' }} />
+        <Stack.Screen name="health-settings" options={{ headerShown: true, title: 'Health Integrations', presentation: 'modal' }} />
+        <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy', presentation: 'modal' }} />
+        <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal' }} />
       </Stack>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </QueryClientProvider>
