@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { Profile, CoachPreferences } from '@health-coach/shared';
 
 interface AuthState {
@@ -30,6 +30,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isOnboarded: false,
 
   initialize: async () => {
+    if (!isSupabaseConfigured) {
+      // No Supabase configured — run in preview mode
+      set({ isLoading: false });
+      return;
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {

@@ -4,15 +4,24 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Platform, useColorScheme } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsTypes from 'expo-notifications';
 import { router } from 'expo-router';
-import { supabase } from '../src/lib/supabase';
+import { supabase, isSupabaseConfigured } from '../src/lib/supabase';
 import { useAuthStore } from '../src/stores/auth-store';
 import { setupNotificationCategories, getRouteForNotificationType } from '../src/lib/notifications';
 import { useNotificationStore } from '../src/stores/notification-store';
 import type { NotificationData } from '../src/types/notifications';
 import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useHealthStore } from '../src/stores/health-store';
+
+// Lazy-load native module (crashes on web)
+let Notifications: typeof import('expo-notifications') | null = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+  } catch {}
+}
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,8 +42,8 @@ export default function RootLayout() {
   const initSubscription = useSubscriptionStore((s) => s.initialize);
   const initHealth = useHealthStore((s) => s.initialize);
   const checkPermission = useNotificationStore((s) => s.checkPermission);
-  const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
-  const notificationReceivedListener = useRef<Notifications.EventSubscription | null>(null);
+  const notificationResponseListener = useRef<NotificationsTypes.EventSubscription | null>(null);
+  const notificationReceivedListener = useRef<NotificationsTypes.EventSubscription | null>(null);
 
   useEffect(() => {
     initialize().then(() => {
@@ -42,6 +51,8 @@ export default function RootLayout() {
       initSubscription();
       initHealth();
     });
+
+    if (!isSupabaseConfigured) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -52,7 +63,7 @@ export default function RootLayout() {
 
   // Notification setup
   useEffect(() => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web' || !Notifications) return;
 
     // Setup notification categories (action buttons)
     setupNotificationCategories();
@@ -88,10 +99,10 @@ export default function RootLayout() {
 
     return () => {
       if (notificationReceivedListener.current) {
-        Notifications.removeNotificationSubscription(notificationReceivedListener.current);
+        Notifications!.removeNotificationSubscription(notificationReceivedListener.current);
       }
       if (notificationResponseListener.current) {
-        Notifications.removeNotificationSubscription(notificationResponseListener.current);
+        Notifications!.removeNotificationSubscription(notificationResponseListener.current);
       }
     };
   }, [checkPermission]);

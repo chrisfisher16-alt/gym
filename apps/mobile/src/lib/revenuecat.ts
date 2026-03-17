@@ -1,12 +1,24 @@
 import { Platform } from 'react-native';
-import Purchases, {
-  type CustomerInfo,
-  type PurchasesOfferings,
-  type PurchasesPackage,
-  LOG_LEVEL,
+import type {
+  CustomerInfo,
+  PurchasesOfferings,
+  PurchasesPackage,
 } from 'react-native-purchases';
 import type { EntitlementTier } from '@health-coach/shared';
 import { ENTITLEMENT_IDS } from './pricing-config';
+
+// ── Lazy-load native module (crashes on web) ─────────────────────────
+
+let Purchases: any = null;
+let LOG_LEVEL: any = {};
+
+if (Platform.OS !== 'web') {
+  try {
+    const mod = require('react-native-purchases');
+    Purchases = mod.default;
+    LOG_LEVEL = mod.LOG_LEVEL;
+  } catch {}
+}
 
 // ── Configuration ─────────────────────────────────────────────────────
 
@@ -18,6 +30,8 @@ let isConfigured = false;
 // ── Initialize ────────────────────────────────────────────────────────
 
 export async function initRevenueCat(): Promise<boolean> {
+  if (!Purchases) return false;
+
   const apiKey = Platform.OS === 'ios' ? API_KEY_IOS : API_KEY_ANDROID;
 
   if (!apiKey) {
@@ -49,7 +63,7 @@ export async function initRevenueCat(): Promise<boolean> {
 // ── Offerings ─────────────────────────────────────────────────────────
 
 export async function getOfferings(): Promise<PurchasesOfferings | null> {
-  if (!isConfigured) return null;
+  if (!isConfigured || !Purchases) return null;
 
   try {
     const offerings = await Purchases.getOfferings();
@@ -65,7 +79,7 @@ export async function getOfferings(): Promise<PurchasesOfferings | null> {
 export async function purchasePackage(
   pkg: PurchasesPackage,
 ): Promise<{ success: boolean; customerInfo?: CustomerInfo; error?: string }> {
-  if (!isConfigured) {
+  if (!isConfigured || !Purchases) {
     return { success: false, error: 'RevenueCat not configured' };
   }
 
@@ -88,7 +102,7 @@ export async function restorePurchases(): Promise<{
   customerInfo?: CustomerInfo;
   error?: string;
 }> {
-  if (!isConfigured) {
+  if (!isConfigured || !Purchases) {
     return { success: false, error: 'RevenueCat not configured' };
   }
 
@@ -104,7 +118,7 @@ export async function restorePurchases(): Promise<{
 // ── Customer Info ─────────────────────────────────────────────────────
 
 export async function getCustomerInfo(): Promise<CustomerInfo | null> {
-  if (!isConfigured) return null;
+  if (!isConfigured || !Purchases) return null;
 
   try {
     const info = await Purchases.getCustomerInfo();
@@ -174,7 +188,7 @@ export function getTrialInfo(customerInfo: CustomerInfo): {
 // ── Identify User ─────────────────────────────────────────────────────
 
 export async function identifyUser(userId: string): Promise<void> {
-  if (!isConfigured) return;
+  if (!isConfigured || !Purchases) return;
 
   try {
     await Purchases.logIn(userId);
@@ -186,7 +200,7 @@ export async function identifyUser(userId: string): Promise<void> {
 // ── Logout ────────────────────────────────────────────────────────────
 
 export async function logout(): Promise<void> {
-  if (!isConfigured) return;
+  if (!isConfigured || !Purchases) return;
 
   try {
     await Purchases.logOut();

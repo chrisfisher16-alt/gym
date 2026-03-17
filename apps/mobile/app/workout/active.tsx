@@ -13,7 +13,6 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../src/theme';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
 import { useSuggestedLoad } from '../../src/hooks/useSuggestedLoad';
@@ -23,6 +22,12 @@ import { formatTimerDisplay, formatWeight } from '../../src/lib/workout-utils';
 import { getLastPerformance } from '../../src/lib/suggested-load';
 import { REST_TIMER_PRESETS } from '../../src/types/workout';
 import type { ActiveExercise, ActiveSet } from '../../src/types/workout';
+
+// Lazy-load native module (crashes on web)
+let Haptics: typeof import('expo-haptics') | null = null;
+if (Platform.OS !== 'web') {
+  try { Haptics = require('expo-haptics'); } catch {}
+}
 
 // ── Set Row Component ───────────────────────────────────────────────
 
@@ -55,7 +60,7 @@ const SetRow = React.memo(function SetRow({
 
   useEffect(() => {
     if (set.isPR && set.isCompleted) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, [set.isPR, set.isCompleted]);
 
@@ -264,7 +269,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
   const handleCompleteSet = useCallback(
     (setId: string) => {
       completeSet(exercise.id, setId);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       // Auto-start rest timer (90s default)
       if (!isInSuperset) {
         startRestTimer(90);
@@ -373,7 +378,7 @@ function RestTimerOverlay() {
 
   useEffect(() => {
     if (restSecondsLeft === 0 && isRestTimerActive) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
   }, [restSecondsLeft, isRestTimerActive]);
 

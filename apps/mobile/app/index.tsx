@@ -1,5 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '../src/stores/auth-store';
+import { isSupabaseConfigured } from '../src/lib/supabase';
 import { LoadingSpinner } from '../src/components/ui';
 
 export default function Index() {
@@ -9,6 +10,11 @@ export default function Index() {
 
   if (isLoading) {
     return <LoadingSpinner fullScreen message="Loading..." />;
+  }
+
+  // Preview mode: skip auth and go straight to tabs
+  if (!isSupabaseConfigured) {
+    return <Redirect href="/(tabs)" />;
   }
 
   if (!session) {

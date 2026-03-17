@@ -2,27 +2,38 @@
 // Core notification primitives: permissions, tokens, scheduling.
 
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import type { NotificationData, NotificationType } from '../types/notifications';
 
+// ── Lazy-load native module (crashes on web) ──────────────────────
+
+let Notifications: typeof import('expo-notifications') | null = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+  } catch {}
+}
+
 // ── Configuration ─────────────────────────────────────────────────
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 // ── Permissions ───────────────────────────────────────────────────
 
 export async function requestPermissions(): Promise<'granted' | 'denied' | 'undetermined'> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' || !Notifications) {
     return 'denied';
   }
 
@@ -45,7 +56,7 @@ export async function requestPermissions(): Promise<'granted' | 'denied' | 'unde
 }
 
 export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' || !Notifications) {
     return 'denied';
   }
   const { status } = await Notifications.getPermissionsAsync();
@@ -57,7 +68,7 @@ export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'und
 // ── Push Token ────────────────────────────────────────────────────
 
 export async function registerPushToken(): Promise<string | null> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' || !Notifications) {
     return null;
   }
 
@@ -78,9 +89,11 @@ export async function registerPushToken(): Promise<string | null> {
 export async function scheduleLocalNotification(
   title: string,
   body: string,
-  trigger: Notifications.NotificationTriggerInput,
+  trigger: any,
   data?: NotificationData,
 ): Promise<string> {
+  if (!Notifications) return '';
+
   const id = await Notifications.scheduleNotificationAsync({
     content: {
       title,
@@ -96,21 +109,24 @@ export async function scheduleLocalNotification(
 // ── Cancel Notifications ──────────────────────────────────────────
 
 export async function cancelNotification(id: string): Promise<void> {
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(id);
 }
 
 export async function cancelAllNotifications(): Promise<void> {
+  if (!Notifications) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
 export async function getScheduledNotifications() {
+  if (!Notifications) return [];
   return Notifications.getAllScheduledNotificationsAsync();
 }
 
 // ── Notification Categories (Action Buttons) ──────────────────────
 
 export async function setupNotificationCategories(): Promise<void> {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || !Notifications) return;
 
   await Notifications.setNotificationCategoryAsync('workout_reminder', [
     {
