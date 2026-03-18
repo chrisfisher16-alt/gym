@@ -30,7 +30,7 @@ const AI_CONFIG_KEY = '@ai/config';
 
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'claude',
-  apiKey: '',
+  apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? '',
 };
 
 let cachedConfig: AIConfig | null = null;
