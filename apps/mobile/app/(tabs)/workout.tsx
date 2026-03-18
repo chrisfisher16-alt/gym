@@ -9,6 +9,7 @@ import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { useWorkoutStore } from '../../src/stores/workout-store';
 import { Button, Card, ScreenContainer, Badge, LoadingSpinner, ErrorState, ProgressBar } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume } from '../../src/lib/workout-utils';
+import { DayType, DAY_TYPE_LABELS, DAY_TYPE_COLORS, DAY_TYPE_ICONS } from '../../src/types/workout';
 import { CoachFAB } from '../../src/components/CoachFAB';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
@@ -21,7 +22,7 @@ export default function WorkoutTab() {
   const { colors, spacing, radius, typography } = useTheme();
   const initialize = useWorkoutStore((s) => s.initialize);
   const isInitialized = useWorkoutStore((s) => s.isInitialized);
-  const { isActive, startEmptyWorkout, activeSession } = useActiveWorkout();
+  const { isActive, startEmptyWorkout, activeSession, cancelWorkout } = useActiveWorkout();
   const { activeProgram, programs, getTodayWorkout, setActiveProgram } = useWorkoutPrograms();
   const { recentWorkouts, weeklyVolume, totalWorkouts } = useWorkoutHistory();
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
@@ -114,7 +115,7 @@ export default function WorkoutTab() {
 
   const handleStartToday = () => {
     if (isActive) {
-      Alert.alert('Workout in Progress', 'Please finish or cancel your current workout first.');
+      router.push('/workout/active');
       return;
     }
     if (!todayWorkout || !activeProgram) return;
@@ -171,57 +172,154 @@ export default function WorkoutTab() {
         )}
       </View>
 
-      {/* Resume active workout */}
+      {/* Today's Workout — active session */}
       {isActive && activeSession && (
         <Card style={{ marginBottom: spacing.base, borderColor: colors.success, borderWidth: 2 }}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="flash" size={20} color={colors.success} />
-            <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-              Workout in Progress
-            </Text>
-          </View>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-            {activeSession.name}
-          </Text>
-          <Button
-            title="Resume Workout"
-            size="md"
-            onPress={() => router.push('/workout/active')}
-            style={{ marginTop: spacing.md }}
-          />
-        </Card>
-      )}
-
-      {/* Today's Workout */}
-      {!isActive && todayWorkout && activeProgram && (
-        <Card style={{ marginBottom: spacing.base }}>
           <View style={styles.cardHeader}>
             <Ionicons name="calendar-outline" size={20} color={colors.primary} />
             <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
               Today&apos;s Workout
             </Text>
+            <Badge label="IN PROGRESS" variant="success" />
           </View>
           <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-            {todayWorkout.name} — {todayWorkout.exercises.length} exercises
+            {activeSession.name}
           </Text>
+          {/* Progress stats */}
+          <View style={[styles.progressDetails, { marginTop: spacing.sm }]}>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+              {activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0)}/
+              {activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0)} sets
+            </Text>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+              {Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000)} min elapsed
+            </Text>
+          </View>
+          {/* Exercise list preview */}
           <View style={[styles.exercisePreview, { marginTop: spacing.sm }]}>
-            {todayWorkout.exercises.slice(0, 3).map((e) => (
-              <Text key={e.id} style={[typography.bodySmall, { color: colors.textTertiary }]}>
-                • {e.exerciseName} ({e.targetSets}×{e.targetReps})
-              </Text>
-            ))}
-            {todayWorkout.exercises.length > 3 && (
-              <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
-                + {todayWorkout.exercises.length - 3} more
+            {activeSession.exercises.slice(0, 3).map((e) => {
+              const completedSets = e.sets.filter(s => s.isCompleted).length;
+              const totalSets = e.sets.length;
+              return (
+                <View key={e.exerciseId} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                  <Ionicons
+                    name={completedSets === totalSets ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={14}
+                    color={completedSets === totalSets ? colors.success : colors.textTertiary}
+                    style={{ marginRight: spacing.xs }}
+                  />
+                  <Text style={[typography.bodySmall, { color: completedSets === totalSets ? colors.success : colors.textTertiary }]}>
+                    {e.exerciseName} ({completedSets}/{totalSets})
+                  </Text>
+                </View>
+              );
+            })}
+            {activeSession.exercises.length > 3 && (
+              <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: 2 }]}>
+                + {activeSession.exercises.length - 3} more
               </Text>
             )}
           </View>
           <Button
-            title="Start Today's Workout"
+            title="Resume Workout"
             size="md"
-            onPress={handleStartToday}
-            style={{ marginTop: spacing.md }}
+            onPress={() => router.push('/workout/active')}
+            style={{ marginTop: spacing.md, backgroundColor: colors.success }}
           />
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Discard Workout',
+                'Are you sure you want to discard this workout? All progress will be lost.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Discard', style: 'destructive', onPress: () => cancelWorkout() },
+                ],
+              );
+            }}
+            style={{ alignSelf: 'center', marginTop: spacing.sm }}
+          >
+            <Text style={[typography.bodySmall, { color: colors.error }]}>Discard Workout</Text>
+          </TouchableOpacity>
+        </Card>
+      )}
+
+      {/* Today's Workout — no active session */}
+      {!isActive && todayWorkout && activeProgram && (
+        <Card style={{ marginBottom: spacing.base }}>
+          {todayWorkout.dayType === 'lifting' ? (
+            <>
+              <View style={styles.cardHeader}>
+                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+                  Today&apos;s Workout
+                </Text>
+              </View>
+              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                {todayWorkout.name} — {todayWorkout.exercises.length} exercises
+              </Text>
+              <View style={[styles.exercisePreview, { marginTop: spacing.sm }]}>
+                {todayWorkout.exercises.slice(0, 3).map((e) => (
+                  <Text key={e.id} style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                    • {e.exerciseName} ({e.targetSets}×{e.targetReps})
+                  </Text>
+                ))}
+                {todayWorkout.exercises.length > 3 && (
+                  <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                    + {todayWorkout.exercises.length - 3} more
+                  </Text>
+                )}
+              </View>
+              <Button
+                title="Start Today's Workout"
+                size="md"
+                onPress={handleStartToday}
+                style={{ marginTop: spacing.md }}
+              />
+            </>
+          ) : todayWorkout.dayType === 'cardio' ? (
+            <>
+              <View style={styles.cardHeader}>
+                <Ionicons name={DAY_TYPE_ICONS.cardio as any} size={20} color={DAY_TYPE_COLORS.cardio} />
+                <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+                  {DAY_TYPE_LABELS.cardio}
+                </Text>
+                <Badge label={DAY_TYPE_LABELS.cardio} variant="default" />
+              </View>
+              {todayWorkout.cardioSuggestions && todayWorkout.cardioSuggestions.length > 0 && (
+                <View style={{ marginTop: spacing.sm }}>
+                  {todayWorkout.cardioSuggestions.slice(0, 2).map((s, i) => (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginTop: i > 0 ? spacing.xs : 0 }}>
+                      <Ionicons name={(s.icon || 'heart-outline') as any} size={16} color={DAY_TYPE_COLORS.cardio} />
+                      <Text style={[typography.body, { color: colors.textSecondary, marginLeft: spacing.sm }]}>
+                        {s.name} — {s.duration}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {todayWorkout.recoveryNotes && (
+                <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.sm }]}>
+                  {todayWorkout.recoveryNotes}
+                </Text>
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.cardHeader}>
+                <Ionicons name={DAY_TYPE_ICONS[todayWorkout.dayType] as any} size={20} color={DAY_TYPE_COLORS[todayWorkout.dayType]} />
+                <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+                  {DAY_TYPE_LABELS[todayWorkout.dayType]}
+                </Text>
+                <Badge label={DAY_TYPE_LABELS[todayWorkout.dayType]} variant="default" />
+              </View>
+              {todayWorkout.recoveryNotes && (
+                <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>
+                  {todayWorkout.recoveryNotes}
+                </Text>
+              )}
+            </>
+          )}
         </Card>
       )}
 
@@ -265,15 +363,28 @@ export default function WorkoutTab() {
             )}
           </View>
           <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>
-            Start an empty workout and add exercises as you go.
+            Start an empty workout or let AI build one for you.
           </Text>
-          <Button
-            title="Start Empty Workout"
-            variant="secondary"
-            size="md"
-            onPress={handleQuickStart}
-            style={{ marginTop: spacing.md }}
-          />
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                title="Empty Workout"
+                variant="secondary"
+                size="md"
+                onPress={handleQuickStart}
+                icon={<Ionicons name="add-outline" size={18} color={colors.primary} />}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                title="AI Workout"
+                variant="secondary"
+                size="md"
+                onPress={() => router.push('/workout/ai-generate')}
+                icon={<Ionicons name="sparkles" size={18} color="#8B5CF6" />}
+              />
+            </View>
+          </View>
         </Card>
       )}
 

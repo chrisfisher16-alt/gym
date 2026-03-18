@@ -193,7 +193,7 @@ function gatherWeeklyContext(weekStart: string, weekEnd: string): {
 // ── Summary Generation ───────────────────────────────────────────────
 
 const WEEKLY_SYSTEM_PROMPT =
-  'You are a fitness coach reviewing a client\'s weekly performance. Provide a concise 2-3 sentence insight that highlights what went well, what could improve, and a specific recommendation for the coming week. Be encouraging but honest. Do not use markdown formatting — write plain text only.';
+  'You are a fitness coach reviewing a client\'s weekly performance. Provide a concise 2-3 sentence insight that highlights what went well, what could improve, and a specific recommendation for the coming week. Be encouraging but honest. Do not use markdown formatting — write plain text only. You are EXCLUSIVELY a health and fitness coach — only discuss exercise, workouts, nutrition, and wellness topics.';
 
 const FALLBACK_INSIGHT =
   'Another week in the books! Review your workouts and nutrition to see where you excelled and where there is room to grow. Keep showing up consistently — that is what drives long-term results.';

@@ -87,7 +87,7 @@ export class HealthConnectService implements IHealthService {
     if (!initialized) return [];
 
     try {
-      const permissions = types.map((type) => ({
+      const permissions: Array<{ accessType: 'read' | 'write'; recordType: string }> = types.map((type) => ({
         accessType: 'read' as const,
         recordType: RECORD_TYPE_MAP[type],
       }));
@@ -100,7 +100,8 @@ export class HealthConnectService implements IHealthService {
         });
       }
 
-      const granted = await HealthConnect.requestPermission(permissions);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const granted = await HealthConnect.requestPermission(permissions as any);
 
       return types.map((type) => {
         const readGranted = granted.some(

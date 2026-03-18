@@ -59,7 +59,7 @@ export function getCompletedSetsCount(session: ActiveWorkoutSession): number {
   let count = 0;
   for (const exercise of session.exercises) {
     for (const set of exercise.sets) {
-      if (set.isCompleted) count++;
+      if (set.isCompleted && set.setType !== 'warmup') count++;
     }
   }
   return count;
@@ -161,8 +161,8 @@ export function activeToCompleted(
           const vol = calculateSetVolume(set.weight, set.reps);
           if (set.setType !== 'warmup') {
             totalVolume += vol;
+            totalSets++;
           }
-          totalSets++;
           if (set.isPR) prCount++;
 
           return {

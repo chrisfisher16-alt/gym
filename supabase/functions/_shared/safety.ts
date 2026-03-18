@@ -155,11 +155,21 @@ export async function checkRateLimit(
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
+  // Get user's conversation IDs
+  const { data: userConvos } = await supabase
+    .from('coach_conversations')
+    .select('id')
+    .eq('user_id', userId);
+  const convIds = userConvos?.map((c: { id: string }) => c.id) ?? [];
+
+  // No conversations means no messages — rate limit passes
+  if (convIds.length === 0) return { safe: true, flagged: false };
+
   // Count messages in the last hour
   const { count: hourCount } = await supabase
     .from('coach_messages')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
+    .in('conversation_id', convIds)
     .eq('role', 'user')
     .gte('created_at', oneHourAgo);
 
@@ -176,7 +186,7 @@ export async function checkRateLimit(
   const { count: dayCount } = await supabase
     .from('coach_messages')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
+    .in('conversation_id', convIds)
     .eq('role', 'user')
     .gte('created_at', dayStart);
 
@@ -222,13 +232,12 @@ export async function logSafetyEvent(
     latency_ms: 0,
     status: 'flagged',
     tool_calls_count: 0,
-    error_message: JSON.stringify({
+    error: JSON.stringify({
       category: event.category,
       reason: event.reason,
       direction: event.direction,
       content_snippet: event.content_snippet.slice(0, 200),
     }),
-    context: event.context,
     created_at: new Date().toISOString(),
   });
 }

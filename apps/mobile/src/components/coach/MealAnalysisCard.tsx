@@ -14,7 +14,7 @@ export function MealAnalysisCard({ data }: MealAnalysisCardProps) {
   const items = (data.items as Array<Record<string, unknown>>) ?? [];
   const parseMethod = (data.parse_method as string) ?? 'ai';
 
-  const totals = items.reduce(
+  const totals = items.reduce<{ calories: number; protein_g: number; carbs_g: number; fat_g: number }>(
     (acc, item) => ({
       calories: acc.calories + ((item.calories as number) ?? 0),
       protein_g: acc.protein_g + ((item.protein_g as number) ?? 0),
@@ -53,7 +53,7 @@ export function MealAnalysisCard({ data }: MealAnalysisCardProps) {
                 {(item.name as string) ?? 'Food item'}
               </Text>
               <Text style={[typography.caption, { color: colors.textTertiary }]}>
-                {item.quantity ?? 1} {(item.unit as string) ?? 'serving'}
+                {String(item.quantity ?? 1)} {String((item.unit as string) ?? 'serving')}
               </Text>
             </View>
             <View style={styles.macros}>

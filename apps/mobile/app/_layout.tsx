@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native';
 import { ToastProvider } from '../src/components/Toast';
+import { migrateAIConfig } from '../src/lib/ai-provider';
+import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +21,9 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Migrate AI config on all platforms (clears stale cached API key)
+    migrateAIConfig().catch(() => {});
+
     // On web, skip all native initialization and just render
     if (Platform.OS === 'web') {
       setReady(true);
@@ -30,6 +35,8 @@ export default function RootLayout() {
       try {
         const { useAuthStore } = require('../src/stores/auth-store');
         await useAuthStore.getState().initialize();
+        // Bootstrap notification categories, re-sync reminders, and set up response listener
+        await bootstrapNotifications();
       } catch (e) {
         console.warn('Init failed:', e);
       } finally {

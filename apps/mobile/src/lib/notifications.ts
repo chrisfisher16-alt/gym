@@ -91,6 +91,7 @@ export async function scheduleLocalNotification(
   body: string,
   trigger: any,
   data?: NotificationData,
+  categoryIdentifier?: string,
 ): Promise<string> {
   if (!Notifications) return '';
 
@@ -100,6 +101,7 @@ export async function scheduleLocalNotification(
       body,
       data: data as Record<string, unknown> | undefined,
       sound: 'default',
+      ...(categoryIdentifier ? { categoryIdentifier } : {}),
     },
     trigger,
   });
@@ -116,6 +118,24 @@ export async function cancelNotification(id: string): Promise<void> {
 export async function cancelAllNotifications(): Promise<void> {
   if (!Notifications) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+/**
+ * Cancel only scheduled notifications whose data.type matches the given type.
+ * Returns the number of notifications cancelled.
+ */
+export async function cancelNotificationsByType(type: string): Promise<number> {
+  if (!Notifications) return 0;
+  const all = await Notifications.getAllScheduledNotificationsAsync();
+  let cancelled = 0;
+  for (const n of all) {
+    const data = n.content.data as Record<string, unknown> | undefined;
+    if (data?.type === type) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      cancelled++;
+    }
+  }
+  return cancelled;
 }
 
 export async function getScheduledNotifications() {
@@ -169,6 +189,31 @@ export async function setupNotificationCategories(): Promise<void> {
 export function parseTime(time: string): { hour: number; minute: number } {
   const [h, m] = time.split(':').map(Number);
   return { hour: h, minute: m };
+}
+
+/**
+ * Returns true if a given "HH:MM" time falls inside the quiet hours window.
+ * Handles the midnight-wrap case (e.g. 22:00 → 07:00).
+ */
+export function isTimeInQuietHours(
+  time: string,
+  quietStart: string,
+  quietEnd: string,
+): boolean {
+  const toMinutes = (t: string) => {
+    const { hour, minute } = parseTime(t);
+    return hour * 60 + minute;
+  };
+  const t = toMinutes(time);
+  const start = toMinutes(quietStart);
+  const end = toMinutes(quietEnd);
+
+  if (start <= end) {
+    // Same-day range, e.g. 13:00–15:00
+    return t >= start && t < end;
+  }
+  // Wraps midnight, e.g. 22:00–07:00
+  return t >= start || t < end;
 }
 
 /** Get the route to navigate to for a notification type */

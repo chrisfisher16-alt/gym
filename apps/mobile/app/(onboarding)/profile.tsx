@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTheme } from '../../src/theme';
@@ -8,10 +8,12 @@ import { Button, Input, ScreenContainer, ProgressBar } from '../../src/component
 import { useOnboardingStore } from '../../src/stores/onboarding-store';
 import type { Gender } from '@health-coach/shared';
 
+const GENDER_VALUES = ['male', 'female', 'non_binary', 'prefer_not_to_say'] as const;
+
 const profileFormSchema = z.object({
   displayName: z.string().min(1, 'Please enter your name'),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format'),
-  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']),
+  gender: z.enum(GENDER_VALUES),
 });
 
 type ProfileForm = z.infer<typeof profileFormSchema>;
@@ -19,7 +21,7 @@ type ProfileForm = z.infer<typeof profileFormSchema>;
 const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
+  { value: 'non_binary', label: 'Non-binary' },
   { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
@@ -36,14 +38,14 @@ export default function ProfileScreen() {
     defaultValues: {
       displayName: store.displayName,
       dateOfBirth: store.dateOfBirth,
-      gender: store.gender ?? 'prefer_not_to_say',
+      gender: (store.gender ?? 'prefer_not_to_say') as ProfileForm['gender'],
     },
   });
 
-  const onSubmit = (data: ProfileForm) => {
+  const onSubmit: SubmitHandler<ProfileForm> = (data) => {
     store.setDisplayName(data.displayName);
     store.setDateOfBirth(data.dateOfBirth);
-    store.setGender(data.gender);
+    store.setGender(data.gender as Gender);
     router.push('/(onboarding)/body');
   };
 

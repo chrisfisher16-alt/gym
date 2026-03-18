@@ -180,7 +180,7 @@ export function generateDefaultTargets(
     carbs_g,
     fat_g,
     fiber_g: profile.sex === 'female' ? 25 : 30,
-    water_ml: 2500,
+    water_oz: 85,
   };
 }
 

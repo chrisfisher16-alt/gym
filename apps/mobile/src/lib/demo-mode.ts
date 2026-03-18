@@ -67,7 +67,7 @@ export const DEMO_PROFILE = {
 export const DEMO_COACH_PREFERENCES = {
   user_id: 'demo-user-001',
   coach_tone: 'balanced' as const,
-  focus_areas: ['strength', 'muscle_growth'],
+  focus_areas: ['gain_muscle', 'build_lean_muscle'],
   dietary_restrictions: [] as string[],
   coaching_style: 'data_driven' as const,
 };
@@ -228,7 +228,7 @@ export const DEMO_NUTRITION_TARGETS: NutritionTargets = {
   carbs_g: 280,
   fat_g: 80,
   fiber_g: 35,
-  water_ml: 3000,
+  water_oz: 100,
 };
 
 function generateDemoMeals(dayOffset: number): MealEntry[] {

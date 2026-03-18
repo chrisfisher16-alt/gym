@@ -28,13 +28,14 @@ try {
 }
 
 // Map our types to HealthKit permissions
+// Cast values to satisfy the HealthPermission enum type expected by the API
 const PERMISSION_MAP: Record<HealthDataType, { read: string; write?: string }> = {
   steps: { read: 'StepCount' },
   active_energy: { read: 'ActiveEnergyBurned' },
   workout: { read: 'Workout', write: 'Workout' },
   body_weight: { read: 'BodyMass' },
   sleep: { read: 'SleepAnalysis' },
-};
+} as const;
 
 function toHealthDataPoint(
   type: HealthDataType,
@@ -82,13 +83,14 @@ export class AppleHealthService implements IHealthService {
 
     const permissions = {
       permissions: {
-        read: readPermissions,
-        write: writePermissions,
+        read: readPermissions as unknown[],
+        write: writePermissions as unknown[],
       },
     };
 
     return new Promise((resolve) => {
-      AppleHealthKit!.initHealthKit(permissions, (err: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      AppleHealthKit!.initHealthKit(permissions as any, (err: unknown) => {
         if (err) {
           resolve([]);
           return;
@@ -176,15 +178,16 @@ export class AppleHealthService implements IHealthService {
   async getWorkouts(startDate: Date, endDate: Date): Promise<HealthDataPoint[]> {
     if (!AppleHealthKit) return [];
 
-    const options = {
+    const options: Record<string, unknown> = {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       type: 'Workout',
     };
 
     return new Promise((resolve) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       AppleHealthKit!.getSamples(
-        options,
+        options as any,
         (err: unknown, results: Array<{ value: number; startDate: string; endDate: string; sourceName?: string }>) => {
           if (err || !results) {
             resolve([]);
@@ -203,7 +206,7 @@ export class AppleHealthService implements IHealthService {
   async getBodyWeight(startDate: Date, endDate: Date): Promise<HealthDataPoint[]> {
     if (!AppleHealthKit) return [];
 
-    const options = {
+    const options: Record<string, unknown> = {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       ascending: false,
@@ -211,8 +214,9 @@ export class AppleHealthService implements IHealthService {
     };
 
     return new Promise((resolve) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       AppleHealthKit!.getWeightSamples(
-        options,
+        options as any,
         (err: unknown, results: Array<{ value: number; startDate: string; endDate: string; sourceName?: string }>) => {
           if (err || !results) {
             resolve([]);
@@ -237,7 +241,8 @@ export class AppleHealthService implements IHealthService {
     };
 
     return new Promise((resolve) => {
-      AppleHealthKit!.getSleepSamples(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (AppleHealthKit!.getSleepSamples as any)(
         options,
         (err: unknown, results: Array<{ value: string; startDate: string; endDate: string; sourceName?: string }>) => {
           if (err || !results) {

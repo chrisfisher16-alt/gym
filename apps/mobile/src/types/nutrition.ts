@@ -12,7 +12,7 @@ export interface NutritionTargets {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
-  water_ml: number;
+  water_oz: number;
 }
 
 // ── Macro Totals ───────────────────────────────────────────────────
@@ -85,7 +85,7 @@ export interface DailyNutritionLog {
   userId: string;
   targets: NutritionTargets;
   consumed: MacroTotals;
-  waterIntake_ml: number;
+  waterIntake_oz: number;
   meals: MealEntry[];
   supplementsTaken: string[]; // supplement IDs taken today
 }
@@ -119,6 +119,9 @@ export interface UserSupplementEntry {
 
 // ── Recipe ─────────────────────────────────────────────────────────
 
+export type RecipeSource = 'seed' | 'user' | 'ai';
+export type RecipeDifficulty = 'Easy' | 'Medium' | 'Hard';
+
 export interface RecipeEntry {
   id: string;
   userId: string;
@@ -128,6 +131,17 @@ export interface RecipeEntry {
   servings: number;
   createdAt: string;
   updatedAt: string;
+  // Extended recipe metadata (optional for backward compat)
+  source?: RecipeSource;
+  difficulty?: RecipeDifficulty;
+  equipment?: string[];       // e.g. ['stove', 'pan']
+  ingredientsList?: string[]; // human-readable ingredient names
+  instructions?: string[];    // step-by-step
+  calories?: number;          // total recipe calories (convenience)
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  fiber_g?: number;
 }
 
 // ── Food Database Item ─────────────────────────────────────────────

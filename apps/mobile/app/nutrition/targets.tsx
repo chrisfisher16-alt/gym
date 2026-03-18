@@ -31,7 +31,7 @@ export default function TargetsScreen() {
   const [carbs, setCarbs] = useState(String(targets.carbs_g));
   const [fat, setFat] = useState(String(targets.fat_g));
   const [fiber, setFiber] = useState(String(targets.fiber_g));
-  const [water, setWater] = useState(String(targets.water_ml));
+  const [water, setWater] = useState(String(targets.water_oz));
   const [selectedPreset, setSelectedPreset] = useState<MacroSplitPreset>('custom');
 
   const handlePreset = (preset: MacroSplitPreset) => {
@@ -63,7 +63,7 @@ export default function TargetsScreen() {
     setCarbs(String(generated.carbs_g));
     setFat(String(generated.fat_g));
     setFiber(String(generated.fiber_g));
-    setWater(String(generated.water_ml));
+    setWater(String(generated.water_oz));
     setSelectedPreset('balanced');
   };
 
@@ -74,7 +74,7 @@ export default function TargetsScreen() {
       carbs_g: parseInt(carbs) || 250,
       fat_g: parseInt(fat) || 70,
       fiber_g: parseInt(fiber) || 30,
-      water_ml: parseInt(water) || 2500,
+      water_oz: parseInt(water) || 85,
     };
 
     setDailyTargets(newTargets);
@@ -230,7 +230,7 @@ export default function TargetsScreen() {
 
         <View style={styles.otherRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[typography.label, { color: colors.info }]}>Water (ml)</Text>
+            <Text style={[typography.label, { color: colors.info }]}>Water (oz)</Text>
           </View>
           <TextInput
             style={[styles.smallField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.label }]}

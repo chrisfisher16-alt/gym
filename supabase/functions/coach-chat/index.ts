@@ -178,12 +178,11 @@ Deno.serve(async (req: Request) => {
 
     // Rate limiting
     const { data: entitlementData } = await supabase
-      .from('subscriptions')
-      .select('entitlement')
+      .from('entitlements')
+      .select('tier')
       .eq('user_id', user_id)
-      .eq('status', 'active')
       .single();
-    const tier = entitlementData?.entitlement?.tier ?? 'free';
+    const tier = entitlementData?.tier ?? 'free';
 
     const rateLimitCheck = await checkRateLimit(supabase, user_id, tier);
     if (!rateLimitCheck.safe) {
@@ -221,7 +220,6 @@ Deno.serve(async (req: Request) => {
       .from('coach_messages')
       .insert({
         conversation_id: convId,
-        user_id,
         role: 'user',
         content: message,
         created_at: new Date().toISOString(),
@@ -346,7 +344,6 @@ Deno.serve(async (req: Request) => {
       .from('coach_messages')
       .insert({
         conversation_id: convId,
-        user_id,
         role: 'assistant',
         content: finalContent,
         tool_calls: toolCallResults.length > 0 ? toolCallResults : null,
@@ -381,7 +378,6 @@ Deno.serve(async (req: Request) => {
       latency_ms: latencyMs,
       status: outputCheck.flagged ? 'flagged' : 'success',
       tool_calls_count: aiResponse.tool_calls.length,
-      context: coachContext,
       created_at: new Date().toISOString(),
     });
 
@@ -410,25 +406,7 @@ Deno.serve(async (req: Request) => {
 
     console.error('Coach chat error:', error);
 
-    // Log error telemetry (best effort)
-    try {
-      const { user_id, supabase } = await verifyAuth(req);
-      await supabase.from('ai_usage_events').insert({
-        user_id,
-        model: 'unknown',
-        input_tokens: 0,
-        output_tokens: 0,
-        total_tokens: 0,
-        estimated_cost_usd: 0,
-        latency_ms: latencyMs,
-        status: 'error',
-        tool_calls_count: 0,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        created_at: new Date().toISOString(),
-      });
-    } catch {
-      // Ignore telemetry errors
-    }
+    // Error telemetry skipped — user_id not available in error scope
 
     return errorResponse('Coach is temporarily unavailable. Please try again.', 500);
   }

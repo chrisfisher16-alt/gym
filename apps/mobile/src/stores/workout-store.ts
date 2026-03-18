@@ -83,7 +83,8 @@ interface WorkoutState {
   addSet: (exerciseInstanceId: string, setType?: 'working' | 'warmup' | 'drop' | 'failure') => void;
 
   // Actions - Exercise Management in Active Session
-  addExerciseToSession: (exercise: ExerciseLibraryEntry, targetSets?: number) => void;
+  addExerciseToSession: (exercise: ExerciseLibraryEntry, targetSets?: number, setType?: import('@health-coach/shared').SetType) => void;
+  prependExercisesToSession: (exercises: ExerciseLibraryEntry[]) => void;
   removeExerciseFromSession: (exerciseInstanceId: string) => void;
   skipExercise: (exerciseInstanceId: string) => void;
   reorderExercises: (orderedIds: string[]) => void;
@@ -169,9 +170,40 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         : [];
       const allExercises = [...baseExercises, ...customExercises];
 
-      const programs: WorkoutProgramLocal[] = storedPrograms
+      const seedPrograms = getSeedPrograms('local_user');
+      let programs: WorkoutProgramLocal[] = storedPrograms
         ? JSON.parse(storedPrograms)
-        : getSeedPrograms('local_user');
+        : seedPrograms;
+
+      // Merge in any new seed programs that don't exist in stored data,
+      // and backfill dayType on stored programs that predate the field.
+      let programsChanged = false;
+      if (storedPrograms) {
+        const storedIds = new Set(programs.map((p) => p.id));
+        const missingSeedPrograms = seedPrograms.filter((sp) => !storedIds.has(sp.id));
+        if (missingSeedPrograms.length > 0) {
+          programs = [...programs, ...missingSeedPrograms];
+          programsChanged = true;
+        }
+        // Backfill dayType on any stored days that lack it
+        for (const prog of programs) {
+          for (const day of prog.days) {
+            if (!day.dayType) {
+              (day as any).dayType = 'lifting';
+              programsChanged = true;
+            }
+          }
+          // Replace stored seed programs with latest seed data, but only if the
+          // user has not manually edited the program (customized flag prevents overwrite).
+          const seedMatch = seedPrograms.find((sp) => sp.id === prog.id);
+          if (seedMatch && !prog.customized) {
+            const idx = programs.indexOf(prog);
+            // Preserve isActive from stored version
+            programs[idx] = { ...seedMatch, isActive: prog.isActive };
+            programsChanged = true;
+          }
+        }
+      }
 
       const history: CompletedSession[] = storedHistory
         ? JSON.parse(storedHistory)
@@ -204,12 +236,13 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         isInitialized: true,
       });
 
-      // Persist seed programs if they weren't stored yet
-      if (!storedPrograms) {
+      // Persist programs if they were newly seeded or migrated
+      if (!storedPrograms || programsChanged) {
         await AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
       }
     } catch (error) {
-      // Fallback to defaults
+      // Fallback to defaults — preserve any previously-loaded rest time
+      const currentRest = get().defaultRestSeconds;
       set({
         exercises: [...EXERCISE_LIBRARY],
         programs: getSeedPrograms('local_user'),
@@ -217,6 +250,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         personalRecords: {},
         programCompletions: {},
         activeSession: null,
+        defaultRestSeconds: currentRest,
         isInitialized: true,
       });
     }
@@ -234,8 +268,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   updateProgram: (program) => {
     set((state) => {
+      const updated = { ...program, customized: true };
       const programs = state.programs.map((p) =>
-        p.id === program.id ? program : p,
+        p.id === updated.id ? updated : p,
       );
       AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
       return { programs };
@@ -259,6 +294,14 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
       return { programs };
     });
+    // Re-sync workout reminder days to match the new active program.
+    // Lazy require avoids circular dependency (notification-store → workout-reminder-days → workout-store).
+    setTimeout(() => {
+      try {
+        const { useNotificationStore } = require('./notification-store');
+        useNotificationStore.getState().syncWorkoutDaysFromProgram();
+      } catch {}
+    }, 200);
   },
 
   // ── Workout Session ─────────────────────────────────────────────
@@ -285,6 +328,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           })),
           supersetGroupId: e.supersetGroupId,
           isTimeBased: libExercise?.isTimeBased,
+          isBodyweight: libExercise?.isBodyweight,
           defaultDurationSeconds: libExercise?.defaultDurationSeconds,
           restSeconds: e.restSeconds,
           isSkipped: false,
@@ -486,7 +530,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   // ── Exercise Management ─────────────────────────────────────────
 
-  addExerciseToSession: (exercise, targetSets = 3) => {
+  addExerciseToSession: (exercise, targetSets = 3, setType = 'working') => {
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -497,11 +541,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         sets: Array.from({ length: targetSets }, (_, i) => ({
           id: generateId('set'),
           setNumber: i + 1,
-          setType: 'working' as const,
+          setType: setType as import('@health-coach/shared').SetType,
           isCompleted: false,
           isPR: false,
         })),
         isTimeBased: exercise.isTimeBased,
+        isBodyweight: exercise.isBodyweight,
         defaultDurationSeconds: exercise.defaultDurationSeconds,
         isSkipped: false,
         order: state.activeSession.exercises.length,
@@ -511,6 +556,45 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         activeSession: {
           ...state.activeSession,
           exercises: [...state.activeSession.exercises, newExercise],
+        },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  prependExercisesToSession: (exercises) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const newExercises: ActiveExercise[] = exercises.map((exercise, idx) => ({
+        id: generateId('ae'),
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        sets: Array.from({ length: exercise.defaultSets || 1 }, (_, i) => ({
+          id: generateId('set'),
+          setNumber: i + 1,
+          setType: 'warmup' as const,
+          isCompleted: false,
+          isPR: false,
+        })),
+        isTimeBased: exercise.isTimeBased,
+        isBodyweight: exercise.isBodyweight,
+        defaultDurationSeconds: exercise.defaultDurationSeconds,
+        isSkipped: false,
+        order: idx,
+      }));
+
+      // Reorder existing exercises to come after the new ones
+      const reordered = state.activeSession.exercises.map((e, i) => ({
+        ...e,
+        order: newExercises.length + i,
+      }));
+
+      return {
+        activeSession: {
+          ...state.activeSession,
+          exercises: [...newExercises, ...reordered],
+          currentExerciseIndex: 0,
         },
       };
     });
@@ -552,8 +636,15 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set((state) => {
       if (!state.activeSession) return state;
 
+      // Find the exerciseId for the target instance so we can propagate
+      const target = state.activeSession.exercises.find(
+        (e) => e.id === exerciseInstanceId,
+      );
+      if (!target) return state;
+
+      // Update ALL instances of the same exercise in this workout
       const exercises = state.activeSession.exercises.map((e) =>
-        e.id === exerciseInstanceId ? { ...e, restSeconds: clamped } : e,
+        e.exerciseId === target.exerciseId ? { ...e, restSeconds: clamped } : e,
       );
 
       return {
@@ -574,6 +665,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           exerciseId: newExercise.id,
           exerciseName: newExercise.name,
           isTimeBased: newExercise.isTimeBased,
+          isBodyweight: newExercise.isBodyweight,
           defaultDurationSeconds: newExercise.defaultDurationSeconds,
           // Keep existing sets data structure
         };

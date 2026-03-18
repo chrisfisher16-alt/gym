@@ -33,7 +33,7 @@ Deno.serve(async (req: Request) => {
     // Look up push token from notification preferences
     const { data: prefRow, error: prefError } = await supabase
       .from('notification_preferences')
-      .select('push_token, quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
+      .select('push_token, quiet_hours_start, quiet_hours_end')
       .eq('user_id', user_id)
       .single();
 
@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Check quiet hours
-    if (prefRow.quiet_hours_enabled) {
+    if (prefRow.quiet_hours_start && prefRow.quiet_hours_end) {
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -64,9 +64,10 @@ Deno.serve(async (req: Request) => {
         // Log that we skipped due to quiet hours
         await supabase.from('notification_events').insert({
           user_id,
-          event_type: 'NOTIFICATION_SUPPRESSED_QUIET_HOURS',
-          notification_type: data?.type ?? 'unknown',
-          metadata: { title, body: notifBody },
+          type: data?.type ?? 'unknown',
+          channel: 'push',
+          status: 'failed',
+          error: 'Suppressed due to quiet hours',
           created_at: new Date().toISOString(),
         });
 
@@ -100,13 +101,10 @@ Deno.serve(async (req: Request) => {
     // Log the notification event
     await supabase.from('notification_events').insert({
       user_id,
-      event_type: 'NOTIFICATION_SENT',
-      notification_type: data?.type ?? 'unknown',
-      metadata: {
-        title,
-        body: notifBody,
-        push_result: pushResult,
-      },
+      type: data?.type ?? 'unknown',
+      channel: 'push',
+      status: 'sent',
+      sent_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
     });
 

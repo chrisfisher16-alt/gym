@@ -88,10 +88,11 @@ Deno.serve(async (req: Request) => {
     await supabase.from('subscription_events').insert({
       user_id: userId,
       event_type: mapEventType(eventType),
-      from_tier: null,
-      to_tier: mapEntitlementToTier(event.entitlement_ids),
+      plan_id: event.product_id,
+      previous_plan_id: null,
       revenue_usd: event.price_in_purchased_currency ?? null,
-      timestamp: new Date().toISOString(),
+      raw_payload: body,
+      created_at: new Date().toISOString(),
     });
 
     // Handle different event types
@@ -135,7 +136,7 @@ Deno.serve(async (req: Request) => {
         await supabase
           .from('subscriptions')
           .update({
-            status: 'cancelled',
+            status: 'canceled',
             cancelled_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -243,10 +244,10 @@ async function upsertSubscription(
       {
         user_id: data.userId,
         status: data.status,
-        platform: data.platform,
-        product_id: data.productId,
-        started_at: data.startedAt,
-        expires_at: data.expiresAt,
+        provider: 'revenuecat',
+        plan_id: data.productId,
+        current_period_start: data.startedAt,
+        current_period_end: data.expiresAt,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },
@@ -269,13 +270,16 @@ async function updateEntitlement(
     full_health_coach: { workout_logs_per_month: -1, meal_logs_per_day: -1, ai_messages_per_day: -1 },
   };
 
+  const entitlementLimits = limits[tier];
   const { error } = await supabase
     .from('entitlements')
     .upsert(
       {
         user_id: userId,
         tier,
-        limits: limits[tier],
+        workout_logs_remaining: entitlementLimits.workout_logs_per_month,
+        meal_logs_remaining: entitlementLimits.meal_logs_per_day,
+        ai_messages_remaining: entitlementLimits.ai_messages_per_day,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },

@@ -10,6 +10,7 @@
     "proxy": "node scripts/cors-proxy.js"
   },
   "dependencies": {
+    "@expo/metro-runtime": "^55.0.6",
     "@expo/vector-icons": "^15.0.2",
     "@hookform/resolvers": "^5.2.2",
     "@react-native-async-storage/async-storage": "^3.0.1",
@@ -30,7 +31,7 @@
     "expo-status-bar": "~55.0.4",
     "expo-system-ui": "~55.0.9",
     "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",
     "react-native": "0.83.2",
     "react-native-health": "^1.19.0",
@@ -38,7 +39,7 @@
     "react-native-purchases": "^9.12.0",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
-    "react-native-web": "^0.21.0",
+    "react-native-web": "^0.21.2",
     "zod": "^3.25.76",
     "zustand": "4.5.7"
   },

@@ -6,9 +6,10 @@ export type NotificationType =
   | 'hydration_reminder'
   | 'supplement_reminder'
   | 'weekly_checkin'
-  | 'coach_tip';
+  | 'coach_tip'
+  | 'daily_briefing';
 
-export type MealType = 'breakfast' | 'lunch' | 'dinner';
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // Sunday=0
 
@@ -20,6 +21,7 @@ export interface MealReminderPreferences {
   breakfast: { enabled: boolean; time: string }; // HH:MM
   lunch: { enabled: boolean; time: string };
   dinner: { enabled: boolean; time: string };
+  snack: { enabled: boolean; time: string };
 }
 
 export interface NotificationPreferences {
@@ -38,6 +40,10 @@ export interface NotificationPreferences {
 
   // Supplements
   supplementRemindersEnabled: boolean;
+
+  // Daily briefing
+  dailyBriefingEnabled: boolean;
+  dailyBriefingTime: string; // HH:MM
 
   // Weekly check-in
   weeklyCheckinEnabled: boolean;
@@ -80,6 +86,54 @@ export interface NotificationData {
   [key: string]: unknown;
 }
 
+// ── Mapping utilities ────────────────────────────────────────────
+
+import type { Weekday } from '../stores/profile-store';
+
+const WEEKDAY_TO_DAY: Record<Weekday, DayOfWeek> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+export function weekdaysToDaysOfWeek(weekdays: Weekday[]): DayOfWeek[] {
+  return weekdays.map((w) => WEEKDAY_TO_DAY[w]);
+}
+
+/**
+ * Given a number of lifting days per week, return a sensible spread of
+ * DayOfWeek values. Prioritises weekdays, avoids consecutive days where
+ * possible, and keeps Sunday/Saturday for higher counts.
+ */
+const SPREAD_MAP: Record<number, DayOfWeek[]> = {
+  1: [1],                         // Mon
+  2: [1, 4],                      // Mon, Thu
+  3: [1, 3, 5],                   // Mon, Wed, Fri
+  4: [1, 2, 4, 5],               // Mon, Tue, Thu, Fri
+  5: [1, 2, 3, 4, 5],            // Mon–Fri
+  6: [1, 2, 3, 4, 5, 6],         // Mon–Sat
+  7: [0, 1, 2, 3, 4, 5, 6],      // Every day
+};
+
+export function spreadDaysOfWeek(liftingDayCount: number): DayOfWeek[] {
+  const clamped = Math.max(1, Math.min(7, liftingDayCount));
+  return SPREAD_MAP[clamped];
+}
+
+const TRAINING_TIME_TO_CLOCK: Record<string, string> = {
+  Morning: '07:00',
+  Afternoon: '12:00',
+  Evening: '17:00',
+};
+
+export function trainingTimeToClockTime(label?: string): string {
+  return (label && TRAINING_TIME_TO_CLOCK[label]) || '08:00';
+}
+
 export const DEFAULT_PREFERENCES: NotificationPreferences = {
   workoutRemindersEnabled: false,
   workoutReminderTime: '08:00',
@@ -90,12 +144,16 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
     breakfast: { enabled: true, time: '08:00' },
     lunch: { enabled: true, time: '12:30' },
     dinner: { enabled: true, time: '18:30' },
+    snack: { enabled: false, time: '15:00' },
   },
 
   hydrationRemindersEnabled: false,
   hydrationIntervalHours: 2,
 
   supplementRemindersEnabled: false,
+
+  dailyBriefingEnabled: false,
+  dailyBriefingTime: '07:00',
 
   weeklyCheckinEnabled: false,
   weeklyCheckinDay: 0, // Sunday

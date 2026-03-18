@@ -76,7 +76,7 @@ async function getUserProfile(
   userId: string,
 ): Promise<Record<string, unknown>> {
   const [profileResult, goalsResult, prefsResult] = await Promise.all([
-    supabase.from('profiles').select('*').eq('user_id', userId).single(),
+    supabase.from('profiles').select('*').eq('id', userId).single(),
     supabase.from('goals').select('*').eq('user_id', userId).eq('status', 'active').single(),
     supabase.from('coach_preferences').select('*').eq('user_id', userId).single(),
   ]);
@@ -137,19 +137,16 @@ async function getProgressMetrics(
   // Weight trend (last 30 days)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400 * 1000).toISOString();
 
-  const { data: weightData } = await supabase
-    .from('weight_logs')
-    .select('weight_kg, logged_at')
-    .eq('user_id', userId)
-    .gte('logged_at', thirtyDaysAgo)
-    .order('logged_at', { ascending: true });
+  // No weight_logs table — weight is stored on profiles.weight_kg (latest only)
+  const weightData: Array<Record<string, unknown>> = [];
 
-  // Recent PRs
+  // Recent PRs — tracked via set_logs.is_pr joined through workout_sessions
   const { data: recentPRs } = await supabase
-    .from('personal_records')
-    .select('*')
-    .eq('user_id', userId)
-    .order('achieved_at', { ascending: false })
+    .from('set_logs')
+    .select('*, workout_sessions!inner(user_id)')
+    .eq('workout_sessions.user_id', userId)
+    .eq('is_pr', true)
+    .order('created_at', { ascending: false })
     .limit(10);
 
   // Workout adherence (last 4 weeks)
@@ -164,12 +161,12 @@ async function getProgressMetrics(
   // Target workouts per week from active program
   const { data: activeProgram } = await supabase
     .from('workout_programs')
-    .select('days')
+    .select('id, days_per_week')
     .eq('user_id', userId)
     .eq('is_active', true)
     .single();
 
-  const targetPerWeek = activeProgram?.days?.length ?? 3;
+  const targetPerWeek = activeProgram?.days_per_week ?? 3;
   const targetTotal = targetPerWeek * 4;
 
   return {
@@ -288,28 +285,25 @@ async function suggestLoadForSet(
 ): Promise<Record<string, unknown>> {
   const exerciseName = params.exercise_name as string;
 
-  // Find last 3 sessions with this exercise
-  const { data: sessions } = await supabase
-    .from('workout_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .not('completed_at', 'is', null)
-    .order('completed_at', { ascending: false })
-    .limit(20);
+  // Find recent sets for this exercise via set_logs joined through workout_sessions and exercises
+  const { data: setData } = await supabase
+    .from('set_logs')
+    .select('weight_kg, reps, created_at, exercises!inner(name), workout_sessions!inner(user_id, completed_at)')
+    .eq('workout_sessions.user_id', userId)
+    .not('workout_sessions.completed_at', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(50);
 
-  // Extract sets for the exercise from session data
+  // Extract sets for the exercise
   const exerciseSets: Array<{ weight: number; reps: number; date: string }> = [];
-  for (const session of sessions ?? []) {
-    const sets = (session.sets as Array<Record<string, unknown>>) ?? [];
-    for (const set of sets) {
-      const setExerciseName = (set.exercise_name as string) ?? '';
-      if (setExerciseName.toLowerCase() === exerciseName.toLowerCase() && set.weight_kg && set.reps) {
-        exerciseSets.push({
-          weight: set.weight_kg as number,
-          reps: set.reps as number,
-          date: session.completed_at as string,
-        });
-      }
+  for (const set of setData ?? []) {
+    const setExerciseName = ((set.exercises as Record<string, unknown>)?.name as string) ?? '';
+    if (setExerciseName.toLowerCase() === exerciseName.toLowerCase() && set.weight_kg && set.reps) {
+      exerciseSets.push({
+        weight: set.weight_kg as number,
+        reps: set.reps as number,
+        date: (set.workout_sessions as Record<string, unknown>)?.completed_at as string,
+      });
     }
     if (exerciseSets.length >= 10) break;
   }
@@ -427,7 +421,7 @@ async function calculateDailyTargets(
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('user_id', userId)
+    .eq('id', userId)
     .single();
 
   const { data: goals } = await supabase
@@ -450,16 +444,16 @@ async function calculateDailyTargets(
   let bmr = 10 * weightKg + 6.25 * heightCm - 5 * age;
   bmr += isFemale ? -161 : 5;
 
-  // Activity multiplier
+  // Activity multiplier (no activity_level column on goals; default to moderate)
   const activityMultipliers = [1.2, 1.375, 1.55, 1.725, 1.9];
-  const activityLevel = goals?.activity_level ?? 2;
+  const activityLevel = 3;
   const tdee = Math.round(bmr * (activityMultipliers[activityLevel - 1] ?? 1.55));
 
   // Adjust for goal
   let targetCalories = tdee;
-  const goalType = goals?.goal_type ?? 'maintain';
-  if (goalType === 'lose_fat') targetCalories = Math.round(tdee * 0.8);
-  else if (goalType === 'build_muscle') targetCalories = Math.round(tdee * 1.1);
+  const goalType = goals?.goal_type ?? 'general_health';
+  if (goalType === 'weight_loss') targetCalories = Math.round(tdee * 0.8);
+  else if (goalType === 'muscle_gain') targetCalories = Math.round(tdee * 1.1);
 
   // Enforce minimum calories
   const minCalories = isFemale ? 1200 : 1500;
@@ -579,7 +573,7 @@ async function recommendSupplements(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<Record<string, unknown>> {
-  const { data: profile } = await supabase.from('profiles').select('*').eq('user_id', userId).single();
+  const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
   const { data: goals } = await supabase.from('goals').select('*').eq('user_id', userId).eq('status', 'active').single();
   const { data: nutrition } = await supabase
     .from('nutrition_day_logs')
@@ -617,7 +611,7 @@ async function recommendSupplements(
     });
   }
 
-  if (goalType === 'build_muscle' || goalType === 'strength') {
+  if (goalType === 'muscle_gain' || goalType === 'strength') {
     recommendations.push({
       name: 'Magnesium',
       reason: 'Supports muscle recovery and sleep quality, important for strength training.',
@@ -674,12 +668,12 @@ async function createWeeklySummary(
   // Active program for planned workouts
   const { data: activeProgram } = await supabase
     .from('workout_programs')
-    .select('days')
+    .select('id, days_per_week')
     .eq('user_id', userId)
     .eq('is_active', true)
     .single();
 
-  const plannedWorkouts = activeProgram?.days?.length ?? 3;
+  const plannedWorkouts = activeProgram?.days_per_week ?? 3;
   const completedWorkouts = workouts?.length ?? 0;
 
   // Nutrition averages
@@ -690,19 +684,22 @@ async function createWeeklySummary(
     ? Math.round(nutritionDays.reduce((s: number, d: Record<string, unknown>) => s + ((d.total_protein_g as number) ?? 0), 0) / nutritionDays.length)
     : 0;
 
-  // PRs
+  // PRs — query set_logs with is_pr flag joined through workout_sessions
+  const { data: prSetLogs } = await supabase
+    .from('set_logs')
+    .select('weight_kg, reps, exercises(name), workout_sessions!inner(user_id, completed_at)')
+    .eq('workout_sessions.user_id', userId)
+    .eq('is_pr', true)
+    .gte('workout_sessions.completed_at', weekStart.toISOString())
+    .order('created_at', { ascending: false });
+
   const prs: Array<Record<string, string>> = [];
-  for (const w of workouts ?? []) {
-    const sets = (w.sets as Array<Record<string, unknown>>) ?? [];
-    for (const set of sets) {
-      if (set.is_pr) {
-        prs.push({
-          exercise: (set.exercise_name as string) ?? 'Unknown',
-          type: 'weight',
-          value: `${set.weight_kg}kg × ${set.reps}`,
-        });
-      }
-    }
+  for (const set of prSetLogs ?? []) {
+    prs.push({
+      exercise: ((set.exercises as Record<string, unknown>)?.name as string) ?? 'Unknown',
+      type: 'weight',
+      value: `${set.weight_kg}kg × ${set.reps}`,
+    });
   }
 
   // Determine trends
@@ -711,7 +708,7 @@ async function createWeeklySummary(
     ? Math.abs(avgCalories - targetCal) / targetCal < 0.1 ? 'maintaining' : avgCalories > targetCal * 0.9 ? 'improving' : 'declining'
     : 'maintaining';
 
-  const coachTone = (prefs?.coach_tone as string) ?? 'balanced';
+  const coachTone = (prefs?.tone as string) ?? 'balanced';
 
   return {
     period: { start: weekStartStr, end: weekEndStr },

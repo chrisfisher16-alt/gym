@@ -520,6 +520,13 @@ export function InWorkoutCoach({
               onChangeText={setCustomInput}
               returnKeyType="send"
               onSubmitEditing={() => handleSend(customInput)}
+              blurOnSubmit={false}
+              onKeyPress={(e: any) => {
+                if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                  e.preventDefault?.();
+                  handleSend(customInput);
+                }
+              }}
               editable={!isLoading}
             />
             <TouchableOpacity

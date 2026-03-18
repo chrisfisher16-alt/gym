@@ -25,12 +25,12 @@ export function useNutritionDashboard() {
       carbs: targets.carbs_g > 0 ? consumed.carbs_g / targets.carbs_g : 0,
       fat: targets.fat_g > 0 ? consumed.fat_g / targets.fat_g : 0,
       fiber: targets.fiber_g > 0 ? consumed.fiber_g / targets.fiber_g : 0,
-      water: targets.water_ml > 0 ? (log?.waterIntake_ml ?? 0) / targets.water_ml : 0,
+      water: targets.water_oz > 0 ? (log?.waterIntake_oz ?? 0) / targets.water_oz : 0,
     }),
-    [targets, consumed, log?.waterIntake_ml],
+    [targets, consumed, log?.waterIntake_oz],
   );
 
-  const waterIntake = log?.waterIntake_ml ?? 0;
+  const waterIntake = log?.waterIntake_oz ?? 0;
   const supplementsTaken = log?.supplementsTaken ?? [];
 
   return {

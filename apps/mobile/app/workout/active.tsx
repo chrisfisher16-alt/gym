@@ -14,6 +14,7 @@ import {
   Linking,
   ActivityIndicator,
   Animated,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +25,7 @@ import { useWorkoutStore } from '../../src/stores/workout-store';
 import { useProfileStore } from '../../src/stores/profile-store';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { formatTimerDisplay, formatWeight, formatDuration } from '../../src/lib/workout-utils';
-import { getLastPerformance, getSuggestedLoad } from '../../src/lib/suggested-load';
+import { getLastPerformance, getSuggestedLoad, type UserBodyMetrics } from '../../src/lib/suggested-load';
 import { getSuggestedReplacements } from '../../src/lib/exercise-replacement';
 import { EQUIPMENT_LABELS } from '../../src/lib/exercise-data';
 import { REST_TIMER_PRESETS } from '../../src/types/workout';
@@ -32,6 +33,14 @@ import type { ActiveExercise, ActiveSet, ExerciseLibraryEntry, CompletedSession 
 import { InWorkoutCoach } from '../../src/components/InWorkoutCoach';
 import { FocusedWorkoutView } from '../../src/components/FocusedWorkoutView';
 import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
+import {
+  getWorkoutFocus,
+  getWarmupExerciseIds,
+  getCooldownExerciseIds,
+  hasWarmupExercises,
+  getWarmupDescription,
+  getCooldownDescription,
+} from '../../src/lib/warmup-cooldown';
 
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
@@ -496,6 +505,190 @@ const SetRow = React.memo(function SetRow({
   );
 });
 
+// ── Bodyweight Set Row Component ────────────────────────────────────
+
+const BodyweightSetRow = React.memo(function BodyweightSetRow({
+  set,
+  exerciseInstanceId,
+  onLog,
+  onComplete,
+  onRemove,
+  onRPE,
+}: {
+  set: ActiveSet;
+  exerciseInstanceId: string;
+  onLog: (setId: string, weight: number, reps: number) => void;
+  onComplete: (setId: string) => void;
+  onRemove: (setId: string) => void;
+  onRPE: (setId: string, rpe: number) => void;
+}) {
+  const { colors, spacing, radius, typography } = useTheme();
+  const [localReps, setLocalReps] = useState(set.reps?.toString() ?? '');
+  const flashAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const prBounce = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (set.reps !== undefined) setLocalReps(set.reps.toString());
+  }, [set.reps]);
+
+  useEffect(() => {
+    if (set.isPR && set.isCompleted) {
+      Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Animated.sequence([
+        Animated.timing(prBounce, { toValue: 1.5, duration: 150, useNativeDriver: true }),
+        Animated.spring(prBounce, { toValue: 1, friction: 3, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [set.isPR, set.isCompleted]);
+
+  useEffect(() => {
+    if (set.isCompleted) {
+      flashAnim.setValue(1);
+      Animated.timing(flashAnim, { toValue: 0, duration: 600, useNativeDriver: true }).start();
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.05, duration: 100, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [set.isCompleted]);
+
+  const handleRepsChange = (text: string) => {
+    setLocalReps(text);
+    const r = parseInt(text, 10);
+    if (!isNaN(r)) onLog(set.id, 0, r);
+  };
+
+  const incrementReps = (delta: number) => {
+    const current = parseInt(localReps, 10) || 0;
+    const newVal = Math.max(0, current + delta);
+    setLocalReps(newVal.toString());
+    onLog(set.id, 0, newVal);
+  };
+
+  const handleComplete = () => {
+    const r = parseInt(localReps, 10);
+    if (!isNaN(r)) onLog(set.id, 0, r);
+    onComplete(set.id);
+  };
+
+  const setTypeLabel =
+    set.setType === 'warmup' ? 'W' : set.setType === 'drop' ? 'D' : set.setType === 'failure' ? 'F' : '';
+  const setTypeColor =
+    set.setType === 'warmup' ? colors.warning : set.setType === 'drop' ? colors.info : colors.text;
+
+  return (
+    <Animated.View
+      style={[
+        styles.setRow,
+        {
+          backgroundColor: set.isCompleted ? (set.isPR ? colors.warningLight : colors.successLight) : 'transparent',
+          borderRadius: radius.md,
+          paddingHorizontal: spacing.sm,
+          paddingVertical: spacing.md,
+          marginBottom: 4,
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: colors.success,
+            borderRadius: radius.md,
+            opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.25] }),
+          },
+        ]}
+      />
+
+      <View style={[styles.setNumber, { width: 28 }]}>
+        <Text style={[typography.label, { color: setTypeLabel ? setTypeColor : colors.textSecondary, fontWeight: '600' }]}>
+          {setTypeLabel || set.setNumber}
+        </Text>
+      </View>
+
+      {/* Reps input with +/- (centered, takes more space) */}
+      <View style={[styles.inputGroup, { flex: 1 }]}>
+        <TouchableOpacity
+          onPress={() => incrementReps(-1)}
+          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
+        >
+          <Text style={[typography.label, { color: colors.text, fontWeight: '700' }]}>-1</Text>
+        </TouchableOpacity>
+        <TextInput
+          style={[
+            styles.numericInput,
+            typography.labelLarge,
+            {
+              color: colors.text,
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+              fontWeight: '700',
+              fontSize: 16,
+              flex: 1,
+              maxWidth: 80,
+            },
+          ]}
+          value={localReps}
+          onChangeText={handleRepsChange}
+          keyboardType="number-pad"
+          placeholder="reps"
+          placeholderTextColor={colors.textTertiary}
+          selectTextOnFocus
+        />
+        <TouchableOpacity
+          onPress={() => incrementReps(1)}
+          style={[styles.incBtn, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md }]}
+        >
+          <Text style={[typography.label, { color: colors.text, fontWeight: '700' }]}>+1</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        onPress={handleComplete}
+        disabled={set.isCompleted}
+        style={[
+          styles.checkBtn,
+          {
+            backgroundColor: set.isCompleted ? colors.success : colors.surfaceSecondary,
+            borderRadius: radius.md,
+          },
+        ]}
+      >
+        <Ionicons
+          name={set.isCompleted ? 'checkmark' : 'checkmark-outline'}
+          size={24}
+          color={set.isCompleted ? colors.textInverse : colors.textTertiary}
+        />
+      </TouchableOpacity>
+
+      {!set.isCompleted && (
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert('Remove Set', 'Remove this set?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: () => onRemove(set.id) },
+            ]);
+          }}
+          style={[styles.removeBtn, { marginLeft: 4 }]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="trash-outline" size={16} color={colors.error} />
+        </TouchableOpacity>
+      )}
+
+      {set.isPR && (
+        <Animated.View style={[styles.prBadge, { transform: [{ scale: prBounce }] }]}>
+          <Ionicons name="trophy" size={16} color={colors.gold ?? colors.warning} />
+        </Animated.View>
+      )}
+    </Animated.View>
+  );
+});
+
 // ── Exercise Replacement Modal ──────────────────────────────────────
 
 function ExerciseReplacementModal({
@@ -693,6 +886,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
   onSwapPress,
   onSupersetPress,
   onRemoveSupersetPress,
+  onDeletePress,
   isReorderMode,
   onMoveUp,
   onMoveDown,
@@ -707,6 +901,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
   onSwapPress: (exercise: ActiveExercise) => void;
   onSupersetPress: (exerciseId: string) => void;
   onRemoveSupersetPress: (groupId: string) => void;
+  onDeletePress: (exerciseInstanceId: string) => void;
   isReorderMode?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -737,37 +932,51 @@ const ExerciseCard = React.memo(function ExerciseCard({
   const [restTimeInput, setRestTimeInput] = useState('');
   const REST_PRESETS = [30, 60, 90, 120, 180];
 
-  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const profile = useProfileStore((s) => s.profile);
+  const unitPref = profile.unitPreference;
   const isMetric = unitPref === 'metric';
   const unit = isMetric ? 'kg' : 'lbs';
   const lastPerf = getLastPerformance(exercise.exerciseId, history, unit);
 
+  // User metrics for beginner suggestions
+  const userMetrics: UserBodyMetrics | undefined = useMemo(() => {
+    if (!profile.weightKg) return undefined;
+    return {
+      weightKg: profile.weightKg,
+      gender: profile.gender,
+      trainingExperience: profile.trainingExperience,
+    };
+  }, [profile.weightKg, profile.gender, profile.trainingExperience]);
+
   // Suggestion engine
   const suggestion = useMemo(
-    () => getSuggestedLoad(exercise.exerciseId, '8-12', exercise.sets.length, history, isMetric),
-    [exercise.exerciseId, exercise.sets.length, history, isMetric],
+    () => getSuggestedLoad(exercise.exerciseId, '8-12', exercise.sets.length, history, isMetric, userMetrics, exercise.isBodyweight),
+    [exercise.exerciseId, exercise.sets.length, history, isMetric, userMetrics, exercise.isBodyweight],
   );
 
   // Pre-fill empty sets with suggestion on mount
   useEffect(() => {
     if (!suggestion) return;
+    const isBodyweightEx = !!exercise.isBodyweight;
     for (const set of exercise.sets) {
       if (!set.isCompleted && set.weight === undefined && set.reps === undefined) {
-        logSet(exercise.id, set.id, suggestion.suggestedWeight, suggestion.suggestedReps);
+        logSet(exercise.id, set.id, isBodyweightEx ? 0 : suggestion.suggestedWeight, suggestion.suggestedReps);
       }
     }
   }, [suggestion?.suggestedWeight, suggestion?.suggestedReps]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleApplySuggestion = useCallback(() => {
     if (!suggestion) return;
+    const isBodyweightEx = !!exercise.isBodyweight;
     for (const set of exercise.sets) {
       if (!set.isCompleted) {
-        logSet(exercise.id, set.id, suggestion.suggestedWeight, suggestion.suggestedReps);
+        logSet(exercise.id, set.id, isBodyweightEx ? 0 : suggestion.suggestedWeight, suggestion.suggestedReps);
       }
     }
-  }, [suggestion, exercise.sets, exercise.id, logSet]);
+  }, [suggestion, exercise.sets, exercise.id, exercise.isBodyweight, logSet]);
 
   const isTimeBased = !!exercise.isTimeBased;
+  const isBodyweight = !!exercise.isBodyweight;
   const defaultDuration = exercise.defaultDurationSeconds ?? 60;
 
   // Superset bar color: blue for superset, purple for tri-set
@@ -954,6 +1163,13 @@ const ExerciseCard = React.memo(function ExerciseCard({
               <Text style={[typography.label, { color: colors.error, marginLeft: spacing.sm }]}>Remove Superset</Text>
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            onPress={() => { onDeletePress(exercise.id); setShowOverflowMenu(false); }}
+            style={[styles.overflowMenuItem, { paddingVertical: spacing.sm }]}
+          >
+            <Ionicons name="trash-outline" size={16} color={colors.error} />
+            <Text style={[typography.label, { color: colors.error, marginLeft: spacing.sm }]}>Delete Exercise</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -1075,7 +1291,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
           <View style={styles.suggestionRow}>
             <Ionicons name="trending-up" size={14} color={suggestion.confidence === 'high' ? colors.success : colors.primary} />
             <Text style={[typography.labelSmall, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, marginLeft: 4, flex: 1 }]}>
-              Suggested: {suggestion.suggestedWeight} {unit} × {suggestion.suggestedReps} reps
+              {isBodyweight ? `Suggested: ${suggestion.suggestedReps} reps` : `Suggested: ${suggestion.suggestedWeight} ${unit} × ${suggestion.suggestedReps} reps`}
             </Text>
             <Ionicons name="arrow-forward-circle-outline" size={16} color={suggestion.confidence === 'high' ? colors.success : colors.primary} />
           </View>
@@ -1102,6 +1318,28 @@ const ExerciseCard = React.memo(function ExerciseCard({
               defaultDuration={defaultDuration}
               onLogDuration={handleLogTimedSet}
               onComplete={handleCompleteSet}
+            />
+          ))}
+        </>
+      ) : isBodyweight ? (
+        <>
+          {/* Bodyweight set header (reps only) */}
+          <View style={[styles.setHeader, { marginTop: spacing.md, marginBottom: spacing.xs }]}>
+            <Text style={[typography.caption, { color: colors.textTertiary, width: 28 }]}>SET</Text>
+            <Text style={[typography.caption, { color: colors.textTertiary, flex: 1, textAlign: 'center' }]}>
+              REPS
+            </Text>
+            <Text style={{ width: 34 }} />
+          </View>
+          {exercise.sets.map((set) => (
+            <BodyweightSetRow
+              key={set.id}
+              set={set}
+              exerciseInstanceId={exercise.id}
+              onLog={handleLogSet}
+              onComplete={handleCompleteSet}
+              onRemove={handleRemoveSet}
+              onRPE={handleRPE}
             />
           ))}
         </>
@@ -1172,10 +1410,8 @@ function RestTimerOverlay() {
   }, [restSecondsLeft, isRestTimerActive]);
 
   const handleAdjust = (delta: number) => {
-    const currentEnd = restSecondsLeft + delta;
-    if (currentEnd > 0) {
-      startRestTimer(currentEnd);
-    }
+    const adjusted = Math.max(5, restSecondsLeft + delta);
+    startRestTimer(adjusted);
   };
 
   const handleCustomStart = () => {
@@ -1405,7 +1641,9 @@ export default function ActiveWorkoutScreen() {
     completeWorkout,
     cancelWorkout,
     addExerciseToSession,
+    prependExercisesToSession,
     replaceExercise,
+    removeExerciseFromSession,
     createSupersetGroup,
     removeSupersetGroup,
     goToNextExercise,
@@ -1427,19 +1665,88 @@ export default function ActiveWorkoutScreen() {
   const [showSummary, setShowSummary] = useState(false);
   const [editingRest, setEditingRest] = useState(false);
   const [restInput, setRestInput] = useState('');
+  const [showWarmupSuggestion, setShowWarmupSuggestion] = useState(false);
+  const [showCooldownSuggestion, setShowCooldownSuggestion] = useState(false);
+  const [warmupDismissed, setWarmupDismissed] = useState(false);
+  const [cooldownDismissed, setCooldownDismissed] = useState(false);
+
+  const exerciseLibrary = useWorkoutStore((s) => s.exercises);
+
+  // Determine workout focus for contextual suggestions
+  const workoutFocus = useMemo(
+    () => activeSession ? getWorkoutFocus(activeSession.exercises, exerciseLibrary) : 'full_body' as const,
+    [activeSession?.exercises, exerciseLibrary],
+  );
+
+  // Show warmup suggestion when workout starts (if no warmup exercises present).
+  // hasWarmupExercises checks exercise library category, so previously-added
+  // warmups are correctly detected even after screen remount.
+  useEffect(() => {
+    if (activeSession && !hasWarmupExercises(activeSession.exercises, exerciseLibrary)) {
+      setShowWarmupSuggestion(true);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAddWarmup = useCallback(() => {
+    const warmupIds = getWarmupExerciseIds(workoutFocus);
+    const warmupExercises = warmupIds
+      .map((id) => exerciseLibrary.find((e) => e.id === id))
+      .filter(Boolean) as ExerciseLibraryEntry[];
+    if (warmupExercises.length > 0) {
+      prependExercisesToSession(warmupExercises);
+    }
+    setShowWarmupSuggestion(false);
+    setWarmupDismissed(true);
+  }, [workoutFocus, exerciseLibrary, prependExercisesToSession]);
+
+  const handleDeleteExercise = useCallback((exerciseInstanceId: string) => {
+    const exercise = activeSession?.exercises.find((e) => e.id === exerciseInstanceId);
+    if (!exercise) return;
+    const name = exercise.exerciseName;
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Remove ${name} from this workout?`)) {
+        removeExerciseFromSession(exerciseInstanceId);
+      }
+      return;
+    }
+    Alert.alert('Delete Exercise', `Remove ${name} from this workout?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removeExerciseFromSession(exerciseInstanceId) },
+    ]);
+  }, [activeSession, removeExerciseFromSession]);
+
+  const handleDismissWarmup = useCallback(() => {
+    setShowWarmupSuggestion(false);
+    setWarmupDismissed(true);
+  }, []);
+
+  const handleAddCooldown = useCallback(() => {
+    const cooldownIds = getCooldownExerciseIds(workoutFocus);
+    const cooldownExercises = cooldownIds
+      .map((id) => exerciseLibrary.find((e) => e.id === id))
+      .filter(Boolean) as ExerciseLibraryEntry[];
+    for (const ex of cooldownExercises) {
+      addExerciseToSession(ex, ex.defaultSets || 1, 'warmup');
+    }
+    setShowCooldownSuggestion(false);
+    setCooldownDismissed(true);
+  }, [workoutFocus, exerciseLibrary, addExerciseToSession]);
 
   const doFinish = () => {
+    // Set showSummary BEFORE completeWorkout — completeWorkout synchronously
+    // sets activeSession to null via zustand, which triggers a re-render.
+    // Without this flag already true, the !activeSession guard navigates away.
+    setShowSummary(true);
     const result = completeWorkout();
     if (result) {
-      // Set both together - React batches these in event handlers
       setCompletedSession(result);
-      setShowSummary(true);
     } else {
+      setShowSummary(false);
       router.replace('/(tabs)/workout');
     }
   };
 
-  const handleFinish = () => {
+  const proceedToFinish = () => {
     if (!activeSession) return;
 
     // Count incomplete working sets across non-skipped exercises
@@ -1454,6 +1761,20 @@ export default function ActiveWorkoutScreen() {
         incompleteSets += incompleteInExercise;
         exercisesWithIncomplete++;
       }
+    }
+
+    // On web, Alert.alert callbacks can be unreliable; use window.confirm
+    if (Platform.OS === 'web') {
+      if (incompleteSets > 0) {
+        const ok = window.confirm(
+          `You have ${incompleteSets} incomplete set${incompleteSets !== 1 ? 's' : ''} across ${exercisesWithIncomplete} exercise${exercisesWithIncomplete !== 1 ? 's' : ''}. Finish anyway?`,
+        );
+        if (ok) doFinish();
+      } else {
+        const ok = window.confirm('All sets completed. Finish this workout?');
+        if (ok) doFinish();
+      }
+      return;
     }
 
     if (incompleteSets > 0) {
@@ -1473,14 +1794,37 @@ export default function ActiveWorkoutScreen() {
     }
   };
 
+  const handleFinish = () => {
+    if (!activeSession) return;
+    // Show cooldown suggestion only once; skip if already added or dismissed
+    if (cooldownDismissed) {
+      proceedToFinish();
+      return;
+    }
+    setShowCooldownSuggestion(true);
+  };
+
   const handleSummaryDone = () => {
     setShowSummary(false);
     setCompletedSession(null);
     router.replace('/(tabs)/workout');
   };
 
-  const handleCancel = () => {
-    Alert.alert('Cancel Workout', 'This will discard all progress. Are you sure?', [
+  const handleMinimize = () => {
+    // Just navigate away — the session stays in activeSession (already persisted)
+    router.push('/(tabs)/workout');
+  };
+
+  const handleDiscard = () => {
+    if (Platform.OS === 'web') {
+      const ok = window.confirm('This will discard all progress. Are you sure?');
+      if (ok) {
+        cancelWorkout();
+        router.replace('/(tabs)/workout');
+      }
+      return;
+    }
+    Alert.alert('Discard Workout', 'This will discard all progress. Are you sure?', [
       { text: 'Keep Going', style: 'cancel' },
       {
         text: 'Discard',
@@ -1494,7 +1838,6 @@ export default function ActiveWorkoutScreen() {
   };
 
   const [showCoach, setShowCoach] = useState(false);
-  const exerciseLibrary = useWorkoutStore((s) => s.exercises);
   const addSet = useWorkoutStore((s) => s.addSet);
   const removeSet = useWorkoutStore((s) => s.removeSet);
 
@@ -1635,9 +1978,15 @@ export default function ActiveWorkoutScreen() {
       >
         {/* Top bar */}
         <View style={[styles.topBar, { paddingHorizontal: spacing.base, borderBottomColor: colors.borderLight }]}>
-          <TouchableOpacity onPress={handleCancel} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="close" size={24} color={colors.error} />
-          </TouchableOpacity>
+          <Pressable
+            onPress={handleMinimize}
+            onLongPress={handleDiscard}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Minimize workout"
+          >
+            <Ionicons name="chevron-down" size={24} color={colors.text} />
+          </Pressable>
           <View style={styles.topBarCenter}>
             <Text style={[typography.label, { color: colors.text }]} numberOfLines={1}>
               {activeSession.name}
@@ -1774,6 +2123,56 @@ export default function ActiveWorkoutScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Warmup suggestion card */}
+          {showWarmupSuggestion && (
+            <View
+              style={[
+                styles.warmupCard,
+                {
+                  backgroundColor: colors.primaryMuted,
+                  borderRadius: radius.lg,
+                  padding: spacing.base,
+                  marginBottom: spacing.md,
+                  borderWidth: 1,
+                  borderColor: colors.primary,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+                <Ionicons name="flame-outline" size={22} color={colors.primary} />
+                <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm }]}>
+                  Warm Up First?
+                </Text>
+              </View>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.md }]}>
+                {getWarmupDescription(workoutFocus)}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <TouchableOpacity
+                  onPress={handleAddWarmup}
+                  style={[
+                    styles.warmupBtn,
+                    { backgroundColor: colors.primary, borderRadius: radius.md, flex: 1 },
+                  ]}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color={colors.textInverse} />
+                  <Text style={[typography.label, { color: colors.textInverse, marginLeft: 6 }]}>
+                    Start Warmup
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDismissWarmup}
+                  style={[
+                    styles.warmupBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, flex: 1 },
+                  ]}
+                >
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>Skip</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {activeSession.exercises.map((exercise, index) => {
             const ssInfo = getSupersetInfo(exercise);
             const visibleExercises = activeSession.exercises.filter((e) => !e.isSkipped);
@@ -1789,6 +2188,7 @@ export default function ActiveWorkoutScreen() {
                 onSwapPress={setSwapModalExercise}
                 onSupersetPress={setSupersetSourceId}
                 onRemoveSupersetPress={handleRemoveSupersetGroup}
+                onDeletePress={handleDeleteExercise}
                 isReorderMode={isReorderMode}
                 onMoveUp={() => handleMoveExercise(index, 'up')}
                 onMoveDown={() => handleMoveExercise(index, 'down')}
@@ -1938,6 +2338,75 @@ export default function ActiveWorkoutScreen() {
           onClose={() => setSupersetSourceId(null)}
           onConfirm={handleCreateSupersetGroup}
         />
+
+        {/* Cooldown Suggestion Modal */}
+        <Modal
+          visible={showCooldownSuggestion}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setShowCooldownSuggestion(false);
+            setCooldownDismissed(true);
+            proceedToFinish();
+          }}
+        >
+          <View style={[styles.cooldownOverlay]}>
+            <View
+              style={[
+                styles.cooldownCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderRadius: radius.xl,
+                  padding: spacing.lg,
+                  shadowColor: colors.shadow,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 12,
+                  elevation: 12,
+                },
+              ]}
+            >
+              <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
+                <Ionicons name="snow-outline" size={36} color={colors.info} />
+                <Text style={[typography.displayMedium, { color: colors.text, marginTop: spacing.sm, textAlign: 'center', fontSize: 22 }]}>
+                  Cool Down?
+                </Text>
+              </View>
+              <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg }]}>
+                {getCooldownDescription(workoutFocus)}
+              </Text>
+              <View style={{ gap: spacing.sm }}>
+                <TouchableOpacity
+                  onPress={handleAddCooldown}
+                  style={[
+                    styles.cooldownBtn,
+                    { backgroundColor: colors.info, borderRadius: radius.md },
+                  ]}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color={colors.textInverse} />
+                  <Text style={[typography.label, { color: colors.textInverse, marginLeft: 8 }]}>
+                    Add Cooldown Exercises
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowCooldownSuggestion(false);
+                    setCooldownDismissed(true);
+                    proceedToFinish();
+                  }}
+                  style={[
+                    styles.cooldownBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+                  ]}
+                >
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>
+                    Skip & Finish
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -2257,5 +2726,31 @@ const styles = StyleSheet.create({
   restApplyBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
+  },
+  // Warmup suggestion card
+  warmupCard: {},
+  warmupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  // Cooldown suggestion modal
+  cooldownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 200,
+  },
+  cooldownCard: {
+    width: '85%',
+    maxWidth: 380,
+  },
+  cooldownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
   },
 });

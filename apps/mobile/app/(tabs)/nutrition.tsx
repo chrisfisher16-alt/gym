@@ -61,7 +61,7 @@ export default function NutritionTab() {
     meals,
     supplementsTaken,
   } = useNutritionDashboard();
-  const { waterIntake, waterTarget, glasses, targetGlasses, addGlass, add8oz, add16oz, addCustom } = useWaterTracking();
+  const { waterIntake, waterTarget, progress: waterProgress_hook, add8oz, add16oz, addCustom, subtract8oz } = useWaterTracking();
   const [showCustomWater, setShowCustomWater] = useState(false);
   const [customWaterAmount, setCustomWaterAmount] = useState('');
   const { activeSupplements, isSupplementTaken, logSupplement, unlogSupplement } = useSupplements();
@@ -246,7 +246,7 @@ export default function NutritionTab() {
             </Text>
           </View>
           <Text style={[typography.body, { color: colors.textSecondary }]}>
-            {glasses}/{targetGlasses} glasses
+            {Math.round(waterIntake)} / {Math.round(waterTarget)} oz
           </Text>
         </View>
 
@@ -296,13 +296,10 @@ export default function NutritionTab() {
           </View>
           <View style={{ marginLeft: spacing.lg, flex: 1 }}>
             <Text style={[typography.h2, { color: colors.text }]}>
-              {waterIntake}ml
+              {Math.round(waterIntake)} oz
             </Text>
             <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-              of {waterTarget}ml goal
-            </Text>
-            <Text style={[typography.caption, { color: colors.textTertiary, marginTop: 4 }]}>
-              {Math.round(waterIntake / 29.574)}oz / {Math.round(waterTarget / 29.574)}oz
+              of {Math.round(waterTarget)} oz goal
             </Text>
           </View>
         </View>
@@ -379,12 +376,12 @@ export default function NutritionTab() {
                 value={customWaterAmount}
                 onChangeText={setCustomWaterAmount}
                 keyboardType="numeric"
-                placeholder="Amount in ml"
+                placeholder="Amount in oz"
                 placeholderTextColor={colors.textTertiary}
                 autoFocus
               />
               <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>
-                {customWaterAmount ? `${Math.round(parseInt(customWaterAmount) / 29.574)}oz` : 'Enter amount in milliliters'}
+                {customWaterAmount ? `${customWaterAmount} oz` : 'Enter amount in ounces'}
               </Text>
               <View style={[styles.customWaterButtons, { marginTop: spacing.lg }]}>
                 <TouchableOpacity
@@ -406,9 +403,9 @@ export default function NutritionTab() {
                     },
                   ]}
                   onPress={() => {
-                    const ml = parseInt(customWaterAmount);
-                    if (ml > 0) {
-                      addCustom(ml);
+                    const oz = parseInt(customWaterAmount);
+                    if (oz > 0) {
+                      addCustom(oz);
                       setShowCustomWater(false);
                       setCustomWaterAmount('');
                     }

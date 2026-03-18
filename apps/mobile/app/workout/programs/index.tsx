@@ -6,12 +6,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../src/theme';
 import { useWorkoutPrograms } from '../../../src/hooks/useWorkoutPrograms';
 import { Card, Badge, Button } from '../../../src/components/ui';
-import type { WorkoutProgramLocal } from '../../../src/types/workout';
+import type { WorkoutProgramLocal, DayType } from '../../../src/types/workout';
+import { DAY_TYPE_COLORS, DAY_TYPE_ICONS } from '../../../src/types/workout';
 
 export default function ProgramsScreen() {
   const router = useRouter();
   const { colors, spacing, radius, typography } = useTheme();
   const { activeProgram, inactivePrograms, programs } = useWorkoutPrograms();
+
+  const getDayTypeBreakdown = (program: WorkoutProgramLocal) => {
+    const counts: Partial<Record<DayType, number>> = {};
+    for (const day of program.days) {
+      counts[day.dayType] = (counts[day.dayType] || 0) + 1;
+    }
+    return Object.entries(counts) as [DayType, number][];
+  };
+
+  const formatDayType = (type: DayType): string => {
+    return type === 'active_recovery' ? 'recovery' : type;
+  };
 
   const renderProgram = (program: WorkoutProgramLocal, isActive: boolean) => (
     <TouchableOpacity
@@ -56,10 +69,27 @@ export default function ProgramsScreen() {
             </Text>
           </View>
           <View style={styles.stat}>
-            <Text style={[typography.labelSmall, { color: colors.textTertiary }]}>Workouts</Text>
-            <Text style={[typography.label, { color: colors.text }]}>{program.days.length}</Text>
+            <Text style={[typography.labelSmall, { color: colors.textTertiary }]}>Schedule</Text>
+            <View style={styles.dotsRow}>
+              {program.days.map((day, i) => (
+                <Ionicons
+                  key={i}
+                  name={DAY_TYPE_ICONS[day.dayType] as any}
+                  size={14}
+                  color={DAY_TYPE_COLORS[day.dayType]}
+                />
+              ))}
+            </View>
           </View>
         </View>
+
+        {program.days.length > 0 && (
+          <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.sm, textAlign: 'center' }]}>
+            {getDayTypeBreakdown(program)
+              .map(([type, count]) => `${count} ${formatDayType(type)}`)
+              .join(' · ')}
+          </Text>
+        )}
       </Card>
     </TouchableOpacity>
   );
@@ -136,6 +166,12 @@ const styles = StyleSheet.create({
   },
   stat: {
     alignItems: 'center',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   emptyContainer: {
     alignItems: 'center',

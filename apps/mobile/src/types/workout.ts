@@ -10,7 +10,9 @@ export type MuscleGroup =
   | 'arms'
   | 'core'
   | 'cardio'
-  | 'full_body';
+  | 'full_body'
+  | 'warmup'
+  | 'cooldown';
 
 export type Equipment =
   | 'barbell'
@@ -32,12 +34,48 @@ export interface ExerciseLibraryEntry {
   tips?: string[];
   isCustom: boolean;
   isTimeBased?: boolean;
+  isBodyweight?: boolean;
   defaultDurationSeconds?: number;
   defaultSets: number;
   defaultReps: string; // e.g. "8-12"
   defaultRestSeconds: number;
   illustrationUrl?: string; // URL to exercise illustration
 }
+
+// ── Day Types ───────────────────────────────────────────────────────
+
+export type DayType = 'lifting' | 'rest' | 'mobility' | 'cardio' | 'active_recovery';
+
+export interface CardioSuggestion {
+  name: string;
+  description: string;
+  duration: string;
+  icon: string; // Ionicons name
+}
+
+export const DAY_TYPE_LABELS: Record<DayType, string> = {
+  lifting: 'Lifting',
+  rest: 'Rest',
+  mobility: 'Stretch / Mobility',
+  cardio: 'Cardio',
+  active_recovery: 'Active Recovery',
+};
+
+export const DAY_TYPE_COLORS: Record<DayType, string> = {
+  lifting: '#3B82F6',      // blue
+  rest: '#6B7280',         // gray
+  mobility: '#8B5CF6',     // purple
+  cardio: '#10B981',       // green
+  active_recovery: '#F59E0B', // amber
+};
+
+export const DAY_TYPE_ICONS: Record<DayType, string> = {
+  lifting: 'barbell-outline',
+  rest: 'bed-outline',
+  mobility: 'body-outline',
+  cardio: 'heart-outline',
+  active_recovery: 'walk-outline',
+};
 
 // ── Workout Program ─────────────────────────────────────────────────
 
@@ -53,6 +91,8 @@ export interface WorkoutProgramLocal {
   createdBy: 'user' | 'ai';
   createdAt: string;
   updatedAt: string;
+  /** True when the user has manually edited this program; prevents seed-data overwrites on init. */
+  customized?: boolean;
 }
 
 export interface WorkoutDayLocal {
@@ -60,8 +100,11 @@ export interface WorkoutDayLocal {
   programId: string;
   dayNumber: number;
   name: string;
+  dayType: DayType;
   focusArea: MuscleGroup;
   exercises: ProgramExercise[];
+  recoveryNotes?: string;
+  cardioSuggestions?: CardioSuggestion[];
 }
 
 export interface ProgramExercise {
@@ -100,6 +143,7 @@ export interface ActiveExercise {
   sets: ActiveSet[];
   supersetGroupId?: string;
   isTimeBased?: boolean;
+  isBodyweight?: boolean;
   defaultDurationSeconds?: number;
   restSeconds?: number; // per-exercise rest time override
   isSkipped: boolean;

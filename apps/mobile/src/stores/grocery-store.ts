@@ -40,6 +40,11 @@ interface GroceryState {
   toggleItem: (categoryIndex: number, itemIndex: number) => void;
   clearList: () => void;
   persist: () => Promise<void>;
+  /**
+   * Merge a set of items into the current list under a named category.
+   * If no list exists, creates a minimal one. Persists automatically.
+   */
+  mergeRecipeItems: (categoryName: string, items: GroceryItem[]) => void;
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -92,6 +97,33 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   clearList: () => {
     set({ currentList: null });
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+  },
+
+  mergeRecipeItems: (categoryName: string, items: GroceryItem[]) => {
+    const { currentList } = get();
+    let updated: GroceryList;
+    if (!currentList) {
+      updated = {
+        id: `grocery_${Date.now()}`,
+        categories: [{ name: categoryName, items }],
+        createdAt: new Date().toISOString(),
+        daysPlanned: 1,
+      };
+    } else {
+      const existingIdx = currentList.categories.findIndex(
+        (c) => c.name === categoryName,
+      );
+      const categories = existingIdx >= 0
+        ? currentList.categories.map((c, i) =>
+            i === existingIdx
+              ? { ...c, items: [...c.items, ...items] }
+              : c,
+          )
+        : [...currentList.categories, { name: categoryName, items }];
+      updated = { ...currentList, categories };
+    }
+    set({ currentList: updated });
+    get().persist();
   },
 
   persist: async () => {

@@ -7,12 +7,12 @@ import { useOnboardingStore } from '../../src/stores/onboarding-store';
 import { useState } from 'react';
 
 const GOAL_OPTIONS = [
-  { id: 'lose_fat', label: 'Lose Weight', icon: 'scale-outline' as const },
-  { id: 'build_muscle', label: 'Build Muscle', icon: 'barbell-outline' as const },
-  { id: 'maintain', label: 'Improve Fitness', icon: 'fitness-outline' as const },
-  { id: 'recomp', label: 'Eat Better', icon: 'nutrition-outline' as const },
-  { id: 'strength', label: 'Track Nutrition', icon: 'analytics-outline' as const },
-  { id: 'endurance', label: 'General Health', icon: 'heart-outline' as const },
+  { id: 'lose_weight', label: 'Lose Weight', icon: 'scale-outline' as const },
+  { id: 'gain_muscle', label: 'Gain Muscle', icon: 'barbell-outline' as const },
+  { id: 'build_lean_muscle', label: 'Build Lean Muscle', icon: 'body-outline' as const },
+  { id: 'improve_endurance', label: 'Improve Endurance', icon: 'heart-outline' as const },
+  { id: 'maintain_weight', label: 'Maintain Weight', icon: 'fitness-outline' as const },
+  { id: 'improve_general_health', label: 'Improve General Health', icon: 'medkit-outline' as const },
 ];
 
 export default function GoalsScreen() {

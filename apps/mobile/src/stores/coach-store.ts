@@ -3,8 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CoachContext } from '@health-coach/shared';
 import * as coachApi from '../lib/coach-api';
 import type { AIMessage } from '../lib/ai-provider';
+import { parseCoachActions, executeCoachAction, type CoachAction } from '../lib/coach-actions';
 
 // ── Types ───────────────────────────────────────────────────────────
+
+export interface CoachActionState {
+  action: CoachAction;
+  status: 'pending' | 'applied' | 'failed';
+  message?: string; // Result message from execution
+}
 
 export interface CoachMessage {
   id: string;
@@ -13,6 +20,7 @@ export interface CoachMessage {
   content: string;
   structured_content?: StructuredContent[];
   tool_calls?: ToolCallResult[];
+  actions?: CoachActionState[];
   model?: string;
   tokens_used?: number;
   created_at: string;
@@ -59,13 +67,14 @@ interface CoachState {
   initialize: () => Promise<void>;
   sendMessage: (text: string, context?: CoachContext) => Promise<void>;
   startConversation: (context?: CoachContext) => void;
-  loadConversation: (conversationId: string) => void;
+  loadConversation: (conversationId: string) => Promise<void>;
   loadHistory: () => Promise<void>;
   clearError: () => void;
   setPrefilledContext: (context: CoachContext, message?: string) => void;
   prefilledContext: CoachContext | null;
   prefilledMessage: string | null;
   clearPrefilledContext: () => void;
+  executeAction: (messageId: string, actionIndex: number) => Promise<void>;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -173,12 +182,18 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         aiHistory,
       );
 
-      // Add assistant message
+      // Parse actions from AI response
+      const { text: cleanContent, actions } = parseCoachActions(response.content);
+
+      // Add assistant message with parsed actions
       const assistantMessage: CoachMessage = {
         id: response.message_id ?? generateId('msg'),
         conversation_id: conversation.id,
         role: 'assistant',
-        content: response.content,
+        content: cleanContent,
+        actions: actions.length > 0
+          ? actions.map((action) => ({ action, status: 'pending' as const }))
+          : undefined,
         model: response.model,
         created_at: new Date().toISOString(),
       };
@@ -242,7 +257,6 @@ export const useCoachStore = create<CoachState>((set, get) => ({
 
     set((s) => ({
       activeConversation: conversation,
-      messages: [],
       conversations: [conversation, ...s.conversations],
       error: null,
     }));
@@ -250,18 +264,31 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(conversation));
   },
 
-  loadConversation: (conversationId: string) => {
+  loadConversation: async (conversationId: string) => {
     const state = get();
     const conversation = state.conversations.find((c) => c.id === conversationId);
     if (!conversation) return;
 
-    const messages = state.messages.filter((m) => m.conversation_id === conversationId);
+    // Read from persisted storage rather than state.messages, which may have
+    // been zeroed by startConversation.
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.MESSAGES);
+      const allMessages: CoachMessage[] = stored ? JSON.parse(stored) : [];
+      const messages = allMessages.filter((m) => m.conversation_id === conversationId);
 
-    set({
-      activeConversation: conversation,
-      messages,
-      error: null,
-    });
+      set({
+        activeConversation: conversation,
+        messages,
+        error: null,
+      });
+    } catch {
+      // Fall back to whatever is in state
+      set({
+        activeConversation: conversation,
+        messages: state.messages.filter((m) => m.conversation_id === conversationId),
+        error: null,
+      });
+    }
   },
 
   loadHistory: async () => {
@@ -283,5 +310,52 @@ export const useCoachStore = create<CoachState>((set, get) => ({
 
   clearPrefilledContext: () => {
     set({ prefilledContext: null, prefilledMessage: null });
+  },
+
+  executeAction: async (messageId: string, actionIndex: number) => {
+    const state = get();
+    const msgIdx = state.messages.findIndex((m) => m.id === messageId);
+    if (msgIdx === -1) return;
+
+    const message = state.messages[msgIdx];
+    if (!message.actions || !message.actions[actionIndex]) return;
+
+    const actionState = message.actions[actionIndex];
+    if (actionState.status === 'applied') return; // Already applied
+
+    try {
+      const result = await executeCoachAction(actionState.action);
+
+      // Update the action status in the message
+      const updatedActions = [...message.actions];
+      updatedActions[actionIndex] = {
+        ...actionState,
+        status: result.success ? 'applied' : 'failed',
+        message: result.message,
+      };
+
+      const updatedMessages = [...state.messages];
+      updatedMessages[msgIdx] = { ...message, actions: updatedActions };
+
+      set({ messages: updatedMessages });
+
+      // Persist
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.MESSAGES,
+        JSON.stringify(updatedMessages.slice(-200)),
+      );
+    } catch (error) {
+      const updatedActions = [...message.actions!];
+      updatedActions[actionIndex] = {
+        ...actionState,
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'Action failed',
+      };
+
+      const updatedMessages = [...state.messages];
+      updatedMessages[msgIdx] = { ...message, actions: updatedActions };
+
+      set({ messages: updatedMessages });
+    }
   },
 }));

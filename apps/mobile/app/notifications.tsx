@@ -1,6 +1,6 @@
 // ── Notification Preferences Screen ───────────────────────────────
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -44,8 +44,16 @@ export default function NotificationsScreen() {
   const setWorkoutDays = useNotificationStore((s) => s.setWorkoutDays);
   const setHydrationInterval = useNotificationStore((s) => s.setHydrationInterval);
   const requestPermission = useNotificationStore((s) => s.requestPermission);
+  const checkPermission = useNotificationStore((s) => s.checkPermission);
 
   const [requesting, setRequesting] = useState(false);
+
+  // Re-check permission status every time the screen mounts/focuses.
+  // Handles the case where the user granted permission in device Settings
+  // and then returned to the app.
+  useEffect(() => {
+    checkPermission();
+  }, [checkPermission]);
 
   const handleRequestPermission = useCallback(async () => {
     setRequesting(true);
@@ -61,9 +69,7 @@ export default function NotificationsScreen() {
           {
             text: 'Open Settings',
             onPress: () => {
-              if (Platform.OS === 'ios') {
-                Linking.openSettings();
-              }
+              Linking.openSettings();
             },
           },
         ],
@@ -227,6 +233,49 @@ export default function NotificationsScreen() {
               typography={typography}
               spacing={spacing}
             />
+            <Divider />
+            <MealToggleRow
+              label="Snack"
+              enabled={prefs.mealReminders.snack.enabled}
+              time={prefs.mealReminders.snack.time}
+              onToggle={(v) => updateMealReminder('snack', { enabled: v })}
+              onTimeSelect={(t) => updateMealReminder('snack', { time: t })}
+              colors={colors}
+              typography={typography}
+              spacing={spacing}
+            />
+          </>
+        )}
+      </Card>
+
+      {/* Daily Briefing */}
+      <SectionHeader title="Daily Briefing" colors={colors} typography={typography} spacing={spacing} />
+      <Card style={{ marginBottom: spacing.base }}>
+        <ToggleRow
+          icon="sunny-outline"
+          label="Daily Briefing"
+          value={prefs.dailyBriefingEnabled}
+          onToggle={(v) => updatePreference('dailyBriefingEnabled', v)}
+          colors={colors}
+          typography={typography}
+          spacing={spacing}
+        />
+        {prefs.dailyBriefingEnabled && (
+          <>
+            <Divider />
+            <TimeRow
+              label="Briefing Time"
+              value={prefs.dailyBriefingTime}
+              onSelect={(t) => updatePreference('dailyBriefingTime', t)}
+              colors={colors}
+              typography={typography}
+              spacing={spacing}
+            />
+            <View style={{ marginTop: spacing.sm }}>
+              <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                Get a daily overview of your workouts, meals, and goals
+              </Text>
+            </View>
           </>
         )}
       </Card>

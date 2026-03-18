@@ -17,7 +17,30 @@ import type {
   MealReminderPreferences,
   PermissionStatus,
 } from '../types/notifications';
-import { DEFAULT_PREFERENCES } from '../types/notifications';
+import {
+  DEFAULT_PREFERENCES,
+  trainingTimeToClockTime,
+} from '../types/notifications';
+import { useProfileStore } from './profile-store';
+import { resolveWorkoutReminderDays } from '../lib/workout-reminder-days';
+
+// ── Debounced sync ────────────────────────────────────────────────
+// Multiple rapid preference changes (e.g. toggling several meal
+// reminders) coalesce into a single sync pass.
+
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function debouncedSync(syncFn: () => Promise<void>) {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    syncFn().catch((err) => {
+      console.warn('Notification sync failed:', err);
+    });
+  }, 250);
+}
+
+// ── Store ─────────────────────────────────────────────────────────
 
 interface NotificationState {
   preferences: NotificationPreferences;
@@ -36,6 +59,7 @@ interface NotificationState {
   ) => void;
   setWorkoutDays: (days: DayOfWeek[]) => void;
   setHydrationInterval: (interval: HydrationInterval) => void;
+  syncWorkoutDaysFromProgram: () => void;
   syncReminders: () => Promise<void>;
   resetPreferences: () => void;
 }
@@ -68,9 +92,15 @@ export const useNotificationStore = create<NotificationState>()(
 
       checkPermission: async () => {
         const status = await getPermissionStatus();
+        const prev = get().preferences.permissionStatus;
         set((state) => ({
           preferences: { ...state.preferences, permissionStatus: status },
         }));
+        // If permission was just granted externally (via device Settings),
+        // sync reminders so any enabled toggles take effect immediately.
+        if (status === 'granted' && prev !== 'granted') {
+          await get().syncReminders();
+        }
         return status;
       },
 
@@ -85,11 +115,38 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       updatePreference: (key, value) => {
+        const current = get().preferences;
+
+        // Auto-populate workout days & time from program/profile when enabling
+        if (
+          key === 'workoutRemindersEnabled' &&
+          value === true
+        ) {
+          const profile = useProfileStore.getState().profile;
+          const updates: Partial<NotificationPreferences> = {
+            workoutRemindersEnabled: true,
+            // Always re-resolve days (handles program changes since last enable)
+            workoutReminderDays: resolveWorkoutReminderDays(),
+          };
+
+          // Pre-fill time from profile preferred training time (only on first enable)
+          if (!current.workoutRemindersEnabled && profile.preferredTrainingTime) {
+            updates.workoutReminderTime = trainingTimeToClockTime(
+              profile.preferredTrainingTime,
+            );
+          }
+
+          set((state) => ({
+            preferences: { ...state.preferences, ...updates },
+          }));
+          debouncedSync(() => get().syncReminders());
+          return;
+        }
+
         set((state) => ({
           preferences: { ...state.preferences, [key]: value },
         }));
-        // Auto-sync after preference change
-        setTimeout(() => get().syncReminders(), 100);
+        debouncedSync(() => get().syncReminders());
       },
 
       updateMealReminder: (meal, update) => {
@@ -102,21 +159,40 @@ export const useNotificationStore = create<NotificationState>()(
             },
           },
         }));
-        setTimeout(() => get().syncReminders(), 100);
+        debouncedSync(() => get().syncReminders());
       },
 
       setWorkoutDays: (days) => {
         set((state) => ({
           preferences: { ...state.preferences, workoutReminderDays: days },
         }));
-        setTimeout(() => get().syncReminders(), 100);
+        debouncedSync(() => get().syncReminders());
       },
 
       setHydrationInterval: (interval) => {
         set((state) => ({
           preferences: { ...state.preferences, hydrationIntervalHours: interval },
         }));
-        setTimeout(() => get().syncReminders(), 100);
+        debouncedSync(() => get().syncReminders());
+      },
+
+      syncWorkoutDaysFromProgram: () => {
+        const { preferences } = get();
+        // Only update if workout reminders are currently enabled
+        if (!preferences.workoutRemindersEnabled) return;
+        const resolved = resolveWorkoutReminderDays();
+        // Avoid unnecessary re-sync if days haven't changed
+        const current = preferences.workoutReminderDays;
+        if (
+          resolved.length === current.length &&
+          resolved.every((d, i) => d === current[i])
+        ) {
+          return;
+        }
+        set((state) => ({
+          preferences: { ...state.preferences, workoutReminderDays: resolved },
+        }));
+        debouncedSync(() => get().syncReminders());
       },
 
       syncReminders: async () => {
@@ -126,7 +202,7 @@ export const useNotificationStore = create<NotificationState>()(
 
       resetPreferences: () => {
         set({ preferences: { ...DEFAULT_PREFERENCES } });
-        setTimeout(() => get().syncReminders(), 100);
+        debouncedSync(() => get().syncReminders());
       },
     }),
     {

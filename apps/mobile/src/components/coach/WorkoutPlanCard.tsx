@@ -82,7 +82,7 @@ export function WorkoutPlanCard({ data }: WorkoutPlanCardProps) {
                           {(ex.exercise_name as string) ?? (ex.name as string) ?? 'Exercise'}
                         </Text>
                         <Text style={[typography.caption, { color: colors.textSecondary }]}>
-                          {ex.target_sets ?? ex.sets ?? 3}×{ex.target_reps ?? ex.reps ?? '8-12'}
+                          {String(ex.target_sets ?? ex.sets ?? 3)}×{String(ex.target_reps ?? ex.reps ?? '8-12')}
                         </Text>
                       </View>
                     ))}

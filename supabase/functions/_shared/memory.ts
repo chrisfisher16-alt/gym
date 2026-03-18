@@ -23,7 +23,7 @@ export async function loadUserContext(
 ): Promise<UserContext> {
   const [profileResult, goalsResult, prefsResult, workoutsResult, nutritionResult, summariesResult] =
     await Promise.all([
-      supabase.from('profiles').select('*').eq('user_id', userId).single(),
+      supabase.from('profiles').select('*').eq('id', userId).single(),
       supabase.from('goals').select('*').eq('user_id', userId).eq('status', 'active').single(),
       supabase.from('coach_preferences').select('*').eq('user_id', userId).single(),
       loadRecentWorkouts(supabase, userId),
@@ -46,15 +46,15 @@ export async function loadUserContext(
     goals: goals
       ? {
           goal_type: goals.goal_type,
-          target_weight_kg: goals.target_weight_kg,
-          target_calories: goals.target_calories,
-          activity_level: goals.activity_level,
+          target_value: goals.target_value,
+          unit: goals.unit,
+          status: goals.status,
         }
       : null,
     preferences: prefs
       ? {
-          product_mode: prefs.product_mode,
-          coach_tone: prefs.coach_tone ?? 'balanced',
+          product_mode: profile?.product_mode ?? 'full_health_coach',
+          coach_tone: prefs.tone ?? 'balanced',
           focus_areas: prefs.focus_areas ?? [],
         }
       : null,
@@ -138,12 +138,12 @@ async function loadMemorySummaries(
 ): Promise<string[]> {
   const { data } = await supabase
     .from('coach_memory_summaries')
-    .select('summary')
+    .select('content')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(3);
 
-  return data?.map((s: { summary: string }) => s.summary) ?? [];
+  return data?.map((s: { content: string }) => s.content) ?? [];
 }
 
 /**
@@ -187,9 +187,8 @@ export function buildContextString(context: UserContext): string {
   if (context.goals) {
     sections.push(`## Goals
 - Type: ${context.goals.goal_type}
-- Target weight: ${context.goals.target_weight_kg ? `${context.goals.target_weight_kg}kg` : 'Not set'}
-- Target calories: ${context.goals.target_calories ?? 'Not set'}
-- Activity level: ${context.goals.activity_level}/5`);
+- Target value: ${context.goals.target_value ?? 'Not set'}${context.goals.unit ? ` ${context.goals.unit}` : ''}
+- Status: ${context.goals.status ?? 'active'}`);
   }
 
   if (context.preferences) {
@@ -250,9 +249,9 @@ export async function saveConversationSummary(
 ): Promise<void> {
   await supabase.from('coach_memory_summaries').insert({
     user_id: userId,
-    conversation_id: conversationId,
-    summary,
-    key_facts: keyFacts,
+    summary_type: 'behavioral',
+    content: summary,
+    data: { key_facts: keyFacts, conversation_id: conversationId },
     created_at: new Date().toISOString(),
   });
 }

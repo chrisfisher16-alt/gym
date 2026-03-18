@@ -6,12 +6,64 @@ export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type MealSource = 'manual' | 'text_parse' | 'photo' | 'barcode' | 'quick_add' | 'saved_meal';
 export type CoachContext = 'general' | 'workout' | 'nutrition' | 'progress' | 'onboarding';
 export type CoachTone = 'direct' | 'balanced' | 'encouraging';
-export type GoalType = 'lose_fat' | 'build_muscle' | 'maintain' | 'recomp' | 'strength' | 'endurance';
+export type GoalType = 'weight_loss' | 'muscle_gain' | 'strength' | 'endurance' | 'flexibility' | 'general_health' | 'custom';
 export type GoalStatus = 'active' | 'completed' | 'paused' | 'abandoned';
-export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'cancelled' | 'expired';
-export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired' | 'incomplete';
+export type Gender = 'male' | 'female' | 'non_binary' | 'prefer_not_to_say';
 export type UnitPreference = 'metric' | 'imperial';
 export type EntitlementTier = 'free' | 'workout_coach' | 'nutrition_coach' | 'full_health_coach';
+
+// ── Health Goals & Preferences ──────────────────────────────────────
+
+export type HealthGoal =
+  | 'lose_weight'
+  | 'gain_muscle'
+  | 'build_lean_muscle'
+  | 'improve_endurance'
+  | 'maintain_weight'
+  | 'improve_general_health';
+
+export type CookingSkillLevel = 'beginner' | 'intermediate' | 'advanced';
+
+export type CookingEquipment =
+  | 'microwave'
+  | 'oven'
+  | 'stove'
+  | 'air_fryer'
+  | 'blender'
+  | 'slow_cooker'
+  | 'instant_pot'
+  | 'grill'
+  | 'no_kitchen';
+
+export type DietaryPreference =
+  | 'vegetarian'
+  | 'vegan'
+  | 'pescatarian'
+  | 'keto'
+  | 'paleo'
+  | 'gluten_free'
+  | 'dairy_free'
+  | 'halal'
+  | 'kosher'
+  | 'low_carb'
+  | 'low_fat'
+  | 'mediterranean'
+  | 'whole30'
+  | 'no_preference';
+
+export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export interface HealthGoalsAndPreferences {
+  health_goals: HealthGoal[];
+  health_goal_description?: string;
+  allergies: string[];
+  dietary_preferences: DietaryPreference[];
+  cooking_skill_level?: CookingSkillLevel;
+  cooking_equipment: CookingEquipment[];
+  preferred_workout_days: Weekday[];
+  fitness_equipment: string[];
+}
 
 // ── User & Profile ───────────────────────────────────────────────────
 
@@ -25,7 +77,7 @@ export interface User {
 }
 
 export interface Profile {
-  user_id: string;
+  id: string;
   display_name: string;
   date_of_birth?: string;
   gender?: Gender;
@@ -43,10 +95,10 @@ export interface Goals {
   user_id: string;
   goal_type: GoalType;
   status: GoalStatus;
-  target_weight_kg?: number;
-  target_calories?: number;
-  activity_level: number; // 1-5
-  started_at: string;
+  target_value?: number;
+  current_value?: number;
+  unit?: string;
+  start_date: string;
   target_date?: string;
   created_at: string;
   updated_at: string;

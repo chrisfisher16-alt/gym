@@ -22,6 +22,8 @@ export const CATEGORY_COLORS: Record<MuscleGroup, { bg: string; text: string }> 
   core: { bg: '#FEF9C3', text: '#CA8A04' }, // yellow
   cardio: { bg: '#FCE7F3', text: '#DB2777' }, // pink
   full_body: { bg: '#CCFBF1', text: '#0D9488' }, // teal
+  warmup: { bg: '#FFF7ED', text: '#C2410C' }, // warm orange
+  cooldown: { bg: '#F0F9FF', text: '#0369A1' }, // cool blue
 };
 
 export const CATEGORY_COLORS_DARK: Record<MuscleGroup, { bg: string; text: string }> = {
@@ -33,6 +35,8 @@ export const CATEGORY_COLORS_DARK: Record<MuscleGroup, { bg: string; text: strin
   core: { bg: '#713F12', text: '#FACC15' },
   cardio: { bg: '#831843', text: '#F472B6' },
   full_body: { bg: '#134E4A', text: '#2DD4BF' },
+  warmup: { bg: '#7C2D12', text: '#FDBA74' },
+  cooldown: { bg: '#0C4A6E', text: '#7DD3FC' },
 };
 
 // ── Equipment Icons ─────────────────────────────────────────────────

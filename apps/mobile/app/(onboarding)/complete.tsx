@@ -5,6 +5,8 @@ import { useTheme } from '../../src/theme';
 import { Button, ScreenContainer, ProgressBar } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/stores/onboarding-store';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { useProfileStore } from '../../src/stores/profile-store';
+import type { HealthGoal } from '../../src/stores/profile-store';
 import { supabase } from '../../src/lib/supabase';
 import { useState } from 'react';
 import { isHealthPlatform } from '../../src/lib/health';
@@ -16,6 +18,7 @@ export default function CompleteScreen() {
   const setProfile = useAuthStore((s) => s.setProfile);
   const setIsOnboarded = useAuthStore((s) => s.setIsOnboarded);
   const setCoachPreferences = useAuthStore((s) => s.setCoachPreferences);
+  const updateProfileStore = useProfileStore((s) => s.updateProfile);
   const [saving, setSaving] = useState(false);
 
   const finishOnboarding = async () => {
@@ -60,6 +63,19 @@ export default function CompleteScreen() {
 
       if (profile) setProfile(profile);
       if (coachPrefs) setCoachPreferences(coachPrefs);
+
+      // Sync onboarding goals into the local profile store so the Coach
+      // and recipe generator can read them from healthGoals.
+      updateProfileStore({
+        displayName: onboarding.displayName,
+        dateOfBirth: onboarding.dateOfBirth || undefined,
+        gender: onboarding.gender || undefined,
+        heightCm: onboarding.heightCm || undefined,
+        weightKg: onboarding.weightKg || undefined,
+        unitPreference: onboarding.unitPreference,
+        healthGoals: onboarding.selectedGoals as HealthGoal[],
+      });
+
       setIsOnboarded(true);
       onboarding.reset();
 

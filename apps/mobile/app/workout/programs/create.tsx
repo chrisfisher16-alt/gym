@@ -99,6 +99,7 @@ export default function CreateProgramScreen() {
       days: days.map((d, i) => ({
         dayNumber: i + 1,
         name: d.name,
+        dayType: 'lifting' as const,
         focusArea: d.focusArea,
         exercises: d.exercises,
       })),

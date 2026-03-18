@@ -21,11 +21,13 @@ import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
 import { checkAIMessageLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
 import type { CoachMessage } from '../../src/stores/coach-store';
+import type { CoachContext } from '@health-coach/shared';
 
 export default function CoachTab() {
   const { colors, spacing, typography, radius } = useTheme();
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const pendingContextRef = useRef<CoachContext | null>(null);
 
   const {
     messages,
@@ -40,6 +42,7 @@ export default function CoachTab() {
     startConversation,
     clearError,
     clearPrefilledContext,
+    executeAction,
   } = useCoachStore();
 
   useEffect(() => {
@@ -48,13 +51,16 @@ export default function CoachTab() {
     }
   }, [isInitialized, initialize]);
 
-  // Handle prefilled message from other tabs
+  // Handle prefilled message from other tabs.
+  // Capture the context in a ref so it survives clearing the store — handleSend
+  // reads from the ref at send time rather than the (already-cleared) store.
   useEffect(() => {
     if (prefilledMessage && isInitialized) {
+      pendingContextRef.current = prefilledContext ?? null;
       setInputText(prefilledMessage);
       clearPrefilledContext();
     }
-  }, [prefilledMessage, isInitialized, clearPrefilledContext]);
+  }, [prefilledMessage, isInitialized, prefilledContext, clearPrefilledContext]);
 
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
@@ -75,6 +81,10 @@ export default function CoachTab() {
     const text = inputText.trim();
     if (!text || isLoading) return;
 
+    // Use the ref-captured context (survives store clear) then reset it.
+    const contextToSend = pendingContextRef.current ?? prefilledContext ?? undefined;
+    pendingContextRef.current = null;
+
     // Check AI message limit for free users
     if (!canAccess('unlimited_ai') && tier === 'free') {
       checkAIMessageLimit().then((usage) => {
@@ -82,7 +92,7 @@ export default function CoachTab() {
         if (usage.allowed) {
           incrementUsage('ai_messages');
           setInputText('');
-          sendMessage(text, prefilledContext ?? undefined);
+          sendMessage(text, contextToSend);
         } else {
           Alert.alert(
             'Daily Message Limit Reached',
@@ -98,7 +108,7 @@ export default function CoachTab() {
     }
 
     setInputText('');
-    sendMessage(text, prefilledContext ?? undefined);
+    sendMessage(text, contextToSend);
   }, [inputText, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
 
   const handlePromptSelect = useCallback(
@@ -122,9 +132,18 @@ export default function CoachTab() {
     }
   }, [currentMessages.length, isLoading]);
 
+  const handleExecuteAction = useCallback(
+    (messageId: string, actionIndex: number) => {
+      executeAction(messageId, actionIndex);
+    },
+    [executeAction],
+  );
+
   const renderMessage = useCallback(
-    ({ item }: { item: CoachMessage }) => <ChatBubble message={item} />,
-    [],
+    ({ item }: { item: CoachMessage }) => (
+      <ChatBubble message={item} onExecuteAction={handleExecuteAction} />
+    ),
+    [handleExecuteAction],
   );
 
   const renderEmptyState = () => (
@@ -288,6 +307,13 @@ export default function CoachTab() {
           multiline
           returnKeyType="send"
           onSubmitEditing={handleSend}
+          blurOnSubmit={false}
+          onKeyPress={(e: any) => {
+            if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+              e.preventDefault?.();
+              handleSend();
+            }
+          }}
           editable={!isLoading}
         />
         <TouchableOpacity

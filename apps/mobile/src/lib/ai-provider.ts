@@ -58,6 +58,25 @@ export function clearConfigCache(): void {
   cachedConfig = null;
 }
 
+/**
+ * One-time migration: if the stored config still has the old API key,
+ * clear it so the updated DEFAULT_CONFIG takes effect.
+ */
+export async function migrateAIConfig(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(AI_CONFIG_KEY);
+    if (stored) {
+      const parsed: AIConfig = JSON.parse(stored);
+      if (parsed.apiKey?.startsWith('')) {
+        await AsyncStorage.removeItem(AI_CONFIG_KEY);
+        cachedConfig = null;
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 // ── Provider Defaults ───────────────────────────────────────────────
 
 const PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string }> = {

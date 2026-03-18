@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,15 @@ import { useTheme } from '../../../src/theme';
 import { useWorkoutPrograms } from '../../../src/hooks/useWorkoutPrograms';
 import { useActiveWorkout } from '../../../src/hooks/useActiveWorkout';
 import { Card, Badge, Button } from '../../../src/components/ui';
+import {
+  DayType,
+  DAY_TYPE_LABELS,
+  DAY_TYPE_COLORS,
+  DAY_TYPE_ICONS,
+  CardioSuggestion,
+  WorkoutDayLocal,
+  ProgramExercise,
+} from '../../../src/types/workout';
 
 export default function ProgramDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,13 +41,12 @@ export default function ProgramDetailScreen() {
     );
   }
 
-  const handleStartDay = (dayIndex: number) => {
-    if (isActive) {
-      Alert.alert('Workout in Progress', 'Please finish or cancel your current workout first.');
-      return;
-    }
-
+  const launchDay = (dayIndex: number) => {
     const day = program.days[dayIndex];
+    // Always set this program as active when starting one of its workouts
+    if (!program.isActive) {
+      setActiveProgram(program.id);
+    }
     startWorkout({
       name: `${program.name} — ${day.name}`,
       programId: program.id,
@@ -55,6 +63,14 @@ export default function ProgramDetailScreen() {
     router.push('/workout/active');
   };
 
+  const handleStartDay = (dayIndex: number) => {
+    if (isActive) {
+      Alert.alert('Workout in Progress', 'Please finish or cancel your current workout first.');
+      return;
+    }
+    launchDay(dayIndex);
+  };
+
   const handleDelete = () => {
     Alert.alert('Delete Program', `Are you sure you want to delete "${program.name}"?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -67,6 +83,226 @@ export default function ProgramDetailScreen() {
         },
       },
     ]);
+  };
+
+  const renderExerciseList = (exercises: ProgramExercise[], accentColor: string) => (
+    <>
+      {exercises.map((exercise, exIndex) => (
+        <View
+          key={exercise.id}
+          style={[
+            styles.exerciseRow,
+            {
+              paddingVertical: spacing.sm,
+              borderTopWidth: exIndex === 0 ? 1 : 0,
+              borderBottomWidth: 1,
+              borderColor: colors.borderLight,
+              marginTop: exIndex === 0 ? spacing.md : 0,
+            },
+          ]}
+        >
+          <Text style={[typography.body, { color: colors.text, flex: 1 }]}>
+            {exercise.exerciseName}
+          </Text>
+          <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+            {exercise.targetSets} × {exercise.targetReps}
+          </Text>
+        </View>
+      ))}
+    </>
+  );
+
+  const renderCardioSuggestions = (suggestions: CardioSuggestion[]) => (
+    <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+      {suggestions.map((suggestion, idx) => (
+        <View
+          key={idx}
+          style={[
+            styles.cardioSubCard,
+            {
+              backgroundColor: colors.surfaceSecondary ?? colors.surface,
+              borderRadius: radius.md,
+              padding: spacing.md,
+              borderLeftWidth: 3,
+              borderLeftColor: DAY_TYPE_COLORS.cardio,
+            },
+          ]}
+        >
+          <View style={styles.cardioSubCardHeader}>
+            <Ionicons
+              name={suggestion.icon as any}
+              size={20}
+              color={DAY_TYPE_COLORS.cardio}
+            />
+            <Text
+              style={[
+                typography.labelLarge,
+                { color: colors.text, marginLeft: spacing.sm, flex: 1 },
+              ]}
+            >
+              {suggestion.name}
+            </Text>
+            <Text style={[typography.labelSmall, { color: DAY_TYPE_COLORS.cardio }]}>
+              {suggestion.duration}
+            </Text>
+          </View>
+          <Text
+            style={[
+              typography.bodySmall,
+              { color: colors.textSecondary, marginTop: 4 },
+            ]}
+          >
+            {suggestion.description}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderDayTypeBadge = (day: WorkoutDayLocal) => {
+    const accent = DAY_TYPE_COLORS[day.dayType];
+    return (
+      <View
+        style={[
+          styles.dayTypeBadge,
+          {
+            backgroundColor: accent + '1A', // 10% opacity
+            borderRadius: radius.sm,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+          },
+        ]}
+      >
+        <Ionicons name={DAY_TYPE_ICONS[day.dayType] as any} size={12} color={accent} />
+        <Text
+          style={[
+            typography.labelSmall,
+            { color: accent, marginLeft: 4 },
+          ]}
+        >
+          {DAY_TYPE_LABELS[day.dayType]}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderDayCard = (day: WorkoutDayLocal, dayIndex: number) => {
+    const accent = DAY_TYPE_COLORS[day.dayType];
+
+    switch (day.dayType) {
+      case 'rest':
+        return (
+          <Card key={day.id} style={{ marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: accent }}>
+            <View style={styles.dayHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={[typography.label, { color: colors.textTertiary }]}>Day {day.dayNumber}</Text>
+                  {renderDayTypeBadge(day)}
+                </View>
+                <Text style={[typography.labelLarge, { color: colors.text, marginTop: 2 }]}>{day.name}</Text>
+              </View>
+              <Ionicons name="bed-outline" size={28} color={accent} style={{ opacity: 0.6 }} />
+            </View>
+            {day.recoveryNotes ? (
+              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
+                {day.recoveryNotes}
+              </Text>
+            ) : null}
+          </Card>
+        );
+
+      case 'mobility':
+        return (
+          <Card key={day.id} style={{ marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: accent }}>
+            <View style={styles.dayHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={[typography.label, { color: colors.textTertiary }]}>Day {day.dayNumber}</Text>
+                  {renderDayTypeBadge(day)}
+                </View>
+                <Text style={[typography.labelLarge, { color: colors.text, marginTop: 2 }]}>{day.name}</Text>
+              </View>
+              <Ionicons name="body-outline" size={28} color={accent} style={{ opacity: 0.6 }} />
+            </View>
+            {day.recoveryNotes ? (
+              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
+                {day.recoveryNotes}
+              </Text>
+            ) : null}
+            {day.exercises.length > 0 && renderExerciseList(day.exercises, accent)}
+          </Card>
+        );
+
+      case 'cardio':
+        return (
+          <Card key={day.id} style={{ marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: accent }}>
+            <View style={styles.dayHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={[typography.label, { color: colors.textTertiary }]}>Day {day.dayNumber}</Text>
+                  {renderDayTypeBadge(day)}
+                </View>
+                <Text style={[typography.labelLarge, { color: colors.text, marginTop: 2 }]}>{day.name}</Text>
+              </View>
+              <Ionicons name="heart-outline" size={28} color={accent} style={{ opacity: 0.6 }} />
+            </View>
+            {day.cardioSuggestions && day.cardioSuggestions.length > 0 &&
+              renderCardioSuggestions(day.cardioSuggestions)}
+            {day.exercises.length > 0 && renderExerciseList(day.exercises, accent)}
+          </Card>
+        );
+
+      case 'active_recovery':
+        return (
+          <Card key={day.id} style={{ marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: accent }}>
+            <View style={styles.dayHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={[typography.label, { color: colors.textTertiary }]}>Day {day.dayNumber}</Text>
+                  {renderDayTypeBadge(day)}
+                </View>
+                <Text style={[typography.labelLarge, { color: colors.text, marginTop: 2 }]}>{day.name}</Text>
+              </View>
+              <Ionicons name="walk-outline" size={28} color={accent} style={{ opacity: 0.6 }} />
+            </View>
+            {day.recoveryNotes ? (
+              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
+                {day.recoveryNotes}
+              </Text>
+            ) : null}
+            {day.exercises.length > 0 && renderExerciseList(day.exercises, accent)}
+          </Card>
+        );
+
+      case 'lifting':
+      default:
+        return (
+          <Card key={day.id} style={{ marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: accent }}>
+            <View style={styles.dayHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={[typography.label, { color: colors.textTertiary }]}>Day {day.dayNumber}</Text>
+                  {renderDayTypeBadge(day)}
+                </View>
+                <Text style={[typography.labelLarge, { color: colors.text, marginTop: 2 }]}>{day.name}</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => handleStartDay(dayIndex)}
+                style={[
+                  styles.startButton,
+                  { backgroundColor: colors.primary, borderRadius: radius.md },
+                ]}
+              >
+                <Ionicons name="play" size={16} color={colors.textInverse} />
+                <Text style={[typography.labelSmall, { color: colors.textInverse, marginLeft: 4 }]}>
+                  Start
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {renderExerciseList(day.exercises, accent)}
+          </Card>
+        );
+    }
   };
 
   return (
@@ -102,63 +338,39 @@ export default function ProgramDetailScreen() {
               {program.description}
             </Text>
           ) : null}
-          {!program.isActive && (
+          {program.isActive ? (
+            <View style={[styles.activeProgramBanner, { backgroundColor: colors.successLight, borderRadius: radius.md, marginTop: spacing.md }]}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>Active Program</Text>
+            </View>
+          ) : (
             <Button
-              title="Set as Active Program"
+              title="Switch to This Program"
               variant="secondary"
               size="md"
-              onPress={() => setActiveProgram(program.id)}
+              onPress={() => {
+                const doSwitch = () => setActiveProgram(program.id);
+                if (Platform.OS === 'web') {
+                  const ok = window.confirm('Switch your active program? This will replace your current program on the workout tab.');
+                  if (ok) doSwitch();
+                } else {
+                  Alert.alert(
+                    'Switch Program',
+                    'Switch your active program? This will replace your current program on the workout tab.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Switch', onPress: doSwitch },
+                    ],
+                  );
+                }
+              }}
               style={{ marginTop: spacing.md }}
             />
           )}
         </Card>
 
         {/* Days */}
-        {program.days.map((day, dayIndex) => (
-          <Card key={day.id} style={{ marginBottom: spacing.md }}>
-            <View style={styles.dayHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[typography.label, { color: colors.textTertiary }]}>Day {day.dayNumber}</Text>
-                <Text style={[typography.labelLarge, { color: colors.text }]}>{day.name}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => handleStartDay(dayIndex)}
-                style={[
-                  styles.startButton,
-                  { backgroundColor: colors.primary, borderRadius: radius.md },
-                ]}
-              >
-                <Ionicons name="play" size={16} color={colors.textInverse} />
-                <Text style={[typography.labelSmall, { color: colors.textInverse, marginLeft: 4 }]}>
-                  Start
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {day.exercises.map((exercise, exIndex) => (
-              <View
-                key={exercise.id}
-                style={[
-                  styles.exerciseRow,
-                  {
-                    paddingVertical: spacing.sm,
-                    borderTopWidth: exIndex === 0 ? 1 : 0,
-                    borderBottomWidth: 1,
-                    borderColor: colors.borderLight,
-                    marginTop: exIndex === 0 ? spacing.md : 0,
-                  },
-                ]}
-              >
-                <Text style={[typography.body, { color: colors.text, flex: 1 }]}>
-                  {exercise.exerciseName}
-                </Text>
-                <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                  {exercise.targetSets} × {exercise.targetReps}
-                </Text>
-              </View>
-            ))}
-          </Card>
-        ))}
+        {program.days.map((day, dayIndex) => renderDayCard(day, dayIndex))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -186,6 +398,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  dayTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   startButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -196,5 +412,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  cardioSubCard: {
+    overflow: 'hidden',
+  },
+  cardioSubCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeProgramBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
   },
 });

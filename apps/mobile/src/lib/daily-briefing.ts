@@ -113,7 +113,7 @@ function gatherBriefingContext(): string {
 // ── Briefing Generation ──────────────────────────────────────────────
 
 const BRIEFING_SYSTEM_PROMPT =
-  'You are a fitness coach creating a daily briefing. Be concise (3-4 sentences). Include: what workout is planned today (if any), nutrition focus, and a motivational note based on recent progress. Be encouraging but direct. Do not use markdown formatting — write plain text only.';
+  'You are a fitness coach creating a daily briefing. Be concise (3-4 sentences). Include: what workout is planned today (if any), nutrition focus, and a motivational note based on recent progress. Be encouraging but direct. Do not use markdown formatting — write plain text only. You are EXCLUSIVELY a health and fitness coach — only discuss exercise, workouts, nutrition, and wellness topics.';
 
 const FALLBACK_MESSAGES = [
   "New day, new opportunity. Stay consistent with your training and nutrition — that's where real results come from. You've got this!",

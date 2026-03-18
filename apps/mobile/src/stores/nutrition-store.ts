@@ -14,6 +14,7 @@ import type {
   MacroTotals,
 } from '../types/nutrition';
 import { calculateDailyTotals, generateNutritionId, getDateString } from '../lib/nutrition-utils';
+import { getSeedRecipes, getSeedRecipeIds } from '../lib/seed-recipes';
 
 // ── Storage Keys ──────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ const DEFAULT_TARGETS: NutritionTargets = {
   carbs_g: 250,
   fat_g: 70,
   fiber_g: 30,
-  water_ml: 2500,
+  water_oz: 85,
 };
 
 // ── Supplement Catalog ────────────────────────────────────────────
@@ -212,8 +213,8 @@ interface NutritionState {
   unlogSupplement: (userSupplementId: string) => void;
 
   // Actions - Water
-  logWater: (amount_ml: number) => void;
-  setWater: (amount_ml: number) => void;
+  logWater: (amount_oz: number) => void;
+  setWater: (amount_oz: number) => void;
 
   // Actions - Targets
   setDailyTargets: (targets: NutritionTargets) => void;
@@ -249,7 +250,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       userId: 'local_user',
       targets: state.targets,
       consumed: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
-      waterIntake_ml: 0,
+      waterIntake_oz: 0,
       meals: [],
       supplementsTaken: [],
     };
@@ -269,7 +270,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   todayWater: () => {
     const state = get();
     const log = state.dailyLogs[state.selectedDate];
-    return log?.waterIntake_ml ?? 0;
+    return log?.waterIntake_oz ?? 0;
   },
 
   // ── Initialize ──────────────────────────────────────────────────
@@ -296,13 +297,52 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         ? JSON.parse(storedSupplements)
         : [];
 
-      const targets: NutritionTargets = storedTargets
+      let targets: NutritionTargets = storedTargets
         ? JSON.parse(storedTargets)
         : DEFAULT_TARGETS;
 
-      const recipes: RecipeEntry[] = storedRecipes
-        ? JSON.parse(storedRecipes)
-        : [];
+      // Migrate water_ml to water_oz
+      if ('water_ml' in targets && !('water_oz' in targets)) {
+        (targets as any).water_oz = Math.round((targets as any).water_ml / 29.5735);
+        delete (targets as any).water_ml;
+      }
+
+      // Migrate waterIntake_ml to waterIntake_oz in daily logs
+      for (const dateKey of Object.keys(dailyLogs)) {
+        const log = dailyLogs[dateKey] as any;
+        if ('waterIntake_ml' in log && !('waterIntake_oz' in log)) {
+          log.waterIntake_oz = Math.round(log.waterIntake_ml / 29.5735);
+          delete log.waterIntake_ml;
+        }
+      }
+
+      // Seed recipes: load from storage, merge in any missing seed recipes
+      const seedRecipes = getSeedRecipes();
+      let recipes: RecipeEntry[];
+      let recipesChanged = false;
+
+      if (storedRecipes) {
+        recipes = JSON.parse(storedRecipes);
+        // Merge: add any seed recipes not already present
+        const existingIds = new Set(recipes.map((r) => r.id));
+        const seedIds = getSeedRecipeIds();
+        const missingSeeds = seedRecipes.filter((sr) => !existingIds.has(sr.id));
+        if (missingSeeds.length > 0) {
+          recipes = [...recipes, ...missingSeeds];
+          recipesChanged = true;
+        }
+        // Update existing seed recipes with latest data (keep user recipes untouched)
+        recipes = recipes.map((r) => {
+          if (seedIds.has(r.id)) {
+            const latest = seedRecipes.find((sr) => sr.id === r.id);
+            if (latest) { recipesChanged = true; return latest; }
+          }
+          return r;
+        });
+      } else {
+        recipes = seedRecipes;
+        recipesChanged = true;
+      }
 
       // Seed today's meals if no data exists
       const today = getDateString();
@@ -314,7 +354,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
           userId: 'local_user',
           targets,
           consumed,
-          waterIntake_ml: 1500,
+          waterIntake_oz: 50,
           meals: seedMeals,
           supplementsTaken: [],
         };
@@ -336,13 +376,16 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       if (!storedLogs) {
         await AsyncStorage.setItem(STORAGE_KEYS.DAILY_LOGS, JSON.stringify(dailyLogs));
       }
+      if (recipesChanged) {
+        await AsyncStorage.setItem(STORAGE_KEYS.RECIPES, JSON.stringify(recipes));
+      }
     } catch {
       set({
         dailyLogs: {},
         savedMeals: getSeedSavedMeals(),
         userSupplements: [],
         targets: DEFAULT_TARGETS,
-        recipes: [],
+        recipes: getSeedRecipes(),
         isInitialized: true,
       });
     }
@@ -371,7 +414,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       userId: 'local_user',
       targets: state.targets,
       consumed: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
-      waterIntake_ml: 0,
+      waterIntake_oz: 0,
       meals: [],
       supplementsTaken: [],
     };
@@ -592,7 +635,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       userId: 'local_user',
       targets: state.targets,
       consumed: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
-      waterIntake_ml: 0,
+      waterIntake_oz: 0,
       meals: [],
       supplementsTaken: [],
     };
@@ -642,7 +685,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
   // ── Water ───────────────────────────────────────────────────────
 
-  logWater: (amount_ml) => {
+  logWater: (amount_oz) => {
     const state = get();
     const date = state.selectedDate;
     const log = state.dailyLogs[date] ?? {
@@ -650,7 +693,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       userId: 'local_user',
       targets: state.targets,
       consumed: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
-      waterIntake_ml: 0,
+      waterIntake_oz: 0,
       meals: [],
       supplementsTaken: [],
     };
@@ -658,13 +701,13 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set({
       dailyLogs: {
         ...state.dailyLogs,
-        [date]: { ...log, waterIntake_ml: log.waterIntake_ml + amount_ml },
+        [date]: { ...log, waterIntake_oz: log.waterIntake_oz + amount_oz },
       },
     });
     get().persistAll();
   },
 
-  setWater: (amount_ml) => {
+  setWater: (amount_oz) => {
     const state = get();
     const date = state.selectedDate;
     const log = state.dailyLogs[date] ?? {
@@ -672,7 +715,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       userId: 'local_user',
       targets: state.targets,
       consumed: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
-      waterIntake_ml: 0,
+      waterIntake_oz: 0,
       meals: [],
       supplementsTaken: [],
     };
@@ -680,7 +723,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set({
       dailyLogs: {
         ...state.dailyLogs,
-        [date]: { ...log, waterIntake_ml: Math.max(0, amount_ml) },
+        [date]: { ...log, waterIntake_oz: Math.max(0, amount_oz) },
       },
     });
     get().persistAll();
@@ -689,8 +732,23 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   // ── Targets ─────────────────────────────────────────────────────
 
   setDailyTargets: (targets) => {
-    set({ targets });
+    // Also update today's log snapshot so historical data stays consistent
+    const today = getDateString();
+    const { dailyLogs } = get();
+    const todayLog = dailyLogs[today];
+    if (todayLog) {
+      set({
+        targets,
+        dailyLogs: {
+          ...dailyLogs,
+          [today]: { ...todayLog, targets },
+        },
+      });
+    } else {
+      set({ targets });
+    }
     AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(targets));
+    get().persistAll();
   },
 
   // ── Recipes ─────────────────────────────────────────────────────
@@ -701,6 +759,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       ...recipeData,
       id: generateNutritionId('rcp'),
       userId: 'local_user',
+      source: recipeData.source ?? 'user',
       createdAt: now,
       updatedAt: now,
     };

@@ -2,14 +2,32 @@ import { z } from 'zod';
 
 // ── Shared primitives ────────────────────────────────────────────────
 
-const goalTypeSchema = z.enum(['lose_fat', 'build_muscle', 'maintain', 'recomp', 'strength', 'endurance']);
-const genderSchema = z.enum(['male', 'female', 'other', 'prefer_not_to_say']);
+const goalTypeSchema = z.enum(['weight_loss', 'muscle_gain', 'strength', 'endurance', 'flexibility', 'general_health', 'custom']);
+const genderSchema = z.enum(['male', 'female', 'non_binary', 'prefer_not_to_say']);
 const unitPreferenceSchema = z.enum(['metric', 'imperial']);
 const productModeSchema = z.enum(['workout_coach', 'nutrition_coach', 'full_health_coach']);
 const coachToneSchema = z.enum(['direct', 'balanced', 'encouraging']);
 const setTypeSchema = z.enum(['warmup', 'working', 'drop', 'failure']);
 const mealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 const mealSourceSchema = z.enum(['manual', 'text_parse', 'photo', 'barcode', 'quick_add', 'saved_meal']);
+
+const healthGoalSchema = z.enum([
+  'lose_weight', 'gain_muscle', 'build_lean_muscle',
+  'improve_endurance', 'maintain_weight', 'improve_general_health',
+]);
+const cookingSkillLevelSchema = z.enum(['beginner', 'intermediate', 'advanced']);
+const cookingEquipmentSchema = z.enum([
+  'microwave', 'oven', 'stove', 'air_fryer', 'blender',
+  'slow_cooker', 'instant_pot', 'grill', 'no_kitchen',
+]);
+const dietaryPreferenceSchema = z.enum([
+  'vegetarian', 'vegan', 'pescatarian', 'keto', 'paleo',
+  'gluten_free', 'dairy_free', 'halal', 'kosher',
+  'low_carb', 'low_fat', 'mediterranean', 'whole30', 'no_preference',
+]);
+const weekdaySchema = z.enum([
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]);
 
 // ── Profile ──────────────────────────────────────────────────────────
 
@@ -30,9 +48,8 @@ export type ProfileInput = z.infer<typeof profileSchema>;
 
 export const goalsSchema = z.object({
   goal_type: goalTypeSchema,
-  target_weight_kg: z.number().min(20).max(500).optional(),
-  target_calories: z.number().min(500).max(10000).optional(),
-  activity_level: z.number().int().min(1).max(5),
+  target_value: z.number().optional(),
+  unit: z.string().optional(),
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
@@ -47,6 +64,21 @@ export const coachPreferencesSchema = z.object({
 });
 
 export type CoachPreferencesInput = z.infer<typeof coachPreferencesSchema>;
+
+// ── Health Goals & Preferences ──────────────────────────────────────
+
+export const healthGoalsAndPreferencesSchema = z.object({
+  health_goals: z.array(healthGoalSchema).default([]),
+  health_goal_description: z.string().max(500).optional(),
+  allergies: z.array(z.string().max(100)).default([]),
+  dietary_preferences: z.array(dietaryPreferenceSchema).default([]),
+  cooking_skill_level: cookingSkillLevelSchema.optional(),
+  cooking_equipment: z.array(cookingEquipmentSchema).default([]),
+  preferred_workout_days: z.array(weekdaySchema).default([]),
+  fitness_equipment: z.array(z.string().max(100)).default([]),
+});
+
+export type HealthGoalsAndPreferencesInput = z.infer<typeof healthGoalsAndPreferencesSchema>;
 
 // ── Workout Session & Sets ───────────────────────────────────────────
 

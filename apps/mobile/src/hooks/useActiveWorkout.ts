@@ -17,6 +17,7 @@ export function useActiveWorkout() {
   const removeSet = useWorkoutStore((s) => s.removeSet);
   const addSet = useWorkoutStore((s) => s.addSet);
   const addExerciseToSession = useWorkoutStore((s) => s.addExerciseToSession);
+  const prependExercisesToSession = useWorkoutStore((s) => s.prependExercisesToSession);
   const removeExerciseFromSession = useWorkoutStore((s) => s.removeExerciseFromSession);
   const skipExercise = useWorkoutStore((s) => s.skipExercise);
   const reorderExercises = useWorkoutStore((s) => s.reorderExercises);
@@ -149,6 +150,7 @@ export function useActiveWorkout() {
 
     // Exercise actions
     addExerciseToSession,
+    prependExercisesToSession,
     removeExerciseFromSession,
     skipExercise,
     reorderExercises,
