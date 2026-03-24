@@ -1,9 +1,24 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme';
-import { Card, ScreenContainer, EmptyState, LoadingSpinner } from '../../src/components/ui';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import {
+  Card,
+  ScreenContainer,
+  EmptyState,
+  ExpandableCard,
+  AnimatedNumber,
+  Sparkline,
+  QuickActionSheet,
+  SmartHeader,
+} from '../../src/components/ui';
+
+import { useQuickActions } from '../../src/hooks/useQuickActions';
+import { MuscleAnatomyDiagram } from '../../src/components/MuscleAnatomyDiagram';
+import type { MuscleId } from '../../src/types/workout';
+import { ProgressTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
 import { useHealthStore } from '../../src/stores/health-store';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { usePersonalRecords } from '../../src/hooks/usePersonalRecords';
@@ -29,6 +44,9 @@ import {
   getDemoNutritionWeek,
   DEMO_NUTRITION_TARGETS,
 } from '../../src/lib/demo-mode';
+import { generateInsights, type InsightContext as InsightCtx } from '../../src/lib/insight-engine';
+import { InsightBadge } from '../../src/components/ui';
+import { useCoachStore } from '../../src/stores/coach-store';
 
 // ── Date Range Types ──────────────────────────────────────────────
 
@@ -78,6 +96,8 @@ export default function ProgressTab() {
   const isHealthConnected = useHealthStore((s) => s.isConnected);
   const recentWeight = useHealthStore((s) => s.recentWeight);
   const syncEnabled = useHealthStore((s) => s.syncEnabled);
+  const healthInitialized = useHealthStore((s) => s.isInitialized);
+  const initHealth = useHealthStore((s) => s.initialize);
   const isInitialized = useWorkoutStore((s) => s.isInitialized);
   const exercises = useWorkoutStore((s) => s.exercises);
   const dailyLogs = useNutritionStore((s) => s.dailyLogs);
@@ -141,7 +161,8 @@ export default function ProgressTab() {
   useEffect(() => {
     if (!measurementsInitialized) initMeasurements();
     if (!achievementsInitialized) initAchievements();
-  }, [measurementsInitialized, achievementsInitialized, initMeasurements, initAchievements]);
+    if (!healthInitialized) initHealth();
+  }, [measurementsInitialized, achievementsInitialized, healthInitialized, initMeasurements, initAchievements, initHealth]);
 
   // Check achievements when data changes
   useEffect(() => {
@@ -397,18 +418,235 @@ export default function ProgressTab() {
       .slice(0, 5);
   }, [demo, demoPRs, allRecords]);
 
+  // ── Inline Insight (workout / streak) ──────────────────────────
+  const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
+  const progressInsight = useMemo(() => {
+    const recentPRList = bestPRs.map((pr) => ({
+      exercise: pr.exerciseName,
+      weight: pr.weight,
+      date: pr.date,
+    }));
+    const wTrend: 'up' | 'down' | 'stable' | undefined =
+      weightTrend === 'up' ? 'up' : weightTrend === 'down' ? 'down' : weightTrend === 'same' ? 'stable' : undefined;
+    const ctx: InsightCtx = {
+      timeOfDay: new Date().getHours(),
+      workoutsThisWeek: filteredHistory.length,
+      currentStreak: displayStreak,
+      lastWorkoutDate: displayHistory[0]?.completedAt?.split('T')[0],
+      recentPRs: recentPRList,
+      weightTrend: wTrend,
+    };
+    return generateInsights(ctx)
+      .filter((i) => i.category === 'workout' || i.category === 'streak')
+      .slice(0, 1)[0] ?? null;
+  }, [bestPRs, weightTrend, filteredHistory, displayStreak, displayHistory]);
+
+  const handleAskInsight = useCallback((prompt: string) => {
+    setPrefilledContext('progress', prompt);
+    router.push('/(tabs)/coach');
+  }, [setPrefilledContext, router]);
+
+  // ── Quick Actions ──────────────────────────────────────────────
+
+  const quickActions = useQuickActions();
+
+  const handleStatLongPress = useCallback(
+    (label: string, expandFn: () => void) => {
+      quickActions.show({
+        title: label,
+        subtitle: 'Quick Actions',
+        actions: [
+          {
+            id: 'see-trend',
+            label: 'See Full Trend',
+            icon: 'analytics-outline',
+            onPress: expandFn,
+          },
+          {
+            id: 'set-goal',
+            label: 'Set Goal',
+            icon: 'flag-outline',
+            onPress: () => {},
+            badge: 'Soon',
+            disabled: true,
+          },
+          {
+            id: 'share',
+            label: 'Share',
+            icon: 'share-outline',
+            onPress: () => {},
+            badge: 'Soon',
+            disabled: true,
+          },
+        ],
+      });
+    },
+    [quickActions],
+  );
+
+  const handlePRLongPress = useCallback(
+    (exerciseName: string, expandFn: () => void) => {
+      quickActions.show({
+        title: exerciseName,
+        subtitle: 'PR Actions',
+        actions: [
+          {
+            id: 'view-history',
+            label: 'View Exercise History',
+            icon: 'time-outline',
+            onPress: expandFn,
+          },
+          {
+            id: 'challenge',
+            label: 'Challenge Yourself',
+            icon: 'flash-outline',
+            onPress: () => {},
+            badge: 'AI',
+            disabled: true,
+          },
+        ],
+      });
+    },
+    [quickActions],
+  );
+
+  // ── Sparkline Data for Stat Cards ────────────────────────────────
+
+  const workoutSparkline = useMemo(() => {
+    // Group workouts by week over the last 12 weeks
+    const weeks: number[] = [];
+    for (let w = 11; w >= 0; w--) {
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - (w + 1) * 7);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date();
+      weekEnd.setDate(weekEnd.getDate() - w * 7);
+      weekEnd.setHours(23, 59, 59, 999);
+      const count = displayHistory.filter((s) => {
+        const d = new Date(s.completedAt);
+        return d >= weekStart && d <= weekEnd;
+      }).length;
+      weeks.push(count);
+    }
+    return weeks;
+  }, [displayHistory]);
+
+  const volumeSparkline = useMemo(() => {
+    const weeks: number[] = [];
+    for (let w = 11; w >= 0; w--) {
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - (w + 1) * 7);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date();
+      weekEnd.setDate(weekEnd.getDate() - w * 7);
+      weekEnd.setHours(23, 59, 59, 999);
+      const vol = displayHistory
+        .filter((s) => {
+          const d = new Date(s.completedAt);
+          return d >= weekStart && d <= weekEnd;
+        })
+        .reduce((sum, s) => sum + s.totalVolume, 0);
+      weeks.push(vol);
+    }
+    return weeks;
+  }, [displayHistory]);
+
+  const getTrendDirection = useCallback((data: number[]): 'up' | 'steady' | 'down' => {
+    if (data.length < 2) return 'steady';
+    const recent = data.slice(-3);
+    const earlier = data.slice(-6, -3);
+    const recentAvg = recent.reduce((s, v) => s + v, 0) / recent.length;
+    const earlierAvg = earlier.length > 0 ? earlier.reduce((s, v) => s + v, 0) / earlier.length : recentAvg;
+    const pctChange = earlierAvg > 0 ? ((recentAvg - earlierAvg) / earlierAvg) * 100 : 0;
+    if (pctChange > 5) return 'up';
+    if (pctChange < -5) return 'down';
+    return 'steady';
+  }, []);
+
+  const trendArrow = useCallback((dir: 'up' | 'steady' | 'down') => {
+    switch (dir) {
+      case 'up': return '↑';
+      case 'down': return '↓';
+      default: return '→';
+    }
+  }, []);
+
+  const trendColor = useCallback((dir: 'up' | 'steady' | 'down', colors: { success: string; error: string; textTertiary: string }) => {
+    switch (dir) {
+      case 'up': return colors.success;
+      case 'down': return colors.error;
+      default: return colors.textTertiary;
+    }
+  }, []);
+
+  // ── Measurement sparkline ────────────────────────────────────────
+
+  const weightSparkline = useMemo(() => {
+    return measurements
+      .filter((m) => m.weightKg != null)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-12)
+      .map((m) => m.weightKg as number);
+  }, [measurements]);
+
+  // ── Muscle anatomy highlights ────────────────────────────────────
+
+  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState<string | null>(null);
+
+  const muscleAnatomyHighlights = useMemo(() => {
+    const muscleGroupToMuscleIds: Record<string, MuscleId[]> = {
+      chest: ['pectoralis_major', 'pectoralis_minor'],
+      back: ['latissimus_dorsi', 'trapezius', 'rhomboids', 'erector_spinae'],
+      shoulders: ['deltoid_anterior', 'deltoid_lateral', 'deltoid_posterior'],
+      legs: ['quadriceps', 'hamstrings', 'glutes', 'calves', 'adductors', 'hip_flexors'],
+      arms: ['biceps', 'triceps', 'forearms', 'brachialis'],
+      core: ['rectus_abdominis', 'obliques', 'transverse_abdominis'],
+    };
+
+    const maxSets = Math.max(...muscleGroupBalance.groups.map((g) => g.sets), 1);
+    const highlights: Array<{ muscleId: MuscleId; state: 'fresh' | 'targeted' | 'recovering' | 'inactive'; opacity: number }> = [];
+
+    for (const group of muscleGroupBalance.groups) {
+      const ids = muscleGroupToMuscleIds[group.group];
+      if (!ids) continue;
+      const intensity = group.sets / maxSets;
+      const state = intensity > 0.6 ? 'targeted' as const : intensity > 0.2 ? 'fresh' as const : 'inactive' as const;
+      for (const id of ids) {
+        highlights.push({ muscleId: id, state, opacity: Math.max(intensity, 0.2) });
+      }
+    }
+    return highlights;
+  }, [muscleGroupBalance]);
+
+  // ── ExpandableCard ref triggers ──────────────────────────────────
+  // We track expanded states so long-press quick actions can expand cards
+  const [expandedStats, setExpandedStats] = useState<Record<string, boolean>>({});
+  const statExpandToggle = useCallback((key: string) => {
+    setExpandedStats((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   if (!isInitialized && !demo) {
     return (
       <ScreenContainer>
-        <LoadingSpinner fullScreen message="Loading your progress..." />
+        <ProgressTabSkeleton />
       </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer>
+      <Animated.View entering={FadeIn.duration(200)} style={{ flex: 1 }}>
       <View style={[styles.header, { paddingTop: spacing.base, paddingBottom: spacing.lg }]}>
-        <Text style={[typography.h1, { color: colors.text }]}>Progress</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.h1, { color: colors.text }]}>Progress</Text>
+          <SmartHeader tab="progress" />
+        </View>
+        <TouchableOpacity
+          onPress={() => router.push('/settings')}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Date Range Selector */}
@@ -441,24 +679,111 @@ export default function ProgressTab() {
         ))}
       </View>
 
-      {/* Stats Overview */}
+      {/* Stats Overview — ExpandableCard + AnimatedNumber */}
       <View style={[styles.statsRow, { marginBottom: spacing.base, gap: spacing.sm }]}>
-        {[
-          { label: 'Workouts', value: String(filteredHistory.length), icon: 'barbell-outline' as const },
-          { label: 'Streak', value: `${displayStreak}d`, icon: 'flame-outline' as const },
-          { label: 'PRs', value: String(displayRecentPRs.length), icon: 'trophy-outline' as const },
-        ].map((stat) => (
-          <Card key={stat.label} style={[styles.statCard, { flex: 1 }]}>
-            <Ionicons name={stat.icon} size={20} color={colors.primary} />
-            <Text style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}>
-              {stat.value}
-            </Text>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>{stat.label}</Text>
-          </Card>
-        ))}
+        {/* Workouts */}
+        <View style={{ flex: 1 }}>
+          <ExpandableCard
+            expandedContent={
+              <View>
+                <Sparkline data={workoutSparkline} width={100} height={40} showFill animated />
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm }}>
+                  <Text style={[typography.caption, { color: trendColor(getTrendDirection(workoutSparkline), colors) }]}>
+                    {trendArrow(getTrendDirection(workoutSparkline))} {getTrendDirection(workoutSparkline) === 'up' ? 'Improving' : getTrendDirection(workoutSparkline) === 'down' ? 'Declining' : 'Steady'}
+                  </Text>
+                </View>
+                <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>
+                  All-time: {displayTotalWorkouts} workouts
+                </Text>
+              </View>
+            }
+          >
+            <Pressable
+              onLongPress={() => handleStatLongPress('Workouts', () => statExpandToggle('workouts'))}
+              style={styles.statCard}
+            >
+              <Ionicons name="barbell-outline" size={20} color={colors.primary} />
+              <AnimatedNumber
+                value={filteredHistory.length}
+                animateOnMount
+                style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}
+              />
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>Workouts</Text>
+            </Pressable>
+          </ExpandableCard>
+        </View>
+
+        {/* Streak */}
+        <View style={{ flex: 1 }}>
+          <ExpandableCard
+            expandedContent={
+              <View>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  Current streak
+                </Text>
+                <Text style={[typography.h3, { color: colors.warning, marginTop: spacing.xs }]}>
+                  {displayStreak} days 🔥
+                </Text>
+                <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.sm }]}>
+                  Keep going! Consistency is key.
+                </Text>
+              </View>
+            }
+          >
+            <Pressable
+              onLongPress={() => handleStatLongPress('Streak', () => statExpandToggle('streak'))}
+              style={styles.statCard}
+            >
+              <Ionicons name="flame-outline" size={20} color={colors.primary} />
+              <AnimatedNumber
+                value={displayStreak}
+                animateOnMount
+                style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}
+                formatter={(n) => `${Math.round(n)}d`}
+              />
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>Streak</Text>
+            </Pressable>
+          </ExpandableCard>
+        </View>
+
+        {/* PRs */}
+        <View style={{ flex: 1 }}>
+          <ExpandableCard
+            expandedContent={
+              <View>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  Total personal records
+                </Text>
+                <Text style={[typography.h3, { color: colors.warning, marginTop: spacing.xs }]}>
+                  {displayRecentPRs.length} PRs
+                </Text>
+                {displayRecentPRs.length > 0 && (
+                  <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.sm }]}>
+                    Latest: {displayRecentPRs[0]?.date
+                      ? new Date(displayRecentPRs[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      : 'N/A'}
+                  </Text>
+                )}
+              </View>
+            }
+          >
+            <Pressable
+              onLongPress={() => handleStatLongPress('PRs', () => statExpandToggle('prs'))}
+              style={styles.statCard}
+            >
+              <Ionicons name="trophy-outline" size={20} color={colors.primary} />
+              <AnimatedNumber
+                value={displayRecentPRs.length}
+                animateOnMount
+                style={[typography.h2, { color: colors.text, marginTop: spacing.xs }]}
+              />
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>PRs</Text>
+            </Pressable>
+          </ExpandableCard>
+        </View>
       </View>
 
-      {/* Achievements Section */}
+      {/* Achievements Section — ExpandableCard per badge */}
       <View style={{ marginBottom: spacing.lg }}>
         <View style={[styles.sectionTitleRow, { marginBottom: spacing.md, justifyContent: 'space-between' }]}>
           <Text style={[typography.h3, { color: colors.text }]}>Achievements</Text>
@@ -475,34 +800,69 @@ export default function ProgressTab() {
             const earned = earnedIds.has(achievement.id);
             const earnedEntry = earnedAchievements.find((e) => e.id === achievement.id);
             return (
-              <AchievementBadge
+              <ExpandableCard
                 key={achievement.id}
-                achievement={achievement}
-                earned={earned}
-                earnedDate={earnedEntry?.dateEarned}
-                progressHint={
-                  !earned && achievement.progressHint
-                    ? achievement.progressHint({
-                        totalWorkouts: displayTotalWorkouts,
-                        totalPRs: displayRecentPRs.length,
-                        totalVolumeLbs: displayTotalVolume * KG_TO_LB,
-                        currentStreak: displayStreak,
-                        totalMealsLogged: 0,
-                        consecutiveMealDays: 0,
-                        totalPhotos: useMeasurementsStore.getState().photos.length,
-                        completedAllPlannedThisWeek: false,
-                        history: [],
-                      })
-                    : undefined
+                style={{ width: 100 }}
+                expandedContent={
+                  <View>
+                    <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+                      {achievement.description}
+                    </Text>
+                    {earned && earnedEntry?.dateEarned ? (
+                      <Text style={[typography.caption, { color: colors.success }]}>
+                        Earned {new Date(earnedEntry.dateEarned).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    ) : (
+                      <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                        {achievement.progressHint
+                          ? achievement.progressHint({
+                              totalWorkouts: displayTotalWorkouts,
+                              totalPRs: displayRecentPRs.length,
+                              totalVolumeLbs: displayTotalVolume * KG_TO_LB,
+                              currentStreak: displayStreak,
+                              totalMealsLogged: 0,
+                              consecutiveMealDays: 0,
+                              totalPhotos: useMeasurementsStore.getState().photos.length,
+                              completedAllPlannedThisWeek: false,
+                              history: [],
+                            })
+                          : 'Keep going!'}
+                      </Text>
+                    )}
+                    <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>
+                      Category: {achievement.category}
+                    </Text>
+                  </View>
                 }
-                size="sm"
-              />
+              >
+                <AchievementBadge
+                  achievement={achievement}
+                  earned={earned}
+                  earnedDate={earnedEntry?.dateEarned}
+                  progressHint={
+                    !earned && achievement.progressHint
+                      ? achievement.progressHint({
+                          totalWorkouts: displayTotalWorkouts,
+                          totalPRs: displayRecentPRs.length,
+                          totalVolumeLbs: displayTotalVolume * KG_TO_LB,
+                          currentStreak: displayStreak,
+                          totalMealsLogged: 0,
+                          consecutiveMealDays: 0,
+                          totalPhotos: useMeasurementsStore.getState().photos.length,
+                          completedAllPlannedThisWeek: false,
+                          history: [],
+                        })
+                      : undefined
+                  }
+                  size="sm"
+                />
+              </ExpandableCard>
             );
           })}
         </ScrollView>
       </View>
 
-      {/* Monthly Volume Comparison */}
+      {/* Monthly Volume Comparison — AnimatedNumber */}
       <View style={{ marginBottom: spacing.lg }}>
         <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
           Monthly Volume
@@ -511,9 +871,12 @@ export default function ProgressTab() {
           <View style={styles.monthlyCompare}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.caption, { color: colors.textTertiary }]}>This Month</Text>
-              <Text style={[typography.h2, { color: colors.text }]}>
-                {Math.round(monthlyComparison.current).toLocaleString()} kg
-              </Text>
+              <AnimatedNumber
+                value={Math.round(monthlyComparison.current)}
+                animateOnMount
+                style={[typography.h2, { color: colors.text }]}
+                formatter={(n) => `${Math.round(n).toLocaleString()} kg`}
+              />
               <View style={[styles.volBar, { marginTop: spacing.sm }]}>
                 <View
                   style={{
@@ -530,9 +893,12 @@ export default function ProgressTab() {
             <View style={{ width: spacing.base }} />
             <View style={{ flex: 1 }}>
               <Text style={[typography.caption, { color: colors.textTertiary }]}>Last Month</Text>
-              <Text style={[typography.h2, { color: colors.textSecondary }]}>
-                {Math.round(monthlyComparison.previous).toLocaleString()} kg
-              </Text>
+              <AnimatedNumber
+                value={Math.round(monthlyComparison.previous)}
+                animateOnMount
+                style={[typography.h2, { color: colors.textSecondary }]}
+                formatter={(n) => `${Math.round(n).toLocaleString()} kg`}
+              />
               <View style={[styles.volBar, { marginTop: spacing.sm }]}>
                 <View
                   style={{
@@ -601,9 +967,15 @@ export default function ProgressTab() {
                 );
               })}
             </View>
-            <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
-              Total: {Math.round(displayVolume.reduce((s, d) => s + d.volume, 0)).toLocaleString()} kg
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: spacing.sm }}>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>Total: </Text>
+              <AnimatedNumber
+                value={Math.round(displayVolume.reduce((s, d) => s + d.volume, 0))}
+                animateOnMount
+                style={[typography.bodySmall, { color: colors.textSecondary }]}
+                formatter={(n) => `${Math.round(n).toLocaleString()} kg`}
+              />
+            </View>
           </Card>
         </View>
       )}
@@ -650,13 +1022,85 @@ export default function ProgressTab() {
         </View>
       )}
 
-      {/* Muscle Group Balance */}
+      {/* Muscle Group Balance — ExpandableCard + MuscleAnatomyDiagram */}
       {muscleGroupBalance.groups.length > 0 && (
         <View style={{ marginBottom: spacing.lg }}>
           <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
             Muscle Group Balance
           </Text>
-          <Card>
+          <ExpandableCard
+            expandedContent={
+              <View>
+                {/* Interactive Muscle Anatomy Diagram */}
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.md, marginBottom: spacing.md }}>
+                  <MuscleAnatomyDiagram
+                    view="front"
+                    highlights={muscleAnatomyHighlights}
+                    width={130}
+                    height={260}
+                    interactive
+                    onMusclePress={(muscleId) => {
+                      // Map muscle ID back to group
+                      const groupMap: Record<string, string> = {
+                        pectoralis_major: 'chest', pectoralis_minor: 'chest',
+                        latissimus_dorsi: 'back', trapezius: 'back', rhomboids: 'back', erector_spinae: 'back',
+                        deltoid_anterior: 'shoulders', deltoid_lateral: 'shoulders', deltoid_posterior: 'shoulders',
+                        quadriceps: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs',
+                        adductors: 'legs', hip_flexors: 'legs', abductors: 'legs',
+                        biceps: 'arms', triceps: 'arms', forearms: 'arms', brachialis: 'arms',
+                        rectus_abdominis: 'core', obliques: 'core', transverse_abdominis: 'core',
+                      };
+                      const group = groupMap[muscleId];
+                      setSelectedMuscleGroup(group === selectedMuscleGroup ? null : (group ?? null));
+                    }}
+                    showLabels
+                    variant="full"
+                  />
+                  <MuscleAnatomyDiagram
+                    view="back"
+                    highlights={muscleAnatomyHighlights}
+                    width={130}
+                    height={260}
+                    interactive
+                    onMusclePress={(muscleId) => {
+                      const groupMap: Record<string, string> = {
+                        latissimus_dorsi: 'back', trapezius: 'back', rhomboids: 'back',
+                        erector_spinae: 'back', lower_back: 'back',
+                        deltoid_posterior: 'shoulders', deltoid_lateral: 'shoulders',
+                        hamstrings: 'legs', glutes: 'legs', gluteus_medius: 'legs',
+                        calves: 'legs', gastrocnemius: 'legs', soleus: 'legs',
+                        triceps: 'arms',
+                      };
+                      const group = groupMap[muscleId];
+                      setSelectedMuscleGroup(group === selectedMuscleGroup ? null : (group ?? null));
+                    }}
+                    showLabels
+                    variant="full"
+                  />
+                </View>
+                {/* Selected muscle group detail */}
+                {selectedMuscleGroup && (() => {
+                  const group = muscleGroupBalance.groups.find((g) => g.group === selectedMuscleGroup);
+                  if (!group) return null;
+                  return (
+                    <View style={[styles.muscleDetailCard, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs }}>
+                        <View style={[styles.colorDot, { backgroundColor: group.color }]} />
+                        <Text style={[typography.label, { color: colors.text }]}>{group.label}</Text>
+                      </View>
+                      <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                        {group.sets} sets · {Math.round(group.pct)}% of total
+                      </Text>
+                    </View>
+                  );
+                })()}
+                <Text style={[typography.caption, { color: colors.textTertiary, textAlign: 'center' }]}>
+                  Tap a muscle group for details
+                </Text>
+              </View>
+            }
+          >
+            {/* Collapsed: percentage bar list */}
             {muscleGroupBalance.groups.map((group) => {
               const isLow = group.pct < (100 / muscleGroupBalance.groups.length) * 0.5;
               return (
@@ -692,7 +1136,7 @@ export default function ProgressTab() {
             <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.sm }]}>
               Based on {muscleGroupBalance.total} total sets in selected range
             </Text>
-          </Card>
+          </ExpandableCard>
         </View>
       )}
 
@@ -879,7 +1323,17 @@ export default function ProgressTab() {
         </View>
       )}
 
-      {/* Best PRs Section (Enhanced) */}
+      {/* Inline insight */}
+      {progressInsight && (
+        <View style={{ marginBottom: spacing.base }}>
+          <InsightBadge
+            insight={progressInsight}
+            onAskMore={progressInsight.coachPrompt ? () => handleAskInsight(progressInsight.coachPrompt!) : undefined}
+          />
+        </View>
+      )}
+
+      {/* Best PRs Section — ExpandableCard per PR */}
       <View style={{ marginBottom: spacing.lg }}>
         <View style={styles.sectionTitleRow}>
           <Ionicons name="trophy" size={20} color={colors.warning} />
@@ -894,59 +1348,155 @@ export default function ProgressTab() {
             description="Complete workouts to start tracking your personal records."
           />
         ) : (
-          bestPRs.map((pr, index) => (
-            <Card key={`${pr.exerciseId}-${index}`} style={{ marginBottom: spacing.sm }}>
-              <View style={styles.prRow}>
-                <View
-                  style={[
-                    styles.prRank,
-                    {
-                      backgroundColor: index === 0 ? colors.warningLight : colors.surfaceSecondary,
-                      borderRadius: radius.md,
-                    },
-                  ]}
+          bestPRs.map((pr, index) => {
+            const prHistory = demo ? null : getExercisePRHistory(pr.exerciseId);
+            const prSparklineData = prHistory && prHistory.length >= 2
+              ? prHistory.map((p) => p.maxWeight)
+              : null;
+            return (
+              <View key={`${pr.exerciseId}-${index}`} style={{ marginBottom: spacing.sm }}>
+                <ExpandableCard
+                  expandedContent={
+                    <View>
+                      {prSparklineData ? (
+                        <View>
+                          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                            Weight progression
+                          </Text>
+                          <Sparkline
+                            data={prSparklineData}
+                            width={260}
+                            height={60}
+                            showFill
+                            showDots
+                            animated
+                          />
+                          <View style={{ marginTop: spacing.sm }}>
+                            {prHistory?.slice(-3).reverse().map((point, i) => (
+                              <View key={i} style={[styles.progressPoint, { marginBottom: i < 2 ? spacing.xs : 0 }]}>
+                                <View style={[styles.progressDot, { backgroundColor: colors.primary, borderRadius: radius.full }]} />
+                                <Text style={[typography.caption, { color: colors.textSecondary, marginLeft: spacing.sm, flex: 1 }]}>
+                                  {typeof point.date === 'string' && point.date.length > 10
+                                    ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                    : point.date}
+                                </Text>
+                                <Text style={[typography.label, { color: colors.text }]}>
+                                  {point.maxWeight} kg
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      ) : (
+                        <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                          Log more sessions to see weight progression.
+                        </Text>
+                      )}
+                    </View>
+                  }
                 >
-                  <Text
-                    style={[
-                      typography.label,
-                      { color: index === 0 ? colors.warning : colors.textTertiary },
-                    ]}
+                  <Pressable
+                    onLongPress={() => handlePRLongPress(pr.exerciseName, () => {})}
                   >
-                    #{index + 1}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: spacing.sm }}>
-                  <Text style={[typography.label, { color: colors.text }]}>
-                    {pr.exerciseName}
-                  </Text>
-                  <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                    {pr.weight} kg x {pr.reps} reps
-                  </Text>
-                </View>
-                <Text style={[typography.caption, { color: colors.textTertiary }]}>
-                  {pr.date
-                    ? new Date(pr.date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })
-                    : ''}
-                </Text>
+                    <View style={styles.prRow}>
+                      <View
+                        style={[
+                          styles.prRank,
+                          {
+                            backgroundColor: index === 0 ? colors.warningLight : colors.surfaceSecondary,
+                            borderRadius: radius.md,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            typography.label,
+                            { color: index === 0 ? colors.warning : colors.textTertiary },
+                          ]}
+                        >
+                          #{index + 1}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                        <Text style={[typography.label, { color: colors.text }]}>
+                          {pr.exerciseName}
+                        </Text>
+                        <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                          {pr.weight} kg x {pr.reps} reps
+                        </Text>
+                      </View>
+                      <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                        {pr.date
+                          ? new Date(pr.date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            })
+                          : ''}
+                      </Text>
+                    </View>
+                  </Pressable>
+                </ExpandableCard>
               </View>
-            </Card>
-          ))
+            );
+          })
         )}
       </View>
 
-      {/* Body Measurements Card */}
+      {/* Body Measurements — ExpandableCard with weight sparkline */}
       <View style={{ marginBottom: spacing.lg }}>
         <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
           Body Measurements
         </Text>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => router.push('/progress/measurements')}
+        <ExpandableCard
+          expandedContent={
+            <View>
+              {weightSparkline.length >= 2 ? (
+                <View>
+                  <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                    Weight trend
+                  </Text>
+                  <Sparkline
+                    data={weightSparkline}
+                    width={260}
+                    height={60}
+                    showFill
+                    showDots
+                    animated
+                  />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm }}>
+                    <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                      Low: {imperial
+                        ? `${(Math.min(...weightSparkline) * KG_TO_LB).toFixed(1)} lbs`
+                        : `${Math.min(...weightSparkline).toFixed(1)} kg`}
+                    </Text>
+                    <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                      High: {imperial
+                        ? `${(Math.max(...weightSparkline) * KG_TO_LB).toFixed(1)} lbs`
+                        : `${Math.max(...weightSparkline).toFixed(1)} kg`}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>
+                  Log more weigh-ins to see your trend.
+                </Text>
+              )}
+              <TouchableOpacity
+                onPress={() => router.push('/progress/measurements')}
+                style={[styles.expandedLink, { marginTop: spacing.md }]}
+              >
+                <Text style={[typography.label, { color: colors.primary }]}>
+                  View All Measurements
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+          }
         >
-          <Card>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push('/progress/measurements')}
+          >
             {latestMeasurement && latestWeight != null ? (
               <View style={styles.measurementCard}>
                 <View style={{ flex: 1 }}>
@@ -954,9 +1504,13 @@ export default function ProgressTab() {
                     Latest Weight
                   </Text>
                   <View style={styles.weightTrendRow}>
-                    <Text style={[typography.h2, { color: colors.text }]}>
-                      {displayMeasurementWeight(latestWeight)}
-                    </Text>
+                    <AnimatedNumber
+                      value={imperial ? latestWeight * KG_TO_LB : latestWeight}
+                      animateOnMount
+                      decimals={1}
+                      style={[typography.h2, { color: colors.text }]}
+                      formatter={(n) => imperial ? `${n.toFixed(1)} lbs` : `${n.toFixed(1)} kg`}
+                    />
                     {weightTrend && (
                       <Ionicons
                         name={
@@ -975,6 +1529,13 @@ export default function ProgressTab() {
                               : colors.textTertiary
                         }
                         style={{ marginLeft: spacing.xs }}
+                      />
+                    )}
+                    {weightSparkline.length >= 2 && (
+                      <Sparkline
+                        data={weightSparkline}
+                        variant="inline"
+                        style={{ marginLeft: spacing.sm }}
                       />
                     )}
                   </View>
@@ -1010,8 +1571,8 @@ export default function ProgressTab() {
                 <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
               </View>
             )}
-          </Card>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </ExpandableCard>
       </View>
 
       {/* Congratulations Modal */}
@@ -1089,7 +1650,11 @@ export default function ProgressTab() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Quick Action Sheet */}
+      <QuickActionSheet {...quickActions.sheetProps} />
+
       <CoachFAB context="progress" label="Analyze My Progress" prefilledMessage="Analyze my progress this week" />
+      </Animated.View>
     </ScreenContainer>
   );
 }
@@ -1254,5 +1819,12 @@ const styles = StyleSheet.create({
   congratsButton: {
     alignItems: 'center',
     width: '100%',
+  },
+  muscleDetailCard: {},
+  expandedLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
 });

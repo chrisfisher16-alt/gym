@@ -40,6 +40,12 @@ export interface ExerciseLibraryEntry {
   defaultReps: string; // e.g. "8-12"
   defaultRestSeconds: number;
   illustrationUrl?: string; // URL to exercise illustration
+  force?: 'push' | 'pull' | 'static';
+  mechanic?: 'compound' | 'isolation';
+  level?: 'beginner' | 'intermediate' | 'expert';
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  heroImageUrl?: string;
 }
 
 // ── Day Types ───────────────────────────────────────────────────────
@@ -134,6 +140,7 @@ export interface ActiveWorkoutSession {
   notes: string;
   mood?: number; // 1-5
   defaultRestSeconds?: number;
+  restTimerExerciseId?: string;
 }
 
 export interface ActiveExercise {
@@ -149,6 +156,9 @@ export interface ActiveExercise {
   isSkipped: boolean;
   order: number;
   notes?: string;
+  targetReps?: string;
+  restTimerMode?: 'auto' | 'manual' | 'disabled' | 'off' | 'custom';
+  restTimerCustomSeconds?: number;
 }
 
 export interface ActiveSet {
@@ -162,6 +172,7 @@ export interface ActiveSet {
   isCompleted: boolean;
   isPR: boolean;
   completedAt?: string;
+  isAutoFilled?: boolean;
 }
 
 // ── Completed Session ───────────────────────────────────────────────
@@ -258,4 +269,98 @@ export interface DayVolume {
   date: string;
   volume: number;
   sets: number;
+}
+
+// ── Muscle Anatomy ──────────────────────────────────────────────────
+
+export type MuscleId =
+  | 'pectoralis_major'
+  | 'pectoralis_minor'
+  | 'deltoid_anterior'
+  | 'deltoid_lateral'
+  | 'deltoid_posterior'
+  | 'biceps'
+  | 'triceps'
+  | 'forearms'
+  | 'brachialis'
+  | 'brachioradialis'
+  | 'rectus_abdominis'
+  | 'obliques'
+  | 'transverse_abdominis'
+  | 'trapezius'
+  | 'rhomboids'
+  | 'latissimus_dorsi'
+  | 'erector_spinae'
+  | 'lower_back'
+  | 'upper_back'
+  | 'rotator_cuff'
+  | 'quadriceps'
+  | 'hamstrings'
+  | 'glutes'
+  | 'gluteus_medius'
+  | 'gluteus_minimus'
+  | 'hip_flexors'
+  | 'adductors'
+  | 'piriformis'
+  | 'calves'
+  | 'gastrocnemius'
+  | 'soleus'
+  | 'abductors'
+  | 'tibialis_anterior';
+
+export interface MuscleDiagramEntry {
+  muscle: MuscleId;
+  opacity: number;
+}
+
+export interface MuscleDiagramData {
+  primaryMuscles: MuscleDiagramEntry[];
+  secondaryMuscles: MuscleDiagramEntry[];
+}
+
+// ── Smart Workout ───────────────────────────────────────────────────
+
+export type WorkoutGoal = 'strength' | 'hypertrophy' | 'endurance' | 'general_fitness' | 'weight_loss';
+
+export type WorkoutMode = 'ai_suggested' | 'custom' | 'program';
+
+export interface SmartExercise {
+  exerciseId: string;
+  exerciseName: string;
+  category: MuscleGroup;
+  equipment: Equipment;
+  targetSets: number;
+  targetReps: string;
+  suggestedWeight?: number;
+  restSeconds: number;
+  isCompound: boolean;
+  supersetGroupId?: string;
+}
+
+export interface SmartWorkout {
+  id: string;
+  name: string;
+  targetMuscles: string[];
+  exercises: SmartExercise[];
+  estimatedDurationMinutes: number;
+  totalSets: number;
+  aiExplanation: string;
+  recoveryStatus: Record<string, number>;
+  generatedAt: string;
+  goal: WorkoutGoal;
+  isRestDay?: boolean;
+  warmupExerciseIds?: string[];
+}
+
+// ── Exercise History ────────────────────────────────────────────────
+
+export interface ExerciseHistoryEntry {
+  exerciseId: string;
+  lastWeight: number;
+  lastReps: number;
+  lastDate: string;
+  personalRecord: {
+    weight: number;
+    reps: number;
+  };
 }

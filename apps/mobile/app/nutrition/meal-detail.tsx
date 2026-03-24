@@ -5,7 +5,6 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +17,7 @@ import { useMealLog } from '../../src/hooks/useMealLog';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { calculateMealTotals, generateNutritionId, getMealTypeLabel, formatMealTime } from '../../src/lib/nutrition-utils';
 import type { MealItemEntry } from '../../src/types/nutrition';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MealDetailScreen() {
@@ -48,7 +48,7 @@ export default function MealDetailScreen() {
   const totals = calculateMealTotals(meal.items);
 
   const handleDelete = () => {
-    Alert.alert('Delete Meal', 'Are you sure you want to delete this meal?', [
+    crossPlatformAlert('Delete Meal', 'Are you sure you want to delete this meal?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -63,11 +63,11 @@ export default function MealDetailScreen() {
 
   const handleSaveAsTemplate = () => {
     saveMealAsTemplate(meal);
-    Alert.alert('Saved', `"${meal.name}" has been saved as a meal template.`);
+    crossPlatformAlert('Saved', `"${meal.name}" has been saved as a meal template.`);
   };
 
   const handleRemoveItem = (itemId: string) => {
-    Alert.alert('Remove Item', 'Remove this item from the meal?', [
+    crossPlatformAlert('Remove Item', 'Remove this item from the meal?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',

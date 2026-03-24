@@ -4,9 +4,18 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
-import { loadUserContext, loadConversationMessages, buildContextString } from '../_shared/memory.ts';
+import {
+  loadUserContext,
+  loadConversationMessages,
+  buildContextString,
+  loadStableContext,
+  loadDynamicContext,
+  buildStableContextString,
+  buildDynamicContextString,
+  classifyIntent,
+} from '../_shared/memory.ts';
 import { validateInput, validateOutput, checkRateLimit, logSafetyEvent, SAFETY_SYSTEM_PROMPT } from '../_shared/safety.ts';
-import type { ChatRequest, ChatResponse, AIMessage, AIToolDefinition, CoachTone, StructuredContent, ToolCallResult } from '../_shared/types.ts';
+import type { ChatRequest, ChatResponse, AIMessage, AIToolDefinition, CoachTone, StructuredContent, ToolCallResult, CacheableSystemBlock } from '../_shared/types.ts';
 
 // ── Tool Definitions for AI ─────────────────────────────────────────
 
@@ -15,7 +24,7 @@ const COACH_TOOLS: AIToolDefinition[] = [
     type: 'function',
     function: {
       name: 'get_user_profile',
-      description: 'Get the user\'s profile including goals and preferences',
+      description: 'Get the user\'s profile including goals and preferences. NOTE: Basic profile data is already provided in the system context — only call this tool if you need additional detail not present in the context above.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -23,7 +32,7 @@ const COACH_TOOLS: AIToolDefinition[] = [
     type: 'function',
     function: {
       name: 'get_recent_workouts',
-      description: 'Get the user\'s recent workout sessions',
+      description: 'Get the user\'s recent workout sessions with full exercise/set details. NOTE: A summary of recent workouts may already be in the system context — only call this if you need more detailed data (e.g., specific set weights, exercise order).',
       parameters: {
         type: 'object',
         properties: { count: { type: 'number', description: 'Number of sessions to return (default 5)' } },
@@ -34,7 +43,7 @@ const COACH_TOOLS: AIToolDefinition[] = [
     type: 'function',
     function: {
       name: 'get_recent_nutrition',
-      description: 'Get the user\'s recent nutrition data',
+      description: 'Get the user\'s recent nutrition data with full meal breakdowns. NOTE: A summary of recent nutrition may already be in the system context — only call this if you need more detailed data (e.g., specific meal items, timing).',
       parameters: {
         type: 'object',
         properties: { days: { type: 'number', description: 'Number of days to return (default 3)' } },
@@ -123,15 +132,61 @@ const COACH_TOOLS: AIToolDefinition[] = [
   },
 ];
 
-// ── System Prompt Builder ───────────────────────────────────────────
+// ── System Prompt Layer Builders (cache-optimized) ─────────────────
 
+const toneInstructions: Record<CoachTone, string> = {
+  direct: 'Be concise, data-driven, and straightforward. Skip pleasantries and focus on actionable advice. Use numbers and metrics when possible.',
+  balanced: 'Be friendly but focused. Provide clear advice with brief explanations. Balance encouragement with honest assessment.',
+  encouraging: 'Be warm, supportive, and motivating. Celebrate progress, no matter how small. Frame challenges positively and emphasize growth.',
+};
+
+/**
+ * Layer 1: Static system instructions — CACHED globally, identical for all users.
+ */
+function buildStaticSystemLayer(): string {
+  return `You are an AI health and fitness coach in a mobile app. You help users with workouts, nutrition, and health goals.
+
+${SAFETY_SYSTEM_PROMPT}
+
+## Response Format
+- Keep responses concise and mobile-friendly (users read on phones).
+- Use structured data when returning workout plans, meal analyses, or summaries.
+- When generating workout plans, use the generate_workout_plan tool.
+- When parsing meals, use the parse_meal_text tool.
+- All nutritional estimates should be clearly labeled as estimates.
+- Include actionable next steps when relevant.
+
+## Available Tools
+You can call tools to fetch data or generate structured content. Use them proactively when the user's question would benefit from real data.`;
+}
+
+/**
+ * Layer 2: User-specific stable context — CACHED per user session.
+ * Includes profile, goals, preferences, and communication tone.
+ */
+function buildUserContextLayer(stableContextString: string, coachTone: CoachTone): string {
+  return `## Communication Style
+${toneInstructions[coachTone]}
+
+## User Context
+${stableContextString}`;
+}
+
+/**
+ * Layer 3: Dynamic context — NOT cached, changes every request.
+ * Includes recent workouts, nutrition, memory summaries.
+ */
+function buildDynamicContextLayer(dynamicContextString: string): string {
+  if (!dynamicContextString.trim()) return '';
+  return `## Recent Activity
+${dynamicContextString}`;
+}
+
+/**
+ * @deprecated Use buildStaticSystemLayer + buildUserContextLayer + buildDynamicContextLayer
+ * with cacheOptions for cache-optimized prompting. Kept for backward compatibility.
+ */
 function buildSystemPrompt(contextString: string, coachTone: CoachTone): string {
-  const toneInstructions: Record<CoachTone, string> = {
-    direct: 'Be concise, data-driven, and straightforward. Skip pleasantries and focus on actionable advice. Use numbers and metrics when possible.',
-    balanced: 'Be friendly but focused. Provide clear advice with brief explanations. Balance encouragement with honest assessment.',
-    encouraging: 'Be warm, supportive, and motivating. Celebrate progress, no matter how small. Frame challenges positively and emphasize growth.',
-  };
-
   return `You are an AI health and fitness coach in a mobile app. You help users with workouts, nutrition, and health goals.
 
 ${SAFETY_SYSTEM_PROMPT}
@@ -189,11 +244,35 @@ Deno.serve(async (req: Request) => {
       return errorResponse(rateLimitCheck.reason ?? 'Rate limit exceeded', 429);
     }
 
-    // Load user context
-    const userContext = await loadUserContext(supabase, user_id);
-    const contextString = buildContextString(userContext);
-    const coachTone: CoachTone = (userContext.preferences?.coach_tone as CoachTone) ?? 'balanced';
-    const systemPrompt = buildSystemPrompt(contextString, coachTone);
+    // Classify intent for context-aware loading
+    const intent = classifyIntent(message);
+
+    // Load stable + dynamic context in parallel
+    const [stableCtx, dynamicCtx] = await Promise.all([
+      loadStableContext(supabase, user_id),
+      loadDynamicContext(supabase, user_id, intent),
+    ]);
+
+    const coachTone: CoachTone = (stableCtx.preferences?.coach_tone as CoachTone) ?? 'balanced';
+
+    // Build cache-optimized system prompt layers
+    const staticLayer = buildStaticSystemLayer();
+    const userLayer = buildUserContextLayer(buildStableContextString(stableCtx), coachTone);
+    const dynamicLayer = buildDynamicContextLayer(buildDynamicContextString(dynamicCtx));
+
+    const cachedSystemBlocks: CacheableSystemBlock[] = [
+      { text: staticLayer, cacheControl: true },
+      { text: userLayer, cacheControl: true },
+      ...(dynamicLayer.trim() ? [{ text: dynamicLayer }] : []),
+    ];
+
+    // Build userContext-compatible object for safety checks (backward compat)
+    const userContext = {
+      ...stableCtx,
+      recent_workouts: dynamicCtx.recent_workouts,
+      recent_nutrition: dynamicCtx.recent_nutrition,
+      memory_summaries: dynamicCtx.memory_summaries,
+    };
 
     // Get or create conversation
     let convId = conversation_id;
@@ -227,10 +306,9 @@ Deno.serve(async (req: Request) => {
       .select('id')
       .single();
 
-    // Build messages array
+    // Build messages array (no system message — system content goes via cacheOptions)
     const previousMessages = await loadConversationMessages(supabase, convId);
     const aiMessages: AIMessage[] = [
-      { role: 'system', content: systemPrompt },
       ...previousMessages.slice(0, -1).map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
@@ -238,18 +316,21 @@ Deno.serve(async (req: Request) => {
       { role: 'user', content: message },
     ];
 
-    // Call AI
+    // Call AI with cache-optimized system blocks
     const aiProvider = createAIProvider();
     const aiResponse = await aiProvider.chat(aiMessages, {
       tools: COACH_TOOLS,
       temperature: 0.7,
       max_tokens: 2048,
+      cacheOptions: { cachedSystemBlocks: cachedSystemBlocks },
     });
 
     // Handle tool calls if present
     let finalContent = aiResponse.content ?? '';
     const toolCallResults: ToolCallResult[] = [];
     let totalToolTokens = 0;
+    let followUpCacheReadTokens = 0;
+    let followUpCacheCreationTokens = 0;
 
     if (aiResponse.tool_calls.length > 0) {
       // Execute tool calls by calling the coach-tools function
@@ -296,14 +377,17 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      // Get final response with tool results
+      // Get final response with tool results (re-use cached system blocks)
       const followUpResponse = await aiProvider.chat(toolMessages, {
         temperature: 0.7,
         max_tokens: 2048,
+        cacheOptions: { cachedSystemBlocks: cachedSystemBlocks },
       });
 
       finalContent = followUpResponse.content ?? finalContent;
       totalToolTokens = followUpResponse.input_tokens + followUpResponse.output_tokens;
+      followUpCacheReadTokens = followUpResponse.cache_read_tokens ?? 0;
+      followUpCacheCreationTokens = followUpResponse.cache_creation_tokens ?? 0;
     }
 
     // Output safety check
@@ -365,6 +449,8 @@ Deno.serve(async (req: Request) => {
     const totalInputTokens = aiResponse.input_tokens;
     const totalOutputTokens = aiResponse.output_tokens;
     const totalTokens = totalInputTokens + totalOutputTokens + totalToolTokens;
+    const totalCacheReadTokens = (aiResponse.cache_read_tokens ?? 0) + followUpCacheReadTokens;
+    const totalCacheCreationTokens = (aiResponse.cache_creation_tokens ?? 0) + followUpCacheCreationTokens;
 
     await supabase.from('ai_usage_events').insert({
       user_id,
@@ -378,6 +464,10 @@ Deno.serve(async (req: Request) => {
       latency_ms: latencyMs,
       status: outputCheck.flagged ? 'flagged' : 'success',
       tool_calls_count: aiResponse.tool_calls.length,
+      cache_read_tokens: totalCacheReadTokens,
+      cache_creation_tokens: totalCacheCreationTokens,
+      cache_hit: totalCacheReadTokens > 0,
+      intent: intent,
       created_at: new Date().toISOString(),
     });
 

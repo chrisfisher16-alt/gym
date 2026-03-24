@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Platform, TextInput, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Platform, TextInput, Linking } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -18,7 +19,7 @@ function confirmAction(title: string, message: string): Promise<boolean> {
     return Promise.resolve(window.confirm(`${title}\n\n${message}`));
   }
   return new Promise((resolve) => {
-    Alert.alert(title, message, [
+    crossPlatformAlert(title, message, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
       { text: 'OK', style: 'destructive', onPress: () => resolve(true) },
     ]);

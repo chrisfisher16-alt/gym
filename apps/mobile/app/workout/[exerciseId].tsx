@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { useTheme } from '../../src/theme';
 import { useExerciseLibrary } from '../../src/hooks/useExerciseLibrary';
 import { usePersonalRecords } from '../../src/hooks/usePersonalRecords';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
-import { Badge, Card, Button } from '../../src/components/ui';
+import { Badge, Card, Button, BottomSheet } from '../../src/components/ui';
 import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import { getExerciseHistory } from '../../src/lib/workout-db';
 import { useWorkoutStore } from '../../src/stores/workout-store';
@@ -22,6 +22,8 @@ export default function ExerciseDetailScreen() {
   const { getRecordForExercise, getExercisePRHistory } = usePersonalRecords();
   const { isActive, addExerciseToSession } = useActiveWorkout();
   const history = useWorkoutStore((s) => s.history);
+  const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
+  const [showStartSheet, setShowStartSheet] = useState(false);
 
   const exercise = getExerciseById(exerciseId ?? '');
   const record = getRecordForExercise(exerciseId ?? '');
@@ -51,6 +53,18 @@ export default function ExerciseDetailScreen() {
     } else {
       router.replace('/workout/active');
     }
+  };
+
+  const handleBuildOwn = () => {
+    setShowStartSheet(false);
+    startEmptyWorkout();
+    addExerciseToSession(exercise);
+    router.push('/workout/active');
+  };
+
+  const handleBuildForMuscles = () => {
+    setShowStartSheet(false);
+    router.push('/workout/ai-generate');
   };
 
   const handleWatchTutorial = () => {
@@ -247,12 +261,56 @@ export default function ExerciseDetailScreen() {
         </Card>
       </ScrollView>
 
-      {/* Add to Workout FAB */}
-      {isActive && (
-        <View style={[styles.fab, { paddingHorizontal: spacing.base, paddingBottom: spacing.xl }]}>
+      {/* Add to Workout / Start Workout FAB */}
+      <View style={[styles.fab, { paddingHorizontal: spacing.base, paddingBottom: spacing.xl }]}>
+        {isActive ? (
           <Button title="Add to Workout" onPress={handleAddToWorkout} />
+        ) : (
+          <Button title="Start Workout" onPress={() => setShowStartSheet(true)} />
+        )}
+      </View>
+
+      <BottomSheet visible={showStartSheet} onClose={() => setShowStartSheet(false)} maxHeight={0.4} scrollable={false}>
+        <View style={{ padding: spacing.base }}>
+          <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.base }]}>
+            Start a Workout
+          </Text>
+
+          <TouchableOpacity
+            onPress={handleBuildOwn}
+            style={[styles.optionRow, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.sm }]}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: colors.primaryMuted }]}>
+              <Ionicons name="barbell-outline" size={24} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={[typography.label, { color: colors.text }]}>Build My Own Workout</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Start with {exercise.name} and add more exercises
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleBuildForMuscles}
+            style={[styles.optionRow, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base }]}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: colors.successLight || colors.primaryMuted }]}>
+              <Ionicons name="body-outline" size={24} color={colors.success || colors.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={[typography.label, { color: colors.text }]}>Build for Muscle Groups</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Select target muscles and we'll build your workout
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
         </View>
-      )}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -338,5 +396,16 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  optionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

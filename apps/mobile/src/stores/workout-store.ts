@@ -17,6 +17,7 @@ import {
   updatePersonalRecord,
   activeToCompleted,
 } from '../lib/workout-utils';
+import { preloadExerciseImages } from '../lib/exercise-image-preloader';
 
 // ── Storage Keys ────────────────────────────────────────────────────
 
@@ -76,8 +77,10 @@ interface WorkoutState {
   startEmptyWorkout: () => void;
 
   // Actions - Set Management
-  logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number) => void;
+  logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number, isAutoFilled?: boolean) => void;
+  cascadeWeight: (exerciseInstanceId: string, fromSetIndex: number, weight: number, reps: number) => void;
   completeSet: (exerciseInstanceId: string, setId: string) => void;
+  uncompleteSet: (exerciseInstanceId: string, setId: string, previousValues?: { weight?: number; reps?: number }) => void;
   updateSetRPE: (exerciseInstanceId: string, setId: string, rpe: number) => void;
   removeSet: (exerciseInstanceId: string, setId: string) => void;
   addSet: (exerciseInstanceId: string, setType?: 'working' | 'warmup' | 'drop' | 'failure') => void;
@@ -94,7 +97,10 @@ interface WorkoutState {
   replaceExercise: (exerciseInstanceId: string, newExercise: ExerciseLibraryEntry) => void;
 
   // Actions - Per-Exercise Rest Time
+  getExerciseRestTime: (exerciseId: string) => number;
   updateExerciseRestTime: (exerciseInstanceId: string, seconds: number) => void;
+  updateExerciseNotes: (exerciseInstanceId: string, notes: string) => void;
+  updateExerciseRestTimerMode: (exerciseInstanceId: string, mode: 'auto' | 'manual' | 'disabled' | 'off' | 'custom', customSeconds?: number) => void;
 
   // Actions - Timed Sets
   logTimedSet: (exerciseInstanceId: string, setId: string, durationSeconds: number) => void;
@@ -106,9 +112,16 @@ interface WorkoutState {
   removeSupersetGroup: (groupId: string) => void;
 
   // Actions - Rest Timer
+  autoRestTimer: boolean;
+  setAutoRestTimer: (enabled: boolean) => void;
+  restTimerDuration: number;
   startRestTimer: (durationSeconds: number) => void;
   clearRestTimer: () => void;
+  extendRestTimer: (additionalSeconds: number) => void;
   setDefaultRestSeconds: (seconds: number) => void;
+
+  // Computed
+  todayWorkoutStatus: () => 'pending' | 'active' | 'completed';
 
   // Actions - Workout Completion
   completeWorkout: () => CompletedSession | null;
@@ -126,6 +139,9 @@ interface WorkoutState {
   // Actions - Custom Exercise
   addCustomExercise: (exercise: ExerciseLibraryEntry) => void;
 
+  // Actions - History
+  deleteSession: (sessionId: string) => void;
+
   // Actions - Persistence
   persistActiveSession: () => Promise<void>;
 }
@@ -141,6 +157,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   defaultRestSeconds: 90,
   programCompletions: {},
   isInitialized: false,
+  autoRestTimer: true,
+  restTimerDuration: 0,
 
   // ── Initialize ──────────────────────────────────────────────────
 
@@ -341,6 +359,10 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     set({ activeSession: session });
     get().persistActiveSession();
+
+    // Preload exercise images for the session (fire and forget)
+    const exerciseIds = exercises.map(e => e.exerciseId);
+    preloadExerciseImages(exerciseIds).catch(() => {});
   },
 
   startEmptyWorkout: () => {
@@ -359,7 +381,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   // ── Set Management ──────────────────────────────────────────────
 
-  logSet: (exerciseInstanceId, setId, weight, reps) => {
+  logSet: (exerciseInstanceId, setId, weight, reps, isAutoFilled) => {
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -369,7 +391,38 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           ...exercise,
           sets: exercise.sets.map((s) => {
             if (s.id !== setId) return s;
-            return { ...s, weight, reps };
+            return { ...s, weight, reps, ...(isAutoFilled !== undefined ? { isAutoFilled } : {}) };
+          }),
+        };
+      });
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  cascadeWeight: (exerciseInstanceId, fromSetIndex, weight, reps) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((exercise) => {
+        if (exercise.id !== exerciseInstanceId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((s, idx) => {
+            // Only cascade forward from the edited set
+            if (idx <= fromSetIndex) return s;
+            // Skip completed sets
+            if (s.isCompleted) return s;
+            // Skip sets that were manually edited (isAutoFilled explicitly false)
+            if (s.isAutoFilled === false) return s;
+            // Apply cascade to empty or previously auto-filled sets
+            if (s.weight === undefined || s.isAutoFilled === true || s.isAutoFilled === undefined) {
+              return { ...s, weight, reps, isAutoFilled: true };
+            }
+            return s;
           }),
         };
       });
@@ -429,6 +482,35 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       return {
         activeSession: { ...state.activeSession, exercises },
         personalRecords: updatedRecords,
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  uncompleteSet: (exerciseInstanceId, setId, previousValues) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((exercise) => {
+        if (exercise.id !== exerciseInstanceId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((s) => {
+            if (s.id !== setId) return s;
+            return {
+              ...s,
+              isCompleted: false,
+              isPR: false,
+              completedAt: undefined,
+              ...(previousValues?.weight !== undefined ? { weight: previousValues.weight } : {}),
+              ...(previousValues?.reps !== undefined ? { reps: previousValues.reps } : {}),
+            };
+          }),
+        };
+      });
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
       };
     });
     get().persistActiveSession();
@@ -496,6 +578,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         if (lastCompleted && setType === 'working') {
           newSet.weight = lastCompleted.weight;
           newSet.reps = lastCompleted.reps;
+          newSet.isAutoFilled = true;
         }
 
         let updatedSets: ActiveSet[];
@@ -545,6 +628,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           isCompleted: false,
           isPR: false,
         })),
+        restSeconds: exercise.defaultRestSeconds,
         isTimeBased: exercise.isTimeBased,
         isBodyweight: exercise.isBodyweight,
         defaultDurationSeconds: exercise.defaultDurationSeconds,
@@ -577,6 +661,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           isCompleted: false,
           isPR: false,
         })),
+        restSeconds: exercise.defaultRestSeconds,
         isTimeBased: exercise.isTimeBased,
         isBodyweight: exercise.isBodyweight,
         defaultDurationSeconds: exercise.defaultDurationSeconds,
@@ -631,6 +716,25 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     get().persistActiveSession();
   },
 
+  getExerciseRestTime: (exerciseId) => {
+    const state = get();
+    if (state.activeSession) {
+      // 1. Check exercise-level override
+      const exercise = state.activeSession.exercises.find(
+        (e) => e.exerciseId === exerciseId,
+      );
+      if (exercise?.restSeconds != null && exercise.restSeconds > 0) {
+        return exercise.restSeconds;
+      }
+      // 2. Check session default
+      if (state.activeSession.defaultRestSeconds != null && state.activeSession.defaultRestSeconds > 0) {
+        return state.activeSession.defaultRestSeconds;
+      }
+    }
+    // 3. Global default
+    return state.defaultRestSeconds || 90;
+  },
+
   updateExerciseRestTime: (exerciseInstanceId, seconds) => {
     const clamped = Math.max(5, Math.min(600, seconds));
     set((state) => {
@@ -647,9 +751,26 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         e.exerciseId === target.exerciseId ? { ...e, restSeconds: clamped } : e,
       );
 
-      return {
-        activeSession: { ...state.activeSession, exercises },
-      };
+      // Live-update running timer if it belongs to this exercise
+      const isTimerForThisExercise =
+        state.activeSession.restTimerEndAt &&
+        state.activeSession.restTimerExerciseId === target.exerciseId;
+
+      const timerUpdate = isTimerForThisExercise
+        ? {
+            restTimerDuration: clamped,
+            activeSession: {
+              ...state.activeSession,
+              exercises,
+              restTimerDuration: clamped,
+              restTimerEndAt: new Date(Date.now() + clamped * 1000).toISOString(),
+            },
+          }
+        : {
+            activeSession: { ...state.activeSession, exercises },
+          };
+
+      return timerUpdate;
     });
     get().persistActiveSession();
   },
@@ -812,12 +933,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   // ── Rest Timer ──────────────────────────────────────────────────
 
+  setAutoRestTimer: (enabled) => {
+    set({ autoRestTimer: enabled });
+  },
+
   startRestTimer: (durationSeconds) => {
     set((state) => {
       if (!state.activeSession) return state;
 
       const endAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
       return {
+        restTimerDuration: durationSeconds,
         activeSession: {
           ...state.activeSession,
           restTimerEndAt: endAt,
@@ -832,6 +958,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set((state) => {
       if (!state.activeSession) return state;
       return {
+        restTimerDuration: 0,
         activeSession: {
           ...state.activeSession,
           restTimerEndAt: undefined,
@@ -841,10 +968,40 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     });
   },
 
+  extendRestTimer: (additionalSeconds) => {
+    set((state) => {
+      if (!state.activeSession?.restTimerEndAt) return state;
+      const currentEnd = new Date(state.activeSession.restTimerEndAt).getTime();
+      const newEnd = new Date(currentEnd + additionalSeconds * 1000).toISOString();
+      const newDuration = (state.activeSession.restTimerDuration ?? 0) + additionalSeconds;
+      return {
+        restTimerDuration: newDuration,
+        activeSession: {
+          ...state.activeSession,
+          restTimerEndAt: newEnd,
+          restTimerDuration: newDuration,
+        },
+      };
+    });
+    get().persistActiveSession();
+  },
+
   setDefaultRestSeconds: (seconds) => {
     const clamped = Math.max(5, Math.min(600, seconds));
     set({ defaultRestSeconds: clamped });
     AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_REST_SECONDS, clamped.toString());
+  },
+
+  // ── Today Workout Status ──────────────────────────────────────
+
+  todayWorkoutStatus: () => {
+    const { activeSession, history } = get();
+    if (activeSession) return 'active';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const completedToday = history.some(
+      (s) => new Date(s.completedAt).toISOString().split('T')[0] === todayStr,
+    );
+    return completedToday ? 'completed' : 'pending';
   },
 
   // ── Workout Completion ──────────────────────────────────────────
@@ -872,6 +1029,14 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   cancelWorkout: () => {
     set({ activeSession: null });
     AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+  },
+
+  // ── Delete Session from History ────────────────────────────────
+
+  deleteSession: (sessionId) => {
+    const history = get().history.filter((s) => s.id !== sessionId);
+    set({ history });
+    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
   },
 
   // ── Session Metadata ────────────────────────────────────────────
@@ -953,6 +1118,40 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       );
       return { exercises };
     });
+  },
+
+  // ── Exercise Notes & Rest Timer Mode ──────────────────────────
+
+  updateExerciseNotes: (exerciseInstanceId, notes) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+      return {
+        activeSession: {
+          ...state.activeSession,
+          exercises: state.activeSession.exercises.map((e) =>
+            e.id === exerciseInstanceId ? { ...e, notes } : e,
+          ),
+        },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  updateExerciseRestTimerMode: (exerciseInstanceId, mode, customSeconds) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+      return {
+        activeSession: {
+          ...state.activeSession,
+          exercises: state.activeSession.exercises.map((e) =>
+            e.id === exerciseInstanceId
+              ? { ...e, restTimerMode: mode, ...(customSeconds != null ? { restTimerCustomSeconds: customSeconds } : {}) }
+              : e,
+          ),
+        },
+      };
+    });
+    get().persistActiveSession();
   },
 
   // ── Persistence ─────────────────────────────────────────────────

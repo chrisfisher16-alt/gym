@@ -15,12 +15,13 @@ import { useGroceryStore } from '../stores/grocery-store';
 import type { CompletedSession, CompletedSet, PersonalRecord } from '../types/workout';
 import type { DailyNutritionLog, NutritionTargets } from '../types/nutrition';
 import { getDateString } from '../lib/nutrition-utils';
+import { type UserIntent, type ContextRequirements, INTENT_CONTEXT_MAP } from './intent-detector';
 
 // ── Types ───────────────────────────────────────────────────────────
 
 export type CoachTone = 'direct' | 'balanced' | 'encouraging';
 
-interface UserContext {
+export interface UserContext {
   displayName?: string;
   goals?: string;
   coachTone: CoachTone;
@@ -69,6 +70,7 @@ interface UserContext {
   supplementsSummary?: string;
   activeSessionSummary?: string;
   allProgramsSummary?: string;
+  conversationSummaries?: string[];
 }
 
 interface WorkoutSummary {
@@ -310,11 +312,60 @@ function getExerciseLibrarySummary(): string {
     .join('\n');
 }
 
+/**
+ * Filtered + compressed exercise library summary.
+ * Filters exercises to only those matching user's available equipment
+ * (always includes bodyweight). Uses compact `id:Name` format.
+ */
+function getFilteredExerciseLibrarySummary(ctx: UserContext): string {
+  const { exercises } = useWorkoutStore.getState();
+  if (exercises.length === 0) return '';
+
+  const totalCount = exercises.length;
+
+  // Merge equipment sources, always include bodyweight
+  const userEquipment = new Set<string>(['bodyweight']);
+  if (ctx.availableEquipment && ctx.availableEquipment.length > 0) {
+    for (const e of ctx.availableEquipment) userEquipment.add(e.toLowerCase());
+  }
+  if (ctx.fitnessEquipment && ctx.fitnessEquipment.length > 0) {
+    for (const e of ctx.fitnessEquipment) userEquipment.add(e.toLowerCase());
+  }
+
+  // If no equipment info available (only bodyweight from default), use full list
+  const hasEquipmentInfo = userEquipment.size > 1;
+  const filtered = hasEquipmentInfo
+    ? exercises.filter((ex) => userEquipment.has(ex.equipment))
+    : exercises;
+
+  const byCategory: Record<string, string[]> = {};
+  for (const ex of filtered) {
+    const cat = ex.category;
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(`${ex.id}:${ex.name}`);
+  }
+
+  const lines = Object.entries(byCategory)
+    .map(([cat, entries]) => `  ${cat}: ${entries.join(', ')}`)
+    .join('\n');
+
+  const filteredCount = filtered.length;
+  const countNote = hasEquipmentInfo
+    ? `\n(${filteredCount} exercises shown matching your equipment. ${totalCount} total in library.)`
+    : `\n(${totalCount} exercises in library.)`;
+
+  return lines + countNote;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // CONTEXT ASSEMBLY
 // ═══════════════════════════════════════════════════════════════════════
 
-export function gatherUserContext(): UserContext {
+export function gatherUserContext(intent?: UserIntent): UserContext {
+  const requirements: ContextRequirements | undefined = intent
+    ? INTENT_CONTEXT_MAP[intent]
+    : undefined;
+
   const authState = useAuthStore.getState();
   const nutritionState = useNutritionStore.getState();
   const profileStore = useProfileStore.getState();
@@ -324,13 +375,25 @@ export function gatherUserContext(): UserContext {
 
   const todayLog = nutritionState.dailyLogs?.[getDateString(new Date())] as DailyNutritionLog | undefined;
 
+  // When intent is provided, skip expensive data gathering for sections
+  // that won't be included in the dynamic layer.
+  const needWorkouts = !requirements || requirements.recentWorkouts;
+  const needNutrition = !requirements || requirements.recentNutrition;
+  const needPRs = !requirements || requirements.personalRecords;
+  const needProgram = !requirements || requirements.activeProgram;
+  const needAllPrograms = !requirements || requirements.allPrograms;
+  const needSavedMeals = !requirements || requirements.savedMeals;
+  const needGrocery = !requirements || requirements.groceryList;
+  const needSupplements = !requirements || requirements.supplements;
+  const needSession = !requirements || requirements.activeSession;
+
   return {
     displayName: userProfile.displayName || profile?.display_name || undefined,
     goals: coachPrefs?.product_mode ?? undefined,
-    coachTone: (coachPrefs?.coach_tone as CoachTone) ?? 'balanced',
+    coachTone: (coachPrefs?.tone ?? coachPrefs?.coach_tone as CoachTone) ?? 'balanced',
     unitPreference: userProfile.unitPreference ?? (profile?.unit_preference as 'imperial' | 'metric') ?? 'imperial',
-    recentWorkouts: getRecentWorkouts(20),
-    recentNutrition: getRecentNutrition(7),
+    recentWorkouts: needWorkouts ? getRecentWorkouts(20) : [],
+    recentNutrition: needNutrition ? getRecentNutrition(7) : [],
     nutritionTargets: nutritionState.targets ?? {
       calories: 2200,
       protein_g: 150,
@@ -358,21 +421,21 @@ export function gatherUserContext(): UserContext {
     heightCm: userProfile.heightCm,
     weightKg: userProfile.weightKg,
     gender: userProfile.gender,
-    activeProgramSummary: getActiveProgramSummary(),
+    activeProgramSummary: needProgram ? getActiveProgramSummary() : '',
     todayWaterOz: todayLog?.waterIntake_oz ?? 0,
-    recentMealDetails: getRecentMealDetails(3),
+    recentMealDetails: needNutrition ? getRecentMealDetails(3) : '',
     targetWeightKg: userProfile.targetWeightKg,
     age: userProfile.dateOfBirth
       ? Math.floor((Date.now() - new Date(userProfile.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
       : undefined,
-    personalRecordsSummary: getPersonalRecordsSummary(),
-    programProgressSummary: getProgramProgressSummary(),
-    savedMealsSummary: getSavedMealsSummary(),
-    recipesSummary: getRecipesSummary(),
-    groceryListSummary: getGroceryListSummary(),
-    supplementsSummary: getSupplementsSummary(),
-    activeSessionSummary: getActiveSessionSummary(),
-    allProgramsSummary: getAllProgramsSummary(),
+    personalRecordsSummary: needPRs ? getPersonalRecordsSummary() : '',
+    programProgressSummary: needProgram ? getProgramProgressSummary() : '',
+    savedMealsSummary: needSavedMeals ? getSavedMealsSummary() : '',
+    recipesSummary: needSavedMeals ? getRecipesSummary() : '',
+    groceryListSummary: needGrocery ? getGroceryListSummary() : '',
+    supplementsSummary: needSupplements ? getSupplementsSummary() : '',
+    activeSessionSummary: needSession ? getActiveSessionSummary() : '',
+    allProgramsSummary: needAllPrograms ? getAllProgramsSummary() : '',
   };
 }
 
@@ -686,15 +749,8 @@ function buildWorkoutDataSection(ctx: UserContext): string {
 
 // ── Section: Action System ──────────────────────────────────────────
 
-function buildActionSection(_ctx: UserContext): string {
-  const workoutStore = useWorkoutStore.getState();
-  const activeProgram = workoutStore.programs.find((p) => p.isActive);
-  const programContext = activeProgram
-    ? `Active Program ID: ${activeProgram.id}\nDays: ${activeProgram.days.map((d, i) => `${i}=${d.name}`).join(', ')}\nExercise IDs in program:\n${activeProgram.days.map((d, i) => d.exercises.map((e) => `  Day ${i}, ${e.exerciseName}: exerciseId="${e.exerciseId}", id="${e.id}"`).join('\n')).join('\n')}`
-    : 'No active program.';
-
-  const exerciseLibrary = getExerciseLibrarySummary();
-
+/** Static action format instructions — schemas, rules, syntax. Does NOT include dynamic context. */
+function buildActionFormatSection(): string {
   return `## Action System
 When the user explicitly asks you to make changes to their workout program, nutrition targets, or asks you to build them a plan, you can include structured action blocks in your response. ONLY include actions when the user asks for a specific change.
 
@@ -711,7 +767,7 @@ Action format — wrap each action in [ACTION]...[/ACTION] tags:
 ### Weekly Plan Builder
 When the user tells you how many workouts they can do this week (e.g. "I can work out 3 days this week" or "plan my week"), build them a complete weekly workout plan using the create_weekly_plan action. Consider their goals, experience, available equipment, and injuries.
 
-[ACTION]{"type": "create_weekly_plan", "name": "Week of Mar 17 — Push/Pull/Legs", "description": "3-day PPL split focused on strength", "daysPerWeek": 3, "difficulty": "intermediate", "days": [{"dayNumber": 1, "name": "Push Day", "dayType": "lifting", "focusArea": "chest", "exercises": [{"exerciseId": "lib_id", "exerciseName": "Bench Press", "targetSets": 4, "targetReps": "6-8", "restSeconds": 120}]}, {"dayNumber": 2, "name": "Rest & Recovery", "dayType": "rest", "focusArea": "full_body", "exercises": [], "recoveryNotes": "Light walking or stretching"}, {"dayNumber": 3, "name": "Pull Day", "dayType": "lifting", "focusArea": "back", "exercises": [{"exerciseId": "lib_id", "exerciseName": "Barbell Row", "targetSets": 4, "targetReps": "6-8", "restSeconds": 120}]}]}[/ACTION]
+[ACTION]{"type": "create_weekly_plan", "name": "Week of Mar 17 — Push/Pull/Legs", "description": "3-day PPL split focused on strength", "daysPerWeek": 3, "difficulty": "intermediate", "days": [{"dayNumber": 1, "name": "Push Day", "dayType": "lifting", "focusArea": "chest", "exercises": [{"exerciseId": "lib_id", "exerciseName": "Bench Press", "targetSets": 4, "targetReps": "6-8", "restSeconds": 120}]}, {"dayNumber": 2, "name": "Rest & Recovery", "dayType": "rest", "focusArea": "full_body", "exe...
 
 IMPORTANT for create_weekly_plan:
 - Build a COMPLETE week (7 days) — fill non-workout days with rest, mobility, cardio, or active_recovery days.
@@ -721,7 +777,22 @@ IMPORTANT for create_weekly_plan:
 - Only use exercises and equipment the user has access to.
 - Tailor the plan to the user's stated goals, experience level, and constraints.
 - Include 3-5 exercises per lifting day with appropriate sets/reps/rest for the user's goal.
+- Consider pairing exercises as supersets (opposing muscle groups) to increase workout intensity and keep heart rate elevated. Mention superset pairings in your explanation.
 - Explain your reasoning: why this split, why these exercises, how it supports their goal.
+
+### Quick Workout Generator
+When the user asks you to build them a workout for right now (e.g. "give me a chest workout", "I want to train legs today", "build me a quick 30-minute session"), generate a workout using the generate_workout action. This starts the workout immediately when the user taps Apply.
+
+[ACTION]{"type": "generate_workout", "name": "Push Day — Chest & Triceps", "exercises": [{"exerciseId": "lib_id", "exerciseName": "Barbell Bench Press", "targetSets": 4, "targetReps": "6-8", "restSeconds": 120}, {"exerciseId": "lib_id", "exerciseName": "Incline Dumbbell Press", "targetSets": 3, "targetReps": "8-12", "restSeconds": 90}]}[/ACTION]
+
+IMPORTANT for generate_workout:
+- Use when the user wants a workout to do RIGHT NOW (not a weekly plan)
+- Include 4-8 exercises with appropriate sets, reps, and rest
+- Only use exercises from the Exercise Library below with exact exerciseIds and names
+- Respect the user's equipment, injuries, and experience level
+- Consider recent workouts to avoid overtraining the same muscles
+- Proactively suggest superset pairings (opposing muscle groups done back-to-back) to keep heart rate elevated and improve workout efficiency. Mention which exercises pair well as supersets in your explanation.
+- Explain your exercise selection and reasoning in the text response
 
 ### Nutrition Actions
 [ACTION]{"type": "update_targets", "calories": 2200, "protein": 180, "carbs": 250, "fat": 65}[/ACTION]
@@ -733,12 +804,6 @@ IMPORTANT for create_weekly_plan:
 [ACTION]{"type": "update_profile", "field": "activityLevel", "value": 4}[/ACTION]
 [ACTION]{"type": "update_profile", "field": "allergies", "value": ["peanuts", "shellfish"]}[/ACTION]
 
-### Program Context for Actions
-${programContext}
-
-### Exercise Library (use these exerciseIds and exact names)
-${exerciseLibrary}
-
 ### Action Rules
 - Only include actions when the user explicitly requests a change or plan
 - Use the exact IDs and names from the program context and exercise library above
@@ -748,7 +813,38 @@ ${exerciseLibrary}
 - For log_quick_meal: estimate macros honestly; label estimates clearly
 - For update_profile: only update fields the user explicitly asks to change
 - For create_weekly_plan: use the exact exercise names from the library above
-- For set_active_program: use the program ID from the Available Programs list`;
+- For set_active_program: use the program ID from the Available Programs list
+- For generate_workout: use when the user wants a single workout NOW; use create_weekly_plan for multi-day programming`;
+}
+
+/** Dynamic action context — active program IDs and exercise library. */
+function buildActionContextSection(ctx?: UserContext): string {
+  const workoutStore = useWorkoutStore.getState();
+  const activeProgram = workoutStore.programs.find((p) => p.isActive);
+  const programContext = activeProgram
+    ? `Active Program ID: ${activeProgram.id}\nDays: ${activeProgram.days.map((d, i) => `${i}=${d.name}`).join(', ')}\nExercise IDs in program:\n${activeProgram.days.map((d, i) => d.exercises.map((e) => `  Day ${i}, ${e.exerciseName}: exerciseId="${e.exerciseId}", id="${e.id}"`).join('\n')).join('\n')}`
+    : 'No active program.';
+
+  const exerciseLibrary = ctx
+    ? getFilteredExerciseLibrarySummary(ctx)
+    : getExerciseLibrarySummary();
+
+  const lines: string[] = [];
+  lines.push('### Program Context for Actions');
+  lines.push(programContext);
+  if (exerciseLibrary) {
+    lines.push('');
+    lines.push('### Exercise Library (use these exerciseIds and exact names)');
+    lines.push(exerciseLibrary);
+  }
+  return lines.join('\n');
+}
+
+/** Combined action section for backward compatibility — format + context */
+function buildActionSection(_ctx: UserContext): string {
+  return `${buildActionFormatSection()}
+
+${buildActionContextSection()}`;
 }
 
 // ── Section: Capabilities & Guidelines ──────────────────────────────
@@ -763,6 +859,7 @@ function buildGuidelinesSection(ctx: UserContext): string {
 - Log a quick meal with estimated macros
 - Log water intake
 - Update profile settings (target weight, activity level, allergies, etc.)
+- Generate and start a workout session immediately based on user preferences
 - Give advice based on personal records, workout history, and nutrition data
 - Suggest meal ideas respecting allergies, dietary preferences, and cooking constraints
 - Help with recovery, sleep, and healthy routine questions
@@ -782,6 +879,220 @@ When relevant, let the user know these capabilities — especially weekly plan b
 - All nutritional estimates should be clearly labeled as estimates
 - Always promote sustainable, evidence-based approaches
 ${ctx.activeSessionSummary ? '- The user is mid-workout right now — keep responses short and actionable' : ''}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CACHE-LAYERED PROMPT BUILDERS
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Layer 1: Static system content — cached globally, changes only on code deploy.
+ * Contains identity, safety boundaries, response format guidelines, and action
+ * format instructions (schemas/syntax).
+ */
+export function buildStaticLayer(tone: CoachTone): string {
+  // Identity section without dynamic tone (tone goes in user layer)
+  const identity = `You are Coach — a positive, supportive health and fitness coach inside a workout & nutrition tracking app.
+
+## Your Identity
+You are the user's dedicated health coach. You are encouraging, knowledgeable, and focused entirely on helping them become healthier. You celebrate their wins, help them push through setbacks, and keep them consistent.
+
+## Strict Boundaries
+You are EXCLUSIVELY a health, fitness, nutrition, and wellness coach. Every response must relate to one of these topics:
+- Exercise, workouts, training programs, and recovery
+- Nutrition, diet, meal planning, macros, and hydration
+- Healthy routines, sleep, and stress management as they relate to fitness
+- Body composition and weight management
+- Supplements and hydration
+- Injury prevention and when to see a professional
+- Motivation, consistency, and building healthy habits
+
+You must NEVER:
+- Provide advice on topics outside health, fitness, nutrition, and wellness
+- Act as a general-purpose assistant, coder, tutor, or creative writer
+- Diagnose medical conditions — always suggest consulting a healthcare provider
+- Recommend dangerously low calorie intake (below 1200 for women, 1500 for men)
+- Recommend extreme diets, dangerous supplements, or unhealthy practices
+- Recommend anabolic steroids, pro-hormones, or banned substances
+
+If the user asks about anything unrelated, redirect warmly:
+"I'm your health and fitness coach — that's outside my lane! But I'm here whenever you want to talk workouts, nutrition, or wellness. What can I help you with?"
+
+Keep responses concise and mobile-friendly — users read on their phone.
+Use short paragraphs. Bullet points are great for lists.`;
+
+  // Guidelines section (capabilities + behavioral rules)
+  const guidelines = `## What You Can Do
+- Answer questions about workouts, nutrition, supplements, recovery, and wellness
+- Build a complete weekly workout plan when the user says how many days they can train
+- Modify their workout program (swap, add, remove exercises; change sets/reps/rest)
+- Switch their active program
+- Update their nutrition targets (calories, protein, carbs, fat, fiber, water)
+- Log a quick meal with estimated macros
+- Log water intake
+- Update profile settings (target weight, activity level, allergies, etc.)
+- Generate and start a workout session immediately based on user preferences
+- Give advice based on personal records, workout history, and nutrition data
+- Suggest meal ideas respecting allergies, dietary preferences, and cooking constraints
+- Help with recovery, sleep, and healthy routine questions
+- Encourage consistency and celebrate progress
+
+When relevant, let the user know these capabilities — especially weekly plan building. If they seem unsure what to do next, offer to build them a plan for the week.
+
+## Guidelines
+- Always connect advice back to the user's goals
+- Be encouraging but honest — celebrate progress while giving constructive feedback
+- When mid-workout, offer relevant tips and form cues — keep it short
+- When suggesting meals: NEVER include allergens, respect dietary preferences, match cooking skill and equipment
+- When suggesting workouts: only use equipment the user has access to, respect injuries/limitations
+- Reference their saved meals, recipes, and grocery list when suggesting what to eat
+- Reference personal records and program progress when giving training advice
+- Give specific, actionable advice based on their actual data — not generic tips
+- All nutritional estimates should be clearly labeled as estimates
+- Always promote sustainable, evidence-based approaches`;
+
+  // Action format (static schemas + syntax)
+  const actionFormat = buildActionFormatSection();
+
+  return [identity, guidelines, actionFormat].join('\n\n');
+}
+
+/**
+ * Layer 2: User-session content — cached per user session, changes rarely.
+ * Contains tone, goals, profile, constraints, and nutrition targets.
+ */
+export function buildUserLayer(ctx: UserContext): string {
+  const sections: string[] = [];
+
+  // Communication style / tone
+  sections.push(`## Communication Style\n${TONE_INSTRUCTIONS[ctx.coachTone]}`);
+
+  // Goal coaching
+  const goals = buildGoalCoachingSection(ctx);
+  if (goals) sections.push(goals);
+
+  // Profile
+  sections.push(buildProfileSection(ctx));
+
+  // Constraints
+  const constraints = buildConstraintsSection(ctx);
+  if (constraints) sections.push(constraints);
+
+  // Nutrition targets only (not recent data)
+  const targets = ctx.nutritionTargets;
+  sections.push(
+    `## Nutrition Targets\nCalories: ${targets.calories} | Protein: ${targets.protein_g}g | Carbs: ${targets.carbs_g}g | Fat: ${targets.fat_g}g | Fiber: ${targets.fiber_g}g\nWater target: ${targets.water_oz}oz`,
+  );
+
+  return sections.filter(Boolean).join('\n\n');
+}
+
+/**
+ * Layer 3: Dynamic content — NOT cached, filtered by intent.
+ * Only includes the context sections that the detected intent requires.
+ */
+export function buildDynamicLayer(ctx: UserContext, intent: UserIntent): string {
+  const requirements = INTENT_CONTEXT_MAP[intent];
+  const sections: string[] = [];
+
+  // Recent nutrition data
+  if (requirements.recentNutrition && ctx.recentNutrition.length > 0) {
+    const nutLines: string[] = ['## Recent Nutrition'];
+    for (const n of ctx.recentNutrition) {
+      nutLines.push(`${n.date}: ${n.calories} cal, ${n.protein}g protein, ${n.carbs}g carbs, ${n.fat}g fat (${n.mealCount} meals)`);
+    }
+    sections.push(nutLines.join('\n'));
+  }
+
+  // Today's water intake
+  if (requirements.recentNutrition || requirements.nutritionTargets) {
+    if (ctx.todayWaterOz) {
+      sections.push(`Today's water intake: ${ctx.todayWaterOz}oz`);
+    }
+  }
+
+  // Recent meal details
+  if (requirements.recentNutrition && ctx.recentMealDetails) {
+    sections.push(`## Recent Meal Log\n${ctx.recentMealDetails}`);
+  }
+
+  // Saved meals
+  if (requirements.savedMeals && ctx.savedMealsSummary) {
+    sections.push(`## Saved Meals\n${ctx.savedMealsSummary}`);
+  }
+
+  // Recipes
+  if (requirements.savedMeals && ctx.recipesSummary) {
+    sections.push(`## Recipes\n${ctx.recipesSummary}`);
+  }
+
+  // Grocery list
+  if (requirements.groceryList && ctx.groceryListSummary) {
+    sections.push(`## Current Grocery List\n${ctx.groceryListSummary}`);
+  }
+
+  // Supplements
+  if (requirements.supplements && ctx.supplementsSummary) {
+    sections.push(`## Supplements\n${ctx.supplementsSummary}`);
+  }
+
+  // Active program
+  if (requirements.activeProgram) {
+    sections.push(`## Active Workout Program\n${ctx.activeProgramSummary || 'No active workout program.'}`);
+  }
+
+  // Recent workouts
+  if (requirements.recentWorkouts && ctx.recentWorkouts.length > 0) {
+    const wLines: string[] = ['## Workout History (recent sessions)'];
+    for (const w of ctx.recentWorkouts) {
+      const exercises = w.exercises
+        .map((e) => `  \u2022 ${e.name}: ${e.sets} sets, best set ${e.bestSet}`)
+        .join('\n');
+      wLines.push(`${w.date} — ${w.name} (${w.durationMinutes} min)\n${exercises}`);
+    }
+    sections.push(wLines.join('\n'));
+  }
+
+  // Personal records
+  if (requirements.personalRecords && ctx.personalRecordsSummary) {
+    sections.push(`## Personal Records (Top Lifts)\n${ctx.personalRecordsSummary}`);
+  }
+
+  // Program progress
+  if (requirements.activeProgram && ctx.programProgressSummary) {
+    sections.push(`## Program Progress\n${ctx.programProgressSummary}`);
+  }
+
+  // Active session (in-progress workout)
+  if (requirements.activeSession && ctx.activeSessionSummary) {
+    sections.push(`## Active Workout (In Progress)\n${ctx.activeSessionSummary}`);
+    sections.push('- The user is mid-workout right now — keep responses short and actionable');
+  }
+
+  // All programs
+  if (requirements.allPrograms && ctx.allProgramsSummary) {
+    sections.push(`## Available Programs\n${ctx.allProgramsSummary}`);
+  }
+
+  // Action system context (program IDs + exercise library)
+  if (requirements.actionSystem) {
+    sections.push(buildActionContextSection(ctx));
+  }
+
+  // Exercise library (without action system — for lookups)
+  if (requirements.exerciseLibrary && !requirements.actionSystem) {
+    const exerciseLib = getFilteredExerciseLibrarySummary(ctx);
+    if (exerciseLib) {
+      sections.push(`## Exercise Library\n${exerciseLib}`);
+    }
+  }
+
+  // Conversation summaries (compressed history from earlier in conversation)
+  if (ctx.conversationSummaries && ctx.conversationSummaries.length > 0) {
+    sections.push(`## Previous Conversation Context\n${ctx.conversationSummaries.join('\n')}`);
+  }
+
+  return sections.filter(Boolean).join('\n\n');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -841,31 +1152,47 @@ ${workoutSection}
 Available exercises in the library:
 ${availableExerciseNames.join(', ')}
 
-When the user asks to replace, swap, or find an alternative for a SINGLE exercise, respond with:
-1. A brief explanation (1-2 sentences) of why this is a good swap.
-2. A JSON block on its own line in this exact format:
+You can suggest the following adjustment types:
+
+1. REPLACE an exercise:
 \`\`\`json
-{"adjustments":[{"action":"replace","currentExercise":"Name Of Exercise Being Replaced","exerciseName":"Exact Exercise Name From Library","reason":"Short reason"}]}
+{"adjustments":[{"action":"replace","currentExercise":"Name Being Replaced","exerciseName":"Exact Name From Library","reason":"Short reason"}]}
 \`\`\`
 
-When the user asks to replace or modify MULTIPLE exercises (e.g. "replace all dumbbell exercises with barbell"), respond with:
-1. A brief explanation of the changes.
-2. A JSON block with multiple adjustments:
-\`\`\`json
-{"adjustments":[{"action":"replace","currentExercise":"Dumbbell Press","exerciseName":"Barbell Bench Press","reason":"..."},{"action":"replace","currentExercise":"Dumbbell Row","exerciseName":"Barbell Row","reason":"..."}]}
-\`\`\`
-
-When the user asks to adjust sets, reps, or weight for an exercise, respond with:
-1. A brief explanation of the adjustment.
-2. A JSON block:
+2. ADJUST sets/reps:
 \`\`\`json
 {"adjustments":[{"action":"adjust_sets","currentExercise":"Exercise Name","sets":4,"reps":"8-10","reason":"Short reason"}]}
 \`\`\`
 
-IMPORTANT:
-- The exerciseName in replace actions MUST exactly match one of the available exercises listed above.
-- The currentExercise MUST exactly match one of the exercises in the current workout.
-- Only include the JSON block when you are making concrete suggestions. For general advice, just respond normally.
+3. ADD a new exercise to the workout:
+\`\`\`json
+{"adjustments":[{"action":"add_exercise","exerciseName":"Exact Name From Library","sets":3,"reps":"10-12","reason":"Short reason"}]}
+\`\`\`
+
+4. REMOVE an exercise:
+\`\`\`json
+{"adjustments":[{"action":"remove_exercise","currentExercise":"Exercise Name","reason":"Short reason"}]}
+\`\`\`
+
+5. CREATE A SUPERSET (group 2-3 exercises to perform back-to-back with no rest between them):
+\`\`\`json
+{"adjustments":[{"action":"create_superset","exercises":["Exercise A","Exercise B"],"reason":"Short reason"}]}
+\`\`\`
+
+You can combine multiple adjustments in a single response. For example, adding exercises and then grouping them into a superset.
+
+SUPERSET GUIDELINES:
+- Supersets are an excellent way to increase workout intensity and keep heart rate elevated throughout the session.
+- When the user asks to add exercises, proactively suggest pairing them as supersets when appropriate.
+- Great superset pairings: opposing muscle groups (chest+back, biceps+triceps, quads+hamstrings), or upper+lower body.
+- When the user asks for a "superset workout" or mentions supersets, restructure the workout into superset pairs.
+- The exercises in a create_superset action MUST exactly match exercise names already in the workout (or being added in the same response).
+
+IMPORTANT RULES:
+- The exerciseName in replace/add actions MUST exactly match one of the available exercises listed above.
+- The currentExercise in replace/remove actions MUST exactly match one of the exercises in the current workout.
+- The exercises in create_superset MUST exactly match exercise names in the current workout.
+- Only include JSON blocks when making concrete suggestions. For general advice, just respond normally.
 - Keep your text response very short — the user is mid-workout.
 - Always wrap adjustments in the {"adjustments":[...]} format, even for a single change.
 

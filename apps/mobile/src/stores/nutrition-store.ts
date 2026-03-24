@@ -182,9 +182,11 @@ interface NutritionState {
   isInitialized: boolean;
 
   // Computed getters
+  currentTargets: () => NutritionTargets;
   todayLog: () => DailyNutritionLog;
   todayMeals: () => MealEntry[];
   todayConsumed: () => MacroTotals;
+  todayRemaining: () => MacroTotals;
   todayWater: () => number;
 
   // Actions - Initialization
@@ -242,6 +244,10 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
   // ── Computed ────────────────────────────────────────────────────
 
+  currentTargets: () => {
+    return get().targets;
+  },
+
   todayLog: () => {
     const state = get();
     const date = state.selectedDate;
@@ -265,6 +271,18 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   todayConsumed: () => {
     const meals = get().todayMeals();
     return calculateDailyTotals(meals);
+  },
+
+  todayRemaining: () => {
+    const targets = get().targets;
+    const consumed = get().todayConsumed();
+    return {
+      calories: Math.max(0, targets.calories - consumed.calories),
+      protein_g: Math.max(0, targets.protein_g - consumed.protein_g),
+      carbs_g: Math.max(0, targets.carbs_g - consumed.carbs_g),
+      fat_g: Math.max(0, targets.fat_g - consumed.fat_g),
+      fiber_g: Math.max(0, targets.fiber_g - consumed.fiber_g),
+    };
   },
 
   todayWater: () => {

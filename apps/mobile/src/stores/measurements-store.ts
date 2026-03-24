@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+export type MeasurementSource = 'manual' | 'health_sync';
+
 export interface BodyMeasurement {
   id: string;
   date: string; // ISO
@@ -16,6 +18,7 @@ export interface BodyMeasurement {
   leftThighCm?: number;
   rightThighCm?: number;
   notes?: string;
+  source?: MeasurementSource;
 }
 
 export interface ProgressPhoto {
@@ -45,9 +48,13 @@ interface MeasurementsState {
   photos: ProgressPhoto[];
   isInitialized: boolean;
 
+  // Computed
+  weightHistory: () => BodyMeasurement[];
+
   // Actions
   initialize: () => Promise<void>;
   addMeasurement: (measurement: Omit<BodyMeasurement, 'id'>) => void;
+  addWeightFromHealthSync: (weightKg: number, date: string) => void;
   deleteMeasurement: (id: string) => void;
   addPhoto: (photo: Omit<ProgressPhoto, 'id'>) => void;
   deletePhoto: (id: string) => void;
@@ -59,6 +66,13 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
   measurements: [],
   photos: [],
   isInitialized: false,
+
+  weightHistory: () => {
+    const { measurements } = get();
+    return measurements
+      .filter((m) => m.weightKg != null)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
 
   initialize: async () => {
     try {
@@ -87,6 +101,32 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
       const newMeasurement: BodyMeasurement = {
         ...measurement,
         id: generateId(),
+      };
+      const measurements = [...state.measurements, newMeasurement].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      );
+      AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
+      return { measurements };
+    });
+  },
+
+  addWeightFromHealthSync: (weightKg, date) => {
+    set((state) => {
+      // Deduplicate: skip if a health_sync entry for the same date already exists with the same weight
+      const dateStr = date.split('T')[0];
+      const exists = state.measurements.some(
+        (m) =>
+          m.source === 'health_sync' &&
+          m.date.split('T')[0] === dateStr &&
+          m.weightKg === weightKg,
+      );
+      if (exists) return state;
+
+      const newMeasurement: BodyMeasurement = {
+        id: generateId(),
+        date,
+        weightKg,
+        source: 'health_sync',
       };
       const measurements = [...state.measurements, newMeasurement].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),

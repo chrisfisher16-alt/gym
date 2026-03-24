@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CoachContext } from '@health-coach/shared';
 import * as coachApi from '../lib/coach-api';
-import type { AIMessage } from '../lib/ai-provider';
+import type { AIMessage, AIContentBlock } from '../lib/ai-provider';
+
 import { parseCoachActions, executeCoachAction, type CoachAction } from '../lib/coach-actions';
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -18,6 +19,7 @@ export interface CoachMessage {
   conversation_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  imageUri?: string;
   structured_content?: StructuredContent[];
   tool_calls?: ToolCallResult[];
   actions?: CoachActionState[];
@@ -63,9 +65,13 @@ interface CoachState {
   error: string | null;
   isInitialized: boolean;
 
+  // Streaming state
+  streamingContent: string;
+  isStreaming: boolean;
+
   // Actions
   initialize: () => Promise<void>;
-  sendMessage: (text: string, context?: CoachContext) => Promise<void>;
+  sendMessage: (text: string, context?: CoachContext, imageUri?: string) => Promise<void>;
   startConversation: (context?: CoachContext) => void;
   loadConversation: (conversationId: string) => Promise<void>;
   loadHistory: () => Promise<void>;
@@ -85,6 +91,8 @@ function generateId(prefix: string): string {
 
 /**
  * Convert coach messages to AIMessage format for the provider.
+ * For messages with images, we only include the text content in history
+ * (the image was already processed by the AI on the original send).
  */
 function toAIHistory(messages: CoachMessage[]): AIMessage[] {
   return messages
@@ -104,6 +112,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
   isLoading: false,
   error: null,
   isInitialized: false,
+  streamingContent: '',
+  isStreaming: false,
   prefilledContext: null,
   prefilledMessage: null,
 
@@ -131,7 +141,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     }
   },
 
-  sendMessage: async (text: string, context?: CoachContext) => {
+  sendMessage: async (text: string, context?: CoachContext, imageUri?: string) => {
     const state = get();
     let conversation = state.activeConversation;
 
@@ -156,6 +166,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       conversation_id: conversation.id,
       role: 'user',
       content: text,
+      imageUri,
       created_at: new Date().toISOString(),
     };
 
@@ -164,6 +175,32 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       isLoading: true,
       error: null,
     }));
+
+    // If there's an image, read it as base64 and build multipart content
+    let messageContent: string | AIContentBlock[] = text;
+    if (imageUri) {
+      try {
+        const FileSystem = await import('expo-file-system');
+        const base64data = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' as any });
+        const blocks: AIContentBlock[] = [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/jpeg',
+              data: base64data,
+            },
+          },
+        ];
+        if (text) {
+          blocks.push({ type: 'text', text });
+        }
+        messageContent = blocks;
+      } catch (err) {
+        console.warn('Failed to read image for AI:', err);
+        // Fall back to text-only
+      }
+    }
 
     try {
       // Build history from current conversation messages
@@ -174,12 +211,18 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const historyMessages = currentMessages.slice(0, -1);
       const aiHistory = toAIHistory(historyMessages);
 
-      // Call the API with conversation history
+      // Call the API with conversation history and streaming callback
       const response = await coachApi.sendChatMessage(
         conversation.id,
-        text,
+        messageContent,
         context ?? conversation.context,
         aiHistory,
+        (token) => {
+          set((s) => ({
+            streamingContent: s.streamingContent + token,
+            isStreaming: true,
+          }));
+        },
       );
 
       // Parse actions from AI response
@@ -212,6 +255,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
           c.id === conversation!.id ? updatedConversation : c,
         ),
         isLoading: false,
+        isStreaming: false,
+        streamingContent: '',
       }));
 
       // Persist
@@ -241,6 +286,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       set((s) => ({
         messages: [...s.messages, fallbackMessage],
         isLoading: false,
+        isStreaming: false,
+        streamingContent: '',
         error: errorMessage,
       }));
     }

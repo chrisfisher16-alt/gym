@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { crossPlatformAlert } from '../../../src/lib/cross-platform-alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -65,14 +66,14 @@ export default function ProgramDetailScreen() {
 
   const handleStartDay = (dayIndex: number) => {
     if (isActive) {
-      Alert.alert('Workout in Progress', 'Please finish or cancel your current workout first.');
+      crossPlatformAlert('Workout in Progress', 'Please finish or cancel your current workout first.');
       return;
     }
     launchDay(dayIndex);
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete Program', `Are you sure you want to delete "${program.name}"?`, [
+    crossPlatformAlert('Delete Program', `Are you sure you want to delete "${program.name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -354,7 +355,7 @@ export default function ProgramDetailScreen() {
                   const ok = window.confirm('Switch your active program? This will replace your current program on the workout tab.');
                   if (ok) doSwitch();
                 } else {
-                  Alert.alert(
+                  crossPlatformAlert(
                     'Switch Program',
                     'Switch your active program? This will replace your current program on the workout tab.',
                     [

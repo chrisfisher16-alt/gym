@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { moderateScale } from './scale';
 
 const fontFamily = Platform.select({
   ios: 'System',
@@ -10,15 +11,15 @@ export const typography = {
   // Display
   displayLarge: {
     fontFamily,
-    fontSize: 32,
-    lineHeight: 40,
+    fontSize: moderateScale(32),
+    lineHeight: moderateScale(40),
     fontWeight: '700' as const,
     letterSpacing: -0.5,
   },
   displayMedium: {
     fontFamily,
-    fontSize: 28,
-    lineHeight: 36,
+    fontSize: moderateScale(28),
+    lineHeight: moderateScale(36),
     fontWeight: '700' as const,
     letterSpacing: -0.3,
   },
@@ -26,70 +27,122 @@ export const typography = {
   // Headings
   h1: {
     fontFamily,
-    fontSize: 24,
-    lineHeight: 32,
+    fontSize: moderateScale(24),
+    lineHeight: moderateScale(32),
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   h2: {
     fontFamily,
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: moderateScale(20),
+    lineHeight: moderateScale(28),
     fontWeight: '600' as const,
   },
   h3: {
     fontFamily,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: moderateScale(18),
+    lineHeight: moderateScale(24),
     fontWeight: '600' as const,
   },
 
   // Body
   bodyLarge: {
     fontFamily,
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: moderateScale(16),
+    lineHeight: moderateScale(24),
     fontWeight: '400' as const,
   },
   body: {
     fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(20),
     fontWeight: '400' as const,
   },
   bodySmall: {
     fontFamily,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: moderateScale(12),
+    lineHeight: moderateScale(16),
     fontWeight: '400' as const,
   },
 
   // Labels
   labelLarge: {
     fontFamily,
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: moderateScale(16),
+    lineHeight: moderateScale(24),
     fontWeight: '600' as const,
   },
   label: {
     fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(20),
     fontWeight: '500' as const,
   },
   labelSmall: {
     fontFamily,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: moderateScale(12),
+    lineHeight: moderateScale(16),
     fontWeight: '500' as const,
+  },
+
+  // Labels (extended)
+  labelXS: {
+    fontFamily,
+    fontSize: moderateScale(10),
+    lineHeight: moderateScale(14),
+    fontWeight: '500' as const,
+    letterSpacing: 0.5,
   },
 
   // Caption
   caption: {
     fontFamily,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: moderateScale(11),
+    lineHeight: moderateScale(14),
     fontWeight: '400' as const,
+  },
+
+  // Overline
+  overline: {
+    fontFamily,
+    fontSize: moderateScale(10),
+    lineHeight: moderateScale(14),
+    fontWeight: '600' as const,
+    letterSpacing: 1.5,
+  },
+
+  // Stat unit
+  statUnit: {
+    fontFamily,
+    fontSize: moderateScale(12),
+    lineHeight: moderateScale(16),
+    fontWeight: '700' as const,
+  },
+
+  // Micro
+  micro: {
+    fontFamily,
+    fontSize: moderateScale(9),
+    lineHeight: moderateScale(12),
+    fontWeight: '600' as const,
+    letterSpacing: 0.5,
+  },
+
+  // Display Focus (large centered number)
+  displayFocus: {
+    fontFamily,
+    fontSize: moderateScale(48),
+    lineHeight: moderateScale(56),
+    fontWeight: '700' as const,
+    letterSpacing: -1,
+  },
+
+  // Stat value
+  statValue: {
+    fontFamily,
+    fontSize: moderateScale(20),
+    lineHeight: moderateScale(28),
+    fontWeight: '700' as const,
   },
 } as const;
 

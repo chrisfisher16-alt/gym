@@ -55,7 +55,7 @@ export default function WelcomeScreen() {
         <View style={[styles.bottom, { paddingBottom: spacing['2xl'] }]}>
           <Button
             title="Get Started"
-            onPress={() => router.push('/(onboarding)/profile')}
+            onPress={() => router.push('/(onboarding)/health-sync')}
           />
         </View>
       </View>
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   features: {
-    paddingHorizontal: 8,
+    alignItems: 'center',
   },
   featureRow: {
     flexDirection: 'row',

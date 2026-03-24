@@ -17,6 +17,10 @@ interface ProgressRingProps {
   sublabel?: string;
   /** Optional override for the track (background ring) color */
   trackColor?: string;
+  /** Custom content rendered in the center of the ring */
+  children?: React.ReactNode;
+  /** Gradient colors for the progress arc (accepted but not yet implemented) */
+  gradientColors?: string[];
 }
 
 /**
@@ -34,6 +38,8 @@ export function ProgressRing({
   label,
   sublabel,
   trackColor: trackColorProp,
+  children,
+  gradientColors: _gradientColors,
 }: ProgressRingProps) {
   const { colors, typography } = useTheme();
   const progress = Math.max(0, Math.min(rawProgress, 1));
@@ -106,8 +112,10 @@ export function ProgressRing({
         style={[
           styles.center,
           {
-            width: size - strokeWidth * 2 - 4,
-            height: size - strokeWidth * 2 - 4,
+            top: strokeWidth + 2,
+            left: strokeWidth + 2,
+            right: strokeWidth + 2,
+            bottom: strokeWidth + 2,
             borderRadius: (size - strokeWidth * 2 - 4) / 2,
           },
         ]}
@@ -134,6 +142,7 @@ export function ProgressRing({
             {sublabel}
           </Text>
         )}
+        {children}
       </View>
     </View>
   );
@@ -157,6 +166,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   center: {
+    position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
   },

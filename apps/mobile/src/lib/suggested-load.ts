@@ -1,4 +1,4 @@
-import type { CompletedSession, LoadSuggestion } from '../types/workout';
+import type { CompletedSession, LoadSuggestion, ExerciseLibraryEntry, ActiveExercise } from '../types/workout';
 
 /**
  * Progressive overload suggestion engine.
@@ -209,6 +209,8 @@ export function getSuggestedLoad(
   isMetric: boolean,
   userMetrics?: UserBodyMetrics,
   isBodyweight?: boolean,
+  _allExercises?: ExerciseLibraryEntry[],
+  _activeExercises?: ActiveExercise[],
 ): LoadSuggestion | null {
   // Find the most recent session containing this exercise
   const sortedHistory = [...history].sort(
@@ -310,6 +312,33 @@ export function getLastPerformance(
       return workingSets
         .map((s) => `${s.weight ?? 0}${unit} × ${s.reps ?? 0}`)
         .join(', ');
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get previous set data for a specific set number of an exercise.
+ */
+export function getPreviousSetData(
+  exerciseId: string,
+  setNumber: number,
+  history: CompletedSession[],
+): { weight: number; reps: number } | null {
+  const sortedHistory = [...history].sort(
+    (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+  );
+
+  for (const session of sortedHistory) {
+    const exerciseEntry = session.exercises.find((e) => e.exerciseId === exerciseId);
+    if (exerciseEntry) {
+      const workingSets = exerciseEntry.sets.filter((s) => s.setType === 'working');
+      const matchingSet = workingSets[setNumber - 1];
+      if (matchingSet && matchingSet.weight != null && matchingSet.reps != null) {
+        return { weight: matchingSet.weight, reps: matchingSet.reps };
+      }
+      return null;
     }
   }
 

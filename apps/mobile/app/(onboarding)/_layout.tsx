@@ -5,9 +5,12 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'slide_from_right',
+        animation: 'ios_from_right',
+        gestureEnabled: true,
+        animationMatchesGesture: true,
       }}
     >
+      {/* V1 screens */}
       <Stack.Screen name="welcome" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="body" />
@@ -15,6 +18,15 @@ export default function OnboardingLayout() {
       <Stack.Screen name="mode" />
       <Stack.Screen name="coach-tone" />
       <Stack.Screen name="complete" />
+      {/* V2 screens */}
+      <Stack.Screen name="health-sync" />
+      <Stack.Screen name="schedule" />
+      <Stack.Screen name="gym-type" />
+      <Stack.Screen name="gym-search" />
+      <Stack.Screen name="equipment" />
+      <Stack.Screen name="notifications" />
+      <Stack.Screen name="attribution" />
+      <Stack.Screen name="generating" />
     </Stack>
   );
 }

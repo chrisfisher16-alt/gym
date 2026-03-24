@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
+  LayoutAnimation,
   Linking,
   Platform,
 } from 'react-native';
@@ -14,6 +15,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useEntitlement } from '../src/hooks/useEntitlement';
 import {
@@ -40,6 +42,7 @@ export default function PaywallScreen() {
     isLoading,
     purchase,
     restore,
+    applyPromoCode,
   } = useSubscriptionStore();
 
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
@@ -49,6 +52,10 @@ export default function PaywallScreen() {
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoExpanded, setPromoExpanded] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoSuccess, setPromoSuccess] = useState(false);
 
   const plans = getPlanList();
 
@@ -62,7 +69,7 @@ export default function PaywallScreen() {
 
   const handlePurchase = useCallback(async () => {
     if (!offerings?.current) {
-      Alert.alert(
+      crossPlatformAlert(
         'Unavailable',
         'Subscription packages are not available right now. Please try again later.',
       );
@@ -78,13 +85,13 @@ export default function PaywallScreen() {
     if (!pkg) {
       // In dev/test mode, show a simulated success
       if (__DEV__) {
-        Alert.alert(
+        crossPlatformAlert(
           'Development Mode',
           `Would purchase: ${selectedPlan} (${billingPeriod}).\nRevenueCat packages not available in dev mode.`,
         );
         return;
       }
-      Alert.alert('Error', 'Package not found. Please try again.');
+      crossPlatformAlert('Error', 'Package not found. Please try again.');
       return;
     }
 
@@ -98,7 +105,7 @@ export default function PaywallScreen() {
         router.back();
       }, 2000);
     } else if (result.error && result.error !== 'cancelled') {
-      Alert.alert('Purchase Failed', result.error);
+      crossPlatformAlert('Purchase Failed', result.error);
     }
   }, [offerings, billingPeriod, selectedPlan, purchase]);
 
@@ -108,16 +115,32 @@ export default function PaywallScreen() {
     setRestoreLoading(false);
 
     if (result.success) {
-      Alert.alert('Restored', 'Your purchases have been restored.', [
+      crossPlatformAlert('Restored', 'Your purchases have been restored.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } else {
-      Alert.alert(
+      crossPlatformAlert(
         'Restore Failed',
         result.error ?? 'No previous purchases found.',
       );
     }
   }, [restore]);
+
+  const handleApplyPromo = useCallback(() => {
+    if (!promoCode.trim()) return;
+    setPromoError(null);
+    const result = applyPromoCode(promoCode);
+    if (result.success) {
+      setPromoSuccess(true);
+      setPromoError(null);
+      setTimeout(() => {
+        router.back();
+      }, 2000);
+    } else {
+      setPromoError(result.error ?? 'Invalid code');
+      setPromoSuccess(false);
+    }
+  }, [promoCode, applyPromoCode]);
 
   // Success overlay
   if (showSuccess) {
@@ -417,6 +440,99 @@ export default function PaywallScreen() {
             </Text>
           )}
         </TouchableOpacity>
+
+        {/* Promo Code */}
+        <View style={{ marginTop: spacing.lg }}>
+          <TouchableOpacity
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setPromoExpanded(!promoExpanded);
+            }}
+            style={{ alignItems: 'center', paddingVertical: spacing.sm }}
+            activeOpacity={0.7}
+          >
+            <Text style={[typography.label, { color: colors.textSecondary }]}>
+              Have a promo code?
+            </Text>
+          </TouchableOpacity>
+
+          {promoExpanded && (
+            <View style={{ marginTop: spacing.sm }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: colors.surface,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: promoError ? colors.error : promoSuccess ? colors.success : colors.border,
+                  paddingHorizontal: spacing.md,
+                }}
+              >
+                <Ionicons name="pricetag-outline" size={18} color={colors.textTertiary} />
+                <TextInput
+                  style={[
+                    typography.body,
+                    {
+                      color: colors.text,
+                      flex: 1,
+                      marginLeft: spacing.sm,
+                      paddingVertical: 12,
+                    },
+                  ]}
+                  placeholder="Enter promo code"
+                  placeholderTextColor={colors.textTertiary}
+                  value={promoCode}
+                  onChangeText={(text) => {
+                    setPromoCode(text);
+                    setPromoError(null);
+                    setPromoSuccess(false);
+                  }}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={handleApplyPromo}
+                  disabled={!promoCode.trim()}
+                  style={{
+                    backgroundColor: promoCode.trim() ? colors.primary : colors.disabled,
+                    borderRadius: radius.sm,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.xs,
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      typography.label,
+                      { color: promoCode.trim() ? colors.textInverse : colors.disabledText },
+                    ]}
+                  >
+                    Apply
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {promoError && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
+                  <Ionicons name="alert-circle" size={14} color={colors.error} />
+                  <Text style={[typography.caption, { color: colors.error, marginLeft: 4 }]}>
+                    {promoError}
+                  </Text>
+                </View>
+              )}
+
+              {promoSuccess && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                  <Text style={[typography.caption, { color: colors.success, marginLeft: 4 }]}>
+                    Promo code applied! Activating your plan...
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
 
         {/* Legal */}
         <View style={[styles.legalLinks, { marginTop: spacing.lg, marginBottom: spacing['3xl'] }]}>

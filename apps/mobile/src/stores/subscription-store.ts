@@ -33,6 +33,7 @@ interface SubscriptionState {
   initialize: (userId?: string) => Promise<void>;
   purchase: (pkg: PurchasesPackage) => Promise<{ success: boolean; error?: string }>;
   restore: () => Promise<{ success: boolean; error?: string }>;
+  applyPromoCode: (code: string) => { success: boolean; error?: string };
   checkEntitlements: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   logout: () => Promise<void>;
@@ -211,6 +212,32 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       set({ isLoading: false, error: message });
       return { success: false, error: message };
     }
+  },
+
+  applyPromoCode: (code) => {
+    const normalizedCode = code.trim().toUpperCase();
+
+    // Valid promo codes
+    const PROMO_CODES: Record<string, { tier: EntitlementTier }> = {
+      'FISHER25': { tier: 'full_health_coach' },
+    };
+
+    const promo = PROMO_CODES[normalizedCode];
+    if (!promo) {
+      return { success: false, error: 'Invalid promo code' };
+    }
+
+    const plan = mapPricingConfig(promo.tier as Exclude<EntitlementTier, 'free'>);
+
+    set({
+      tier: promo.tier,
+      isSubscribed: true,
+      isTrial: false,
+      trialEndsAt: null,
+      currentPlan: plan,
+    });
+
+    return { success: true };
   },
 
   checkEntitlements: async () => {

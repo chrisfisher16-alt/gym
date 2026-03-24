@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -10,6 +10,7 @@ import type { HealthGoal } from '../../src/stores/profile-store';
 import { supabase } from '../../src/lib/supabase';
 import { useState } from 'react';
 import { isHealthPlatform } from '../../src/lib/health';
+import { EQUIPMENT_CATALOG } from '../../src/types/onboarding';
 
 export default function CompleteScreen() {
   const { colors, spacing, typography } = useTheme();
@@ -20,52 +21,87 @@ export default function CompleteScreen() {
   const setCoachPreferences = useAuthStore((s) => s.setCoachPreferences);
   const updateProfileStore = useProfileStore((s) => s.updateProfile);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const finishOnboarding = async () => {
     if (!user) return;
     setSaving(true);
+    setError(null);
+
+    // Build user_equipment jsonb from selectedEquipment + equipmentWeights + catalog
+    const userEquipment = onboarding.selectedEquipment.map((eqId) => {
+      const catalogItem = EQUIPMENT_CATALOG.find((c) => c.id === eqId);
+      return {
+        id: eqId,
+        name: catalogItem?.name ?? eqId,
+        category: catalogItem?.category ?? 'other',
+        available: true,
+        weights: onboarding.equipmentWeights[eqId] ?? [],
+      };
+    });
+
+    // Resolve effective training days
+    const effectiveTrainingDays = onboarding.getEffectiveTrainingDays();
 
     try {
-      // Save profile
-      const profileData = {
-        user_id: user.id,
-        display_name: onboarding.displayName,
-        date_of_birth: onboarding.dateOfBirth || null,
-        gender: onboarding.gender,
-        height_cm: onboarding.heightCm,
-        weight_kg: onboarding.weightKg,
-        unit_preference: onboarding.unitPreference,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data: profile } = await supabase
+      // Update profile (row already exists from handle_new_user trigger)
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .upsert(profileData)
+        .update({
+          display_name: onboarding.displayName || null,
+          date_of_birth: onboarding.dateOfBirth || null,
+          gender: onboarding.gender,
+          height_cm: onboarding.heightCm,
+          weight_kg: onboarding.weightKg,
+          unit_preference: onboarding.unitPreference,
+          product_mode: onboarding.productMode ?? 'full_health_coach',
+          onboarding_completed: true,
+          onboarding_version: 2,
+          // v2 fields
+          fitness_goal: onboarding.fitnessGoal,
+          experience_level: onboarding.experienceLevel,
+          consistency_level: onboarding.consistencyLevel,
+          gym_type: onboarding.gymType,
+          gym_name: onboarding.gymName || null,
+          training_days_per_week: onboarding.trainingDaysPerWeek,
+          specific_training_days: effectiveTrainingDays,
+          session_duration_pref: onboarding.sessionDuration,
+          injuries: [],  // TODO: wire up injury selection if added to onboarding
+          user_equipment: userEquipment,
+          attribution_source: onboarding.attributionSource,
+          notification_time: onboarding.notificationTime || '09:00',
+          notifications_enabled: onboarding.notificationsEnabled,
+          health_sync_enabled: onboarding.healthSyncEnabled,
+        })
+        .eq('id', user.id)
         .select()
         .single();
 
-      // Save coach preferences
-      const coachData = {
-        user_id: user.id,
-        product_mode: onboarding.productMode,
-        coach_tone: onboarding.coachTone,
-        focus_areas: onboarding.selectedGoals,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      if (profileError) {
+        console.error('Profile update error:', profileError);
+        throw profileError;
+      }
 
-      const { data: coachPrefs } = await supabase
+      // Update coach preferences (row already exists from handle_new_user trigger)
+      const { data: coachPrefs, error: coachError } = await supabase
         .from('coach_preferences')
-        .upsert(coachData)
+        .update({
+          tone: onboarding.coachTone || 'balanced',
+          focus_areas: onboarding.selectedGoals.length > 0 ? onboarding.selectedGoals : null,
+        })
+        .eq('user_id', user.id)
         .select()
         .single();
+
+      if (coachError) {
+        console.error('Coach preferences update error:', coachError);
+        // Non-critical — don't throw, profile was already saved
+      }
 
       if (profile) setProfile(profile);
       if (coachPrefs) setCoachPreferences(coachPrefs);
 
-      // Sync onboarding goals into the local profile store so the Coach
-      // and recipe generator can read them from healthGoals.
+      // Sync into local profile store for Coach and recipe generator
       updateProfileStore({
         displayName: onboarding.displayName,
         dateOfBirth: onboarding.dateOfBirth || undefined,
@@ -74,6 +110,9 @@ export default function CompleteScreen() {
         weightKg: onboarding.weightKg || undefined,
         unitPreference: onboarding.unitPreference,
         healthGoals: onboarding.selectedGoals as HealthGoal[],
+        trainingDaysPerWeek: onboarding.trainingDaysPerWeek ?? undefined,
+        preferredWorkoutDays: effectiveTrainingDays,
+        fitnessEquipment: onboarding.selectedEquipment,
       });
 
       setIsOnboarded(true);
@@ -85,11 +124,9 @@ export default function CompleteScreen() {
       } else {
         router.replace('/(tabs)');
       }
-    } catch {
-      // Fallback: mark as onboarded anyway so user isn't stuck
-      setIsOnboarded(true);
-      router.replace('/(tabs)');
-    } finally {
+    } catch (err) {
+      console.error('Onboarding save failed:', err);
+      setError('Failed to save your profile. Please try again.');
       setSaving(false);
     }
   };
@@ -116,31 +153,46 @@ export default function CompleteScreen() {
             Your personalized health coaching experience is ready.
           </Text>
 
+          {error && (
+            <Text style={[typography.body, { color: colors.error, marginTop: spacing.md, textAlign: 'center' }]}>
+              {error}
+            </Text>
+          )}
+
           <View style={[styles.summary, { marginTop: spacing['2xl'], gap: spacing.md }]}>
             <SummaryRow label="Name" value={onboarding.displayName} colors={colors} typography={typography} spacing={spacing} />
             <SummaryRow
-              label="Mode"
+              label="Goal"
               value={
-                onboarding.productMode === 'workout_coach'
-                  ? 'Workout Coach'
-                  : onboarding.productMode === 'nutrition_coach'
-                  ? 'Nutrition Coach'
-                  : 'Full Health Coach'
+                onboarding.fitnessGoal
+                  ? onboarding.fitnessGoal.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                  : 'Not set'
               }
               colors={colors}
               typography={typography}
               spacing={spacing}
             />
             <SummaryRow
-              label="Coach Style"
-              value={onboarding.coachTone.charAt(0).toUpperCase() + onboarding.coachTone.slice(1)}
+              label="Experience"
+              value={
+                onboarding.experienceLevel
+                  ? onboarding.experienceLevel.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                  : 'Not set'
+              }
               colors={colors}
               typography={typography}
               spacing={spacing}
             />
             <SummaryRow
-              label="Goals"
-              value={`${onboarding.selectedGoals.length} selected`}
+              label="Training Days"
+              value={`${onboarding.trainingDaysPerWeek ?? 3} days/week`}
+              colors={colors}
+              typography={typography}
+              spacing={spacing}
+            />
+            <SummaryRow
+              label="Equipment"
+              value={`${onboarding.selectedEquipment.length} items`}
               colors={colors}
               typography={typography}
               spacing={spacing}
@@ -150,7 +202,7 @@ export default function CompleteScreen() {
 
         <View style={[styles.bottom, { paddingBottom: spacing['2xl'] }]}>
           <Button
-            title="Start Your Journey"
+            title={error ? 'Retry' : 'Start Your Journey'}
             onPress={finishOnboarding}
             loading={saving}
           />

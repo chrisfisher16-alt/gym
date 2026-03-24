@@ -3,8 +3,9 @@
 // of Supabase Edge Functions.
 
 import { sendAIMessage, sendWorkoutCoachMessage, sendNutritionCoachMessage, type AIClientResponse } from './ai-client';
+import { loadSummaries } from './conversation-summarizer';
 import { buildExerciseAdjustmentSystemPrompt } from './coach-system-prompt';
-import type { AIMessage } from './ai-provider';
+import type { AIMessage, AIContentBlock } from './ai-provider';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -37,13 +38,20 @@ export interface ParsedMealItem {
  */
 export async function sendChatMessage(
   conversationId: string | undefined,
-  message: string,
+  message: string | AIContentBlock[],
   context: string = 'general',
   history: AIMessage[] = [],
+  onToken?: (token: string) => void,
 ): Promise<ChatResponse> {
+  // Load any existing conversation summaries for context continuity
+  const summaries = conversationId ? await loadSummaries(conversationId) : [];
+
   const response = await sendAIMessage(message, {
     history,
     context: context as 'general' | 'workout' | 'nutrition',
+    conversationId,
+    conversationSummaries: summaries.length > 0 ? summaries : undefined,
+    onToken,
   });
 
   return {
@@ -91,7 +99,32 @@ export interface ExerciseAdjustmentSets {
   reason: string;
 }
 
-export type ExerciseAdjustment = ExerciseAdjustmentReplace | ExerciseAdjustmentSets;
+export interface ExerciseAdjustmentAdd {
+  action: 'add_exercise';
+  exerciseName: string;
+  sets: number;
+  reps: string;
+  reason: string;
+}
+
+export interface ExerciseAdjustmentRemove {
+  action: 'remove_exercise';
+  currentExercise: string;
+  reason: string;
+}
+
+export interface ExerciseAdjustmentSuperset {
+  action: 'create_superset';
+  exercises: string[];
+  reason: string;
+}
+
+export type ExerciseAdjustment =
+  | ExerciseAdjustmentReplace
+  | ExerciseAdjustmentSets
+  | ExerciseAdjustmentAdd
+  | ExerciseAdjustmentRemove
+  | ExerciseAdjustmentSuperset;
 
 export interface ExerciseAdjustmentResponse {
   content: string;
@@ -122,6 +155,29 @@ function parseSingleAdjustment(obj: Record<string, unknown>, fallbackCurrentExer
       currentExercise,
       sets: obj.sets as number | undefined,
       reps: obj.reps as string | undefined,
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'add_exercise' && obj.exerciseName) {
+    return {
+      action: 'add_exercise',
+      exerciseName: obj.exerciseName as string,
+      sets: (obj.sets as number) ?? 3,
+      reps: (obj.reps as string) ?? '8-12',
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'remove_exercise') {
+    return {
+      action: 'remove_exercise',
+      currentExercise,
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'create_superset' && Array.isArray(obj.exercises)) {
+    return {
+      action: 'create_superset',
+      exercises: obj.exercises as string[],
       reason: (obj.reason as string) ?? '',
     };
   }

@@ -1,25 +1,28 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Linking,
   Platform,
+  LayoutAnimation,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
 import { ScreenContainer, Card, Button, Divider } from '../src/components/ui';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import {
   getAIConfig,
   setAIConfig,
   getProviderDefaults,
   testAIConnection,
   clearConfigCache,
+  fetchAvailableModels,
   type AIConfig,
+  type AIModelInfo,
 } from '../src/lib/ai-provider';
 
 const PROVIDERS = [
@@ -63,6 +66,13 @@ export default function AISettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Model dropdown state
+  const [availableModels, setAvailableModels] = useState<AIModelInfo[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
+  const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     clearConfigCache();
     getAIConfig().then((c) => {
@@ -70,6 +80,34 @@ export default function AISettingsScreen() {
       setIsLoading(false);
     });
   }, []);
+
+  // Fetch models when provider or API key changes
+  useEffect(() => {
+    if (isLoading) return;
+    if (config.provider === 'demo') {
+      setAvailableModels([]);
+      return;
+    }
+
+    // Debounce API key changes
+    if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    fetchTimeoutRef.current = setTimeout(() => {
+      setIsLoadingModels(true);
+      setModelFetchError(null);
+      fetchAvailableModels(config).then((models) => {
+        setAvailableModels(models);
+        setIsLoadingModels(false);
+      }).catch(() => {
+        setAvailableModels([]);
+        setModelFetchError('Could not fetch models');
+        setIsLoadingModels(false);
+      });
+    }, 500);
+
+    return () => {
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    };
+  }, [config.provider, config.apiKey, config.baseUrl, isLoading]);
 
   const updateConfig = useCallback((updates: Partial<AIConfig>) => {
     setConfig((prev) => ({ ...prev, ...updates }));
@@ -79,24 +117,42 @@ export default function AISettingsScreen() {
   const handleProviderChange = useCallback(
     (provider: AIConfig['provider']) => {
       const defaults = getProviderDefaults(provider);
+      // Save current API key for the current provider before switching
+      const updatedKeys = { ...config.providerKeys };
+      if (config.apiKey && config.provider !== 'demo' && config.provider !== 'ollama') {
+        updatedKeys[config.provider] = config.apiKey;
+      }
+      // Load the saved API key for the new provider
+      const savedKey = updatedKeys[provider];
       updateConfig({
         provider,
         baseUrl: provider === 'demo' || provider === 'claude' ? undefined : defaults.baseUrl,
         model: provider === 'demo' ? undefined : defaults.model,
-        apiKey: provider === 'demo' || provider === 'ollama' ? undefined : config.apiKey,
+        apiKey: provider === 'demo' || provider === 'ollama' ? undefined : (savedKey ?? ''),
+        providerKeys: updatedKeys,
       });
+      setModelDropdownOpen(false);
     },
-    [config.apiKey, updateConfig],
+    [config.apiKey, config.provider, config.providerKeys, updateConfig],
   );
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      await setAIConfig(config);
+      // Sync current apiKey into providerKeys before saving
+      const configToSave = { ...config };
+      if (config.apiKey && config.provider !== 'demo' && config.provider !== 'ollama') {
+        configToSave.providerKeys = {
+          ...config.providerKeys,
+          [config.provider]: config.apiKey,
+        };
+      }
+      await setAIConfig(configToSave);
+      setConfig(configToSave);
       setHasChanges(false);
-      Alert.alert('Saved', 'AI settings updated successfully.');
+      crossPlatformAlert('Saved', 'AI settings updated successfully.');
     } catch {
-      Alert.alert('Error', 'Failed to save settings.');
+      crossPlatformAlert('Error', 'Failed to save settings.');
     } finally {
       setIsSaving(false);
     }
@@ -107,11 +163,17 @@ export default function AISettingsScreen() {
     const result = await testAIConnection(config);
     setIsTesting(false);
     if (result.success) {
-      Alert.alert('Connection Successful', `Connected to: ${result.model}`);
+      crossPlatformAlert('Connection Successful', `Connected to: ${result.model}`);
     } else {
-      Alert.alert('Connection Failed', result.error ?? 'Unknown error');
+      crossPlatformAlert('Connection Failed', result.error ?? 'Unknown error');
     }
   }, [config]);
+
+  const handleSelectModel = useCallback((modelId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    updateConfig({ model: modelId });
+    setModelDropdownOpen(false);
+  }, [updateConfig]);
 
   if (isLoading) {
     return (
@@ -124,6 +186,8 @@ export default function AISettingsScreen() {
   const needsApiKey = config.provider === 'groq' || config.provider === 'openai' || config.provider === 'claude';
   const showBaseUrl = config.provider === 'openai' || config.provider === 'ollama';
   const showModel = config.provider !== 'demo';
+  const currentModel = config.model || getProviderDefaults(config.provider).model;
+  const selectedModelInfo = availableModels.find((m) => m.id === currentModel);
 
   return (
     <ScreenContainer edges={[]}>
@@ -210,7 +274,7 @@ export default function AISettingsScreen() {
                 },
               ]}
             >
-              API Key
+              API Key (Optional)
             </Text>
             <Card style={{ marginBottom: spacing.base }}>
               <TextInput
@@ -227,12 +291,20 @@ export default function AISettingsScreen() {
                 ]}
                 value={config.apiKey ?? ''}
                 onChangeText={(text) => updateConfig({ apiKey: text.trim() })}
-                placeholder="Enter your API key..."
+                placeholder="Leave blank to use built-in key"
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.textTertiary, marginTop: spacing.sm },
+                ]}
+              >
+                AI coaching works without a key. Add your own for higher limits or to use premium models.
+              </Text>
               {config.provider === 'groq' && (
                 <TouchableOpacity
                   onPress={() => Linking.openURL('https://console.groq.com')}
@@ -304,7 +376,7 @@ export default function AISettingsScreen() {
           </>
         )}
 
-        {/* Model */}
+        {/* Model Selection */}
         {showModel && (
           <>
             <Text
@@ -322,44 +394,178 @@ export default function AISettingsScreen() {
               Model
             </Text>
             <Card style={{ marginBottom: spacing.base }}>
-              <TextInput
-                style={[
-                  typography.body,
-                  {
-                    color: colors.text,
-                    backgroundColor: colors.surfaceSecondary,
-                    borderRadius: radius.md,
-                    padding: spacing.md,
-                    fontSize: 13,
-                  },
-                ]}
-                value={config.model ?? ''}
-                onChangeText={(text) => updateConfig({ model: text.trim() })}
-                placeholder={getProviderDefaults(config.provider).model}
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {config.provider === 'groq' && (
+              {/* Selected model button */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setModelDropdownOpen(!modelDropdownOpen);
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: colors.surfaceSecondary,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.body, { color: colors.text, fontSize: 13 }]}>
+                    {selectedModelInfo?.name ?? currentModel}
+                  </Text>
+                  {selectedModelInfo?.description ? (
+                    <Text style={[typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+                      {selectedModelInfo.description}
+                    </Text>
+                  ) : null}
+                </View>
+                {isLoadingModels ? (
+                  <ActivityIndicator size="small" color={colors.textTertiary} />
+                ) : (
+                  <Ionicons
+                    name={modelDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={colors.textTertiary}
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* Model dropdown list */}
+              {modelDropdownOpen && (
+                <View style={{ marginTop: spacing.sm }}>
+                  {availableModels.length > 0 ? (
+                    <>
+                      {availableModels.map((model, index) => {
+                        const isSelected = model.id === currentModel;
+                        return (
+                          <React.Fragment key={model.id}>
+                            {index > 0 && (
+                              <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xs }} />
+                            )}
+                            <TouchableOpacity
+                              activeOpacity={0.7}
+                              onPress={() => handleSelectModel(model.id)}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: spacing.sm + 2,
+                                paddingHorizontal: spacing.sm,
+                                backgroundColor: isSelected ? colors.primaryMuted : 'transparent',
+                                borderRadius: radius.sm,
+                              }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={[
+                                    typography.bodySmall,
+                                    {
+                                      color: isSelected ? colors.primary : colors.text,
+                                      fontWeight: isSelected ? '600' : '400',
+                                    },
+                                  ]}
+                                >
+                                  {model.name}
+                                </Text>
+                                {model.description ? (
+                                  <Text
+                                    style={[
+                                      typography.caption,
+                                      { color: colors.textTertiary, marginTop: 1, fontSize: 11 },
+                                    ]}
+                                  >
+                                    {model.description}
+                                  </Text>
+                                ) : (
+                                  <Text
+                                    style={[
+                                      typography.caption,
+                                      { color: colors.textTertiary, marginTop: 1, fontSize: 11 },
+                                    ]}
+                                  >
+                                    {model.id}
+                                  </Text>
+                                )}
+                              </View>
+                              {isSelected && (
+                                <Ionicons name="checkmark" size={18} color={colors.primary} />
+                              )}
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                      {/* Manual entry option */}
+                      <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xs }} />
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setModelDropdownOpen(false);
+                        }}
+                        style={{
+                          paddingVertical: spacing.sm + 2,
+                          paddingHorizontal: spacing.sm,
+                        }}
+                      >
+                        <Text style={[typography.caption, { color: colors.textTertiary, fontStyle: 'italic' }]}>
+                          Or type a custom model ID below
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : isLoadingModels ? (
+                    <View style={{ paddingVertical: spacing.md, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.sm }]}>
+                        Fetching available models...
+                      </Text>
+                    </View>
+                  ) : modelFetchError ? (
+                    <View style={{ paddingVertical: spacing.sm, paddingHorizontal: spacing.sm }}>
+                      <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                        {needsApiKey && !config.apiKey
+                          ? 'Enter your API key above to see available models.'
+                          : 'Could not fetch models. Enter a model ID manually below.'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ paddingVertical: spacing.sm, paddingHorizontal: spacing.sm }}>
+                      <Text style={[typography.caption, { color: colors.textTertiary }]}>
+                        {needsApiKey && !config.apiKey
+                          ? 'Enter your API key above to see available models.'
+                          : 'No models found. Enter a model ID manually below.'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Custom model input (always visible below dropdown) */}
+              <View style={{ marginTop: spacing.sm }}>
+                <TextInput
+                  style={[
+                    typography.body,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surfaceSecondary,
+                      borderRadius: radius.md,
+                      padding: spacing.md,
+                      fontSize: 13,
+                    },
+                  ]}
+                  value={config.model ?? ''}
+                  onChangeText={(text) => updateConfig({ model: text.trim() })}
+                  placeholder={getProviderDefaults(config.provider).model}
+                  placeholderTextColor={colors.textTertiary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
                 <Text
                   style={[
                     typography.caption,
-                    { color: colors.textTertiary, marginTop: spacing.sm },
+                    { color: colors.textTertiary, marginTop: spacing.xs, fontSize: 11 },
                   ]}
                 >
-                  Recommended: llama-3.3-70b-versatile (fast, free tier: 30 RPM, 14,400/day)
+                  Select from the list above or type a model ID directly.
                 </Text>
-              )}
-              {config.provider === 'ollama' && (
-                <Text
-                  style={[
-                    typography.caption,
-                    { color: colors.textTertiary, marginTop: spacing.sm },
-                  ]}
-                >
-                  Popular: llama3, mistral, gemma2. Pull models with: ollama pull llama3
-                </Text>
-              )}
+              </View>
             </Card>
           </>
         )}

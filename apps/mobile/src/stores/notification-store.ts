@@ -126,7 +126,7 @@ export const useNotificationStore = create<NotificationState>()(
           const updates: Partial<NotificationPreferences> = {
             workoutRemindersEnabled: true,
             // Always re-resolve days (handles program changes since last enable)
-            workoutReminderDays: resolveWorkoutReminderDays(),
+            workoutReminderDays: resolveWorkoutReminderDays(current.workoutReminderDays),
           };
 
           // Pre-fill time from profile preferred training time (only on first enable)
@@ -180,7 +180,7 @@ export const useNotificationStore = create<NotificationState>()(
         const { preferences } = get();
         // Only update if workout reminders are currently enabled
         if (!preferences.workoutRemindersEnabled) return;
-        const resolved = resolveWorkoutReminderDays();
+        const resolved = resolveWorkoutReminderDays(preferences.workoutReminderDays);
         // Avoid unnecessary re-sync if days haven't changed
         const current = preferences.workoutReminderDays;
         if (

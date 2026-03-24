@@ -7,7 +7,8 @@ export type NotificationType =
   | 'supplement_reminder'
   | 'weekly_checkin'
   | 'coach_tip'
-  | 'daily_briefing';
+  | 'daily_briefing'
+  | 'smart_pattern';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 

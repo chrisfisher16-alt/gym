@@ -7,25 +7,31 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Image,
   StyleSheet,
-  Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../src/theme';
 import { useCoachStore } from '../../src/stores/coach-store';
 import { ChatBubble } from '../../src/components/coach/ChatBubble';
 import { TypingIndicator } from '../../src/components/coach/TypingIndicator';
 import { SuggestedPrompts } from '../../src/components/coach/SuggestedPrompts';
 import { CoachAvatar } from '../../src/components/coach/CoachAvatar';
+import { ExpandableCard, SmartHeader } from '../../src/components/ui';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
-import { checkAIMessageLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
+import { checkAIMessageLimit, checkWorkoutLogLimit, checkMealLogLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
 import type { CoachMessage } from '../../src/stores/coach-store';
 import type { CoachContext } from '@health-coach/shared';
 
 export default function CoachTab() {
+  const router = useRouter();
   const { colors, spacing, typography, radius } = useTheme();
   const [inputText, setInputText] = useState('');
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pendingContextRef = useRef<CoachContext | null>(null);
 
@@ -37,6 +43,8 @@ export default function CoachTab() {
     isInitialized,
     prefilledMessage,
     prefilledContext,
+    streamingContent,
+    isStreaming,
     initialize,
     sendMessage,
     startConversation,
@@ -77,13 +85,25 @@ export default function CoachTab() {
     ? messages.filter((m) => m.conversation_id === activeConversation.id)
     : [];
 
+  const handlePickImage = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAttachedImage(result.assets[0].uri);
+    }
+  }, []);
+
   const handleSend = useCallback(() => {
     const text = inputText.trim();
-    if (!text || isLoading) return;
+    if ((!text && !attachedImage) || isLoading) return;
 
     // Use the ref-captured context (survives store clear) then reset it.
     const contextToSend = pendingContextRef.current ?? prefilledContext ?? undefined;
     pendingContextRef.current = null;
+    const imageToSend = attachedImage;
 
     // Check AI message limit for free users
     if (!canAccess('unlimited_ai') && tier === 'free') {
@@ -92,9 +112,10 @@ export default function CoachTab() {
         if (usage.allowed) {
           incrementUsage('ai_messages');
           setInputText('');
-          sendMessage(text, contextToSend);
+          setAttachedImage(null);
+          sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
         } else {
-          Alert.alert(
+          crossPlatformAlert(
             'Daily Message Limit Reached',
             'You\'ve used all 5 free AI messages today. Upgrade for unlimited coaching.',
             [
@@ -108,8 +129,9 @@ export default function CoachTab() {
     }
 
     setInputText('');
-    sendMessage(text, contextToSend);
-  }, [inputText, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
+    setAttachedImage(null);
+    sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+  }, [inputText, attachedImage, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
 
   const handlePromptSelect = useCallback(
     (prompt: string) => {
@@ -123,14 +145,14 @@ export default function CoachTab() {
     startConversation();
   }, [startConversation]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or streaming content updates
   useEffect(() => {
-    if (currentMessages.length > 0) {
+    if (currentMessages.length > 0 || streamingContent) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [currentMessages.length, isLoading]);
+  }, [currentMessages.length, isLoading, streamingContent]);
 
   const handleExecuteAction = useCallback(
     (messageId: string, actionIndex: number) => {
@@ -198,26 +220,22 @@ export default function CoachTab() {
           <CoachAvatar size={36} />
           <View style={{ marginLeft: spacing.sm }}>
             <Text style={[typography.labelLarge, { color: colors.text }]}>AI Coach</Text>
-            <Text style={[typography.caption, { color: colors.success }]}>
-              {isLoading ? 'Thinking...' : 'Online'}
-            </Text>
+            <SmartHeader tab="coach" />
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           {tier === 'free' && aiUsage && (
-            <View
-              style={{
-                backgroundColor: aiUsage.remaining <= 1 ? colors.warningLight : colors.surfaceSecondary,
-                borderRadius: 12,
-                paddingHorizontal: spacing.sm,
-                paddingVertical: 2,
-              }}
-            >
-              <Text style={[typography.caption, { color: aiUsage.remaining <= 1 ? colors.warning : colors.textSecondary, fontWeight: '600' }]}>
-                {aiUsage.remaining}/{aiUsage.limit} left
-              </Text>
-            </View>
+            <UsageCounterExpandable
+              aiUsage={aiUsage}
+              onUpgrade={() => showPaywall({ feature: 'unlimited_ai', source: 'coach_tab' })}
+            />
           )}
+          <TouchableOpacity
+            onPress={() => router.push('/settings')}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleNewConversation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
           </TouchableOpacity>
@@ -235,7 +253,22 @@ export default function CoachTab() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingVertical: spacing.md }}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={isLoading ? <TypingIndicator /> : null}
+          ListFooterComponent={
+            isStreaming && streamingContent ? (
+              <ChatBubble
+                message={{
+                  id: 'streaming',
+                  conversation_id: activeConversation?.id ?? '',
+                  role: 'assistant',
+                  content: streamingContent,
+                  created_at: new Date().toISOString(),
+                }}
+                isStreaming={true}
+              />
+            ) : isLoading ? (
+              <TypingIndicator />
+            ) : null
+          }
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
       )}
@@ -274,6 +307,46 @@ export default function CoachTab() {
         <SuggestedPrompts onSelect={handlePromptSelect} />
       )}
 
+      {/* Image preview */}
+      {attachedImage && (
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderTopColor: colors.borderLight,
+            borderTopWidth: 1,
+            paddingHorizontal: spacing.md,
+            paddingTop: spacing.sm,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          <Image
+            source={{ uri: attachedImage }}
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: radius.md,
+            }}
+            resizeMode="cover"
+          />
+          <TouchableOpacity
+            onPress={() => setAttachedImage(null)}
+            style={{
+              marginLeft: spacing.sm,
+              backgroundColor: colors.surfaceSecondary,
+              borderRadius: radius.full,
+              width: 24,
+              height: 24,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close" size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Input area */}
       <View
         style={[
@@ -284,9 +357,28 @@ export default function CoachTab() {
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm,
             paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.sm,
+            borderTopWidth: attachedImage ? 0 : 1,
           },
         ]}
       >
+        <TouchableOpacity
+          onPress={handlePickImage}
+          disabled={isLoading}
+          style={{
+            width: 40,
+            height: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: spacing.xs,
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name="camera-outline"
+            size={24}
+            color={isLoading ? colors.textTertiary : colors.textSecondary}
+          />
+        </TouchableOpacity>
         <TextInput
           style={[
             styles.input,
@@ -318,11 +410,11 @@ export default function CoachTab() {
         />
         <TouchableOpacity
           onPress={handleSend}
-          disabled={!inputText.trim() || isLoading}
+          disabled={(!inputText.trim() && !attachedImage) || isLoading}
           style={[
             styles.sendButton,
             {
-              backgroundColor: inputText.trim() && !isLoading ? colors.primary : colors.surfaceSecondary,
+              backgroundColor: (inputText.trim() || attachedImage) && !isLoading ? colors.primary : colors.surfaceSecondary,
               borderRadius: radius.full,
               width: 40,
               height: 40,
@@ -333,11 +425,178 @@ export default function CoachTab() {
           <Ionicons
             name="send"
             size={18}
-            color={inputText.trim() && !isLoading ? colors.textInverse : colors.textTertiary}
+            color={(inputText.trim() || attachedImage) && !isLoading ? colors.textInverse : colors.textTertiary}
           />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+// ── Usage Counter Expandable ──────────────────────────────────────────
+
+function UsageCounterExpandable({
+  aiUsage,
+  onUpgrade,
+}: {
+  aiUsage: UsageCheck;
+  onUpgrade: () => void;
+}) {
+  const { colors, spacing, radius, typography } = useTheme();
+  const [workoutUsage, setWorkoutUsage] = useState<UsageCheck | null>(null);
+  const [mealUsage, setMealUsage] = useState<UsageCheck | null>(null);
+
+  useEffect(() => {
+    Promise.all([checkWorkoutLogLimit(), checkMealLogLimit()]).then(
+      ([wk, ml]) => {
+        setWorkoutUsage(wk);
+        setMealUsage(ml);
+      },
+    );
+  }, []);
+
+  const formatResetDate = (date: Date): string => {
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+    if (diffHours <= 24) return `${diffHours}h`;
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `${diffDays}d`;
+  };
+
+  return (
+    <ExpandableCard
+      style={{ borderRadius: 12 }}
+      expandedContent={
+        <View style={{ gap: spacing.md }}>
+          {/* AI Messages */}
+          <View style={{ gap: spacing.xs }}>
+            <Text style={[typography.caption, { color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+              Daily Limits
+            </Text>
+            <UsageRow
+              icon="chatbubble-outline"
+              label="AI Messages"
+              used={aiUsage.used}
+              limit={aiUsage.limit}
+              resets={formatResetDate(aiUsage.resetDate)}
+            />
+            {mealUsage && (
+              <UsageRow
+                icon="restaurant-outline"
+                label="Meal Logs"
+                used={mealUsage.used}
+                limit={mealUsage.limit}
+                resets={formatResetDate(mealUsage.resetDate)}
+              />
+            )}
+          </View>
+
+          {/* Monthly Limits */}
+          {workoutUsage && (
+            <View style={{ gap: spacing.xs }}>
+              <Text style={[typography.caption, { color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+                Monthly Limits
+              </Text>
+              <UsageRow
+                icon="barbell-outline"
+                label="Workout Logs"
+                used={workoutUsage.used}
+                limit={workoutUsage.limit}
+                resets={formatResetDate(workoutUsage.resetDate)}
+              />
+            </View>
+          )}
+
+          {/* Tips */}
+          <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.sm }}>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>
+              Tip: Be specific with your questions to get the most out of each message.
+            </Text>
+          </View>
+
+          {/* Upgrade CTA */}
+          <TouchableOpacity
+            onPress={onUpgrade}
+            activeOpacity={0.7}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: radius.md,
+              paddingVertical: spacing.sm,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={[typography.label, { color: colors.textInverse }]}>
+              Upgrade for Unlimited
+            </Text>
+          </TouchableOpacity>
+        </View>
+      }
+    >
+      {/* Collapsed: usage badge */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: aiUsage.remaining <= 1 ? colors.warning : colors.textSecondary,
+              fontWeight: '600',
+            },
+          ]}
+        >
+          {aiUsage.remaining}/{aiUsage.limit} left
+        </Text>
+        <Ionicons
+          name="chevron-down-outline"
+          size={10}
+          color={aiUsage.remaining <= 1 ? colors.warning : colors.textTertiary}
+        />
+      </View>
+    </ExpandableCard>
+  );
+}
+
+// ── Usage Row ─────────────────────────────────────────────────────────
+
+function UsageRow({
+  icon,
+  label,
+  used,
+  limit,
+  resets,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  used: number;
+  limit: number;
+  resets: string;
+}) {
+  const { colors, spacing, radius, typography } = useTheme();
+  const ratio = limit > 0 ? used / limit : 0;
+  const barColor = ratio >= 0.8 ? colors.warning : colors.primary;
+
+  return (
+    <View style={{ gap: 4 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+          <Ionicons name={icon} size={14} color={colors.textSecondary} />
+          <Text style={[typography.bodySmall, { color: colors.text }]}>{label}</Text>
+        </View>
+        <Text style={[typography.caption, { color: colors.textTertiary }]}>
+          {used}/{limit} · resets in {resets}
+        </Text>
+      </View>
+      <View style={{ height: 4, backgroundColor: colors.surfaceSecondary, borderRadius: radius.full, overflow: 'hidden' }}>
+        <View
+          style={{
+            height: '100%',
+            width: `${Math.min(ratio * 100, 100)}%`,
+            backgroundColor: barColor,
+            borderRadius: radius.full,
+          }}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -370,7 +629,6 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    borderTopWidth: 1,
   },
   input: {
     flex: 1,

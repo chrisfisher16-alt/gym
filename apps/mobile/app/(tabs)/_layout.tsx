@@ -21,6 +21,16 @@ export default function TabsLayout() {
           fontSize: 11,
           fontWeight: '500',
         },
+        animation: 'fade',
+        transitionSpec: {
+          animation: 'spring',
+          config: {
+            damping: 20,
+            stiffness: 200,
+            mass: 0.8,
+            overshootClamping: true,
+          },
+        },
       }}
     >
       <Tabs.Screen

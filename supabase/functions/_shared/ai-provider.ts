@@ -5,6 +5,7 @@ import type {
   AIResponse,
   AIProviderOptions,
   AIProvider,
+  CacheableSystemBlock,
 } from './types.ts';
 
 // ── Token Cost Estimates (per 1M tokens) ─────────────────────────
@@ -54,6 +55,10 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
   }
 
+  get isAnthropicAPI(): boolean {
+    return this.baseUrl.includes('anthropic.com') || this.baseUrl.includes('/v1/messages');
+  }
+
   async chat(messages: AIMessage[], options?: AIProviderOptions): Promise<AIResponse> {
     try {
       return await this.callModel(this.model, messages, options);
@@ -71,9 +76,34 @@ export class OpenAICompatibleProvider implements AIProvider {
     messages: AIMessage[],
     options?: AIProviderOptions,
   ): Promise<AIResponse> {
+    const cachedBlocks = options?.cacheOptions?.cachedSystemBlocks;
+
+    if (this.isAnthropicAPI && cachedBlocks && cachedBlocks.length > 0) {
+      return this.callAnthropicNative(model, messages, cachedBlocks, options);
+    }
+
+    return this.callOpenAICompatible(model, messages, cachedBlocks, options);
+  }
+
+  // ── OpenAI-compatible request path ────────────────────────────────
+
+  private async callOpenAICompatible(
+    model: string,
+    messages: AIMessage[],
+    cachedBlocks: CacheableSystemBlock[] | undefined,
+    options?: AIProviderOptions,
+  ): Promise<AIResponse> {
+    // If cachedSystemBlocks provided, prepend as a merged system message
+    let finalMessages = messages;
+    if (cachedBlocks && cachedBlocks.length > 0) {
+      const mergedSystem = cachedBlocks.map((b) => b.text).join('\n\n');
+      const nonSystem = messages.filter((m) => m.role !== 'system');
+      finalMessages = [{ role: 'system' as const, content: mergedSystem }, ...nonSystem];
+    }
+
     const body: Record<string, unknown> = {
       model,
-      messages: messages.map((m) => {
+      messages: finalMessages.map((m) => {
         const msg: Record<string, unknown> = { role: m.role, content: m.content };
         if (m.tool_calls) msg.tool_calls = m.tool_calls;
         if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
@@ -126,6 +156,96 @@ export class OpenAICompatibleProvider implements AIProvider {
       output_tokens: usage.completion_tokens ?? estimateTokenCount(choice.message?.content ?? ''),
       total_tokens: usage.total_tokens ?? 0,
       finish_reason: choice.finish_reason ?? 'stop',
+      cache_read_tokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+      cache_creation_tokens: 0,
+    };
+  }
+
+  // ── Anthropic-native request path (with prompt caching) ───────────
+
+  private async callAnthropicNative(
+    model: string,
+    messages: AIMessage[],
+    cachedBlocks: CacheableSystemBlock[],
+    options?: AIProviderOptions,
+  ): Promise<AIResponse> {
+    const nonSystemMessages = messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => {
+        const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        if (m.name) msg.name = m.name;
+        return msg;
+      });
+
+    const systemBlocks = cachedBlocks.map((block) => ({
+      type: 'text' as const,
+      text: block.text,
+      ...(block.cacheControl ? { cache_control: { type: 'ephemeral' } } : {}),
+    }));
+
+    const body: Record<string, unknown> = {
+      model,
+      system: systemBlocks,
+      messages: nonSystemMessages,
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.max_tokens ?? 2048,
+    };
+
+    if (options?.tools && options.tools.length > 0) {
+      body.tools = options.tools.map((t) => ({
+        name: t.function.name,
+        description: t.function.description,
+        input_schema: t.function.parameters,
+      }));
+    }
+
+    const response = await fetch(this.baseUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'prompt-caching-2024-07-31',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const usage = data.usage ?? {};
+
+    // Anthropic returns content as an array of blocks
+    const textContent = (data.content ?? [])
+      .filter((b: { type: string }) => b.type === 'text')
+      .map((b: { text: string }) => b.text)
+      .join('');
+
+    // Map Anthropic tool_use blocks to OpenAI-style tool_calls
+    const toolCalls = (data.content ?? [])
+      .filter((b: { type: string }) => b.type === 'tool_use')
+      .map((b: { id: string; name: string; input: unknown }) => ({
+        id: b.id,
+        type: 'function' as const,
+        function: {
+          name: b.name,
+          arguments: JSON.stringify(b.input),
+        },
+      }));
+
+    return {
+      content: textContent || null,
+      tool_calls: toolCalls,
+      model: data.model ?? model,
+      input_tokens: usage.input_tokens ?? estimateTokenCount(JSON.stringify(messages)),
+      output_tokens: usage.output_tokens ?? estimateTokenCount(textContent),
+      total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+      finish_reason: data.stop_reason === 'end_turn' ? 'stop' : (data.stop_reason ?? 'stop'),
+      cache_read_tokens: usage.cache_read_input_tokens ?? 0,
+      cache_creation_tokens: usage.cache_creation_input_tokens ?? 0,
     };
   }
 }

@@ -76,6 +76,12 @@ export interface User {
   subscription?: Subscription;
 }
 
+export type FitnessGoal = 'build_muscle' | 'lose_fat' | 'get_stronger' | 'stay_active' | 'athletic_performance';
+export type ExperienceLevel = 'beginner' | 'less_than_1_year' | '1_to_2_years' | '2_to_4_years' | '4_plus_years';
+export type ConsistencyLevel = 'never_consistent' | 'returning_from_break' | 'struggle_with_it' | 'very_consistent';
+export type GymType = 'large_gym' | 'small_gym' | 'garage_gym' | 'at_home' | 'no_equipment';
+export type SessionDuration = '30_min' | '45_min' | '60_min' | '75_plus_min';
+
 export interface Profile {
   id: string;
   display_name: string;
@@ -86,6 +92,24 @@ export interface Profile {
   unit_preference: UnitPreference;
   avatar_url?: string;
   timezone?: string;
+  onboarding_completed?: boolean;
+  product_mode?: ProductMode;
+  // v2 onboarding fields
+  fitness_goal?: FitnessGoal;
+  experience_level?: ExperienceLevel;
+  consistency_level?: ConsistencyLevel;
+  gym_type?: GymType;
+  gym_name?: string;
+  training_days_per_week?: number;
+  specific_training_days?: string[];
+  session_duration_pref?: SessionDuration;
+  injuries?: string[];
+  user_equipment?: unknown[];
+  attribution_source?: string;
+  notification_time?: string;
+  notifications_enabled?: boolean;
+  onboarding_version?: number;
+  health_sync_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -105,10 +129,14 @@ export interface Goals {
 }
 
 export interface CoachPreferences {
+  id?: string;
   user_id: string;
-  product_mode: ProductMode;
-  coach_tone: CoachTone;
-  focus_areas: string[];
+  tone: CoachTone;
+  focus_areas?: string[];
+  reminder_frequency?: string;
+  // Legacy aliases for backward compat in app code
+  product_mode?: ProductMode;
+  coach_tone?: CoachTone;
   notification_preferences?: NotificationPreferences;
   created_at: string;
   updated_at: string;

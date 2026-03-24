@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { useNutritionStore } from '../../src/stores/nutrition-store';
-import { Card, Button, ScreenContainer } from '../../src/components/ui';
+import { useProfileStore } from '../../src/stores/profile-store';
+import { useOnboardingStore } from '../../src/stores/onboarding-store';
+import { calculateNutritionTargets } from '../../src/lib/nutrition-calculator';
+import { Card, Button, ScreenContainer, BottomSheet } from '../../src/components/ui';
 import { generateDefaultTargets } from '../../src/lib/nutrition-utils';
 import {
   MACRO_SPLIT_PRESETS,
@@ -26,6 +29,19 @@ export default function TargetsScreen() {
   const targets = useNutritionStore((s) => s.targets);
   const setDailyTargets = useNutritionStore((s) => s.setDailyTargets);
 
+  const profileGender = useProfileStore((s) => s.profile.gender);
+  const profileHeight = useProfileStore((s) => s.profile.heightCm);
+  const profileWeight = useProfileStore((s) => s.profile.weightKg);
+  const profileDob = useProfileStore((s) => s.profile.dateOfBirth);
+  const profileTrainingDays = useProfileStore((s) => s.profile.trainingDaysPerWeek);
+
+  const onboardingGender = useOnboardingStore((s) => s.gender);
+  const onboardingHeight = useOnboardingStore((s) => s.heightCm);
+  const onboardingWeight = useOnboardingStore((s) => s.weightKg);
+  const onboardingDob = useOnboardingStore((s) => s.dateOfBirth);
+  const onboardingGoal = useOnboardingStore((s) => s.fitnessGoal);
+  const onboardingTrainingDays = useOnboardingStore((s) => s.trainingDaysPerWeek);
+
   const [calories, setCalories] = useState(String(targets.calories));
   const [protein, setProtein] = useState(String(targets.protein_g));
   const [carbs, setCarbs] = useState(String(targets.carbs_g));
@@ -33,6 +49,19 @@ export default function TargetsScreen() {
   const [fiber, setFiber] = useState(String(targets.fiber_g));
   const [water, setWater] = useState(String(targets.water_oz));
   const [selectedPreset, setSelectedPreset] = useState<MacroSplitPreset>('custom');
+  const [showCalcSheet, setShowCalcSheet] = useState(false);
+  const [calcBreakdown, setCalcBreakdown] = useState<{
+    gender: string;
+    age: number;
+    weightKg: number;
+    heightCm: number;
+    trainingDays: number;
+    goal: string;
+    bmr: number;
+    tdee: number;
+    adjustment: number;
+    targets: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g: number; water_oz: number };
+  } | null>(null);
 
   const handlePreset = (preset: MacroSplitPreset) => {
     setSelectedPreset(preset);
@@ -53,18 +82,77 @@ export default function TargetsScreen() {
   };
 
   const handleAutoCalculate = () => {
-    const generated = generateDefaultTargets(
-      { sex: 'male', age: 30, weight_kg: 80, height_cm: 178, activityLevel: 'moderate', goal: 'maintain' },
-      MACRO_SPLIT_PRESETS.balanced,
-    );
+    // Resolve profile data (profile store → onboarding store → defaults)
+    const gender = profileGender || onboardingGender || 'male';
+    const heightCm = profileHeight || onboardingHeight || 175;
+    const weightKg = profileWeight || onboardingWeight || 75;
+    const trainingDays = profileTrainingDays || onboardingTrainingDays || 3;
+    const goal = onboardingGoal || 'stay_active';
 
-    setCalories(String(generated.calories));
-    setProtein(String(generated.protein_g));
-    setCarbs(String(generated.carbs_g));
-    setFat(String(generated.fat_g));
-    setFiber(String(generated.fiber_g));
-    setWater(String(generated.water_oz));
-    setSelectedPreset('balanced');
+    // Calculate age from date of birth
+    const dob = profileDob || onboardingDob;
+    let age = 30; // default
+    if (dob) {
+      const birthDate = new Date(dob);
+      const today = new Date();
+      age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+    }
+
+    // Calculate using the sophisticated calculator
+    const targets = calculateNutritionTargets({
+      weightKg,
+      heightCm,
+      ageYears: age,
+      gender,
+      fitnessGoal: goal,
+      trainingDaysPerWeek: trainingDays,
+    });
+
+    // Calculate intermediate values for the breakdown
+    const bmr = Math.round(gender === 'female'
+      ? 10 * weightKg + 6.25 * heightCm - 5 * age - 161
+      : 10 * weightKg + 6.25 * heightCm - 5 * age + 5);
+    
+    let multiplier = 1.55;
+    if (trainingDays <= 2) multiplier = 1.375;
+    else if (trainingDays > 4) multiplier = 1.725;
+    const tdee = Math.round(bmr * multiplier);
+
+    let adjustment = 0;
+    if (goal === 'build_muscle') adjustment = 300;
+    else if (goal === 'lose_fat') adjustment = -500;
+    else if (goal === 'get_stronger') adjustment = 200;
+
+    setCalcBreakdown({
+      gender,
+      age,
+      weightKg,
+      heightCm,
+      trainingDays,
+      goal,
+      bmr,
+      tdee,
+      adjustment,
+      targets,
+    });
+    setShowCalcSheet(true);
+  };
+
+  const handleApplyCalculated = () => {
+    if (!calcBreakdown) return;
+    const { targets: t } = calcBreakdown;
+    setCalories(String(t.calories));
+    setProtein(String(t.protein_g));
+    setCarbs(String(t.carbs_g));
+    setFat(String(t.fat_g));
+    setFiber(String(t.fiber_g));
+    setWater(String(t.water_oz));
+    setSelectedPreset('custom');
+    setShowCalcSheet(false);
   };
 
   const handleSave = () => {
@@ -247,6 +335,147 @@ export default function TargetsScreen() {
         onPress={handleSave}
         style={{ marginBottom: spacing['2xl'] }}
       />
+
+      {/* Calculation Breakdown Sheet */}
+      <BottomSheet visible={showCalcSheet} onClose={() => setShowCalcSheet(false)} maxHeight={0.85}>
+        <ScrollView style={{ padding: spacing.base }}>
+          <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.base }]}>
+            Calculation Breakdown
+          </Text>
+
+          {calcBreakdown && (
+            <>
+              {/* Profile Data Used */}
+              <Card style={{ marginBottom: spacing.md }}>
+                <Text style={[typography.label, { color: colors.text, marginBottom: spacing.sm }]}>
+                  Your Profile
+                </Text>
+                <View style={{ gap: 4 }}>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>
+                    {calcBreakdown.gender === 'female' ? 'Female' : 'Male'}, {calcBreakdown.age} years old
+                  </Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>
+                    {calcBreakdown.heightCm} cm · {calcBreakdown.weightKg} kg ({Math.round(calcBreakdown.weightKg * 2.205)} lbs)
+                  </Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>
+                    Training {calcBreakdown.trainingDays} days/week
+                  </Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>
+                    Goal: {calcBreakdown.goal.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  </Text>
+                </View>
+              </Card>
+
+              {/* Step 1: BMR */}
+              <Card style={{ marginBottom: spacing.md }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+                  <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={[typography.labelSmall, { color: colors.primary }]}>1</Text>
+                  </View>
+                  <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                    Basal Metabolic Rate (BMR)
+                  </Text>
+                </View>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+                  Mifflin-St Jeor equation — calories your body burns at rest
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textTertiary, fontStyle: 'italic', marginBottom: spacing.sm }]}>
+                  {calcBreakdown.gender === 'female' 
+                    ? `(10 × ${calcBreakdown.weightKg}kg) + (6.25 × ${calcBreakdown.heightCm}cm) - (5 × ${calcBreakdown.age}) - 161`
+                    : `(10 × ${calcBreakdown.weightKg}kg) + (6.25 × ${calcBreakdown.heightCm}cm) - (5 × ${calcBreakdown.age}) + 5`}
+                </Text>
+                <Text style={[typography.h2, { color: colors.primary }]}>
+                  BMR = {calcBreakdown.bmr.toLocaleString()} cal/day
+                </Text>
+              </Card>
+
+              {/* Step 2: TDEE */}
+              <Card style={{ marginBottom: spacing.md }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+                  <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={[typography.labelSmall, { color: colors.primary }]}>2</Text>
+                  </View>
+                  <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                    Total Daily Energy Expenditure
+                  </Text>
+                </View>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+                  BMR × activity multiplier ({calcBreakdown.trainingDays <= 2 ? '1.375 — lightly active' : calcBreakdown.trainingDays <= 4 ? '1.55 — moderately active' : '1.725 — very active'})
+                </Text>
+                <Text style={[typography.h2, { color: colors.primary }]}>
+                  TDEE = {calcBreakdown.tdee.toLocaleString()} cal/day
+                </Text>
+              </Card>
+
+              {/* Step 3: Goal Adjustment */}
+              {calcBreakdown.adjustment !== 0 && (
+                <Card style={{ marginBottom: spacing.md }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+                    <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={[typography.labelSmall, { color: colors.primary }]}>3</Text>
+                    </View>
+                    <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                      Goal Adjustment
+                    </Text>
+                  </View>
+                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+                    {calcBreakdown.adjustment > 0 
+                      ? `+${calcBreakdown.adjustment} cal surplus for ${calcBreakdown.goal.replace(/_/g, ' ')}`
+                      : `${calcBreakdown.adjustment} cal deficit for ${calcBreakdown.goal.replace(/_/g, ' ')}`}
+                  </Text>
+                  <Text style={[typography.h2, { color: colors.primary }]}>
+                    {calcBreakdown.tdee.toLocaleString()} {calcBreakdown.adjustment > 0 ? '+' : ''} {calcBreakdown.adjustment} = {calcBreakdown.targets.calories.toLocaleString()} cal
+                  </Text>
+                </Card>
+              )}
+
+              {/* Final Targets */}
+              <Card style={{ marginBottom: spacing.md, backgroundColor: colors.primaryMuted }}>
+                <Text style={[typography.label, { color: colors.primary, marginBottom: spacing.md }]}>
+                  Recommended Daily Targets
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={[typography.h2, { color: colors.text }]}>{calcBreakdown.targets.calories}</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Calories</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={[typography.label, { color: colors.protein }]}>{calcBreakdown.targets.protein_g}g</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Protein</Text>
+                  </View>
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={[typography.label, { color: colors.carbs }]}>{calcBreakdown.targets.carbs_g}g</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Carbs</Text>
+                  </View>
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={[typography.label, { color: colors.fat }]}>{calcBreakdown.targets.fat_g}g</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Fat</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: spacing.sm }}>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={[typography.label, { color: colors.fiber }]}>{calcBreakdown.targets.fiber_g}g</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Fiber</Text>
+                  </View>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={[typography.label, { color: colors.info }]}>{calcBreakdown.targets.water_oz}oz</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Water</Text>
+                  </View>
+                </View>
+              </Card>
+
+              {/* Apply Button */}
+              <Button
+                title="Apply These Targets"
+                onPress={handleApplyCalculated}
+                style={{ marginBottom: spacing.xl }}
+              />
+            </>
+          )}
+        </ScrollView>
+      </BottomSheet>
     </ScreenContainer>
   );
 }

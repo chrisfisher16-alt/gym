@@ -66,6 +66,7 @@ export const DEMO_PROFILE = {
 
 export const DEMO_COACH_PREFERENCES = {
   user_id: 'demo-user-001',
+  tone: 'balanced' as const,
   coach_tone: 'balanced' as const,
   focus_areas: ['gain_muscle', 'build_lean_muscle'],
   dietary_restrictions: [] as string[],

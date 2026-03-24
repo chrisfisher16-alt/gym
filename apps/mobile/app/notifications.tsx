@@ -9,8 +9,8 @@ import {
   TouchableOpacity,
   Platform,
   Linking,
-  Alert,
 } from 'react-native';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
 import { Card, ScreenContainer, Divider, Button } from '../src/components/ui';
@@ -61,7 +61,7 @@ export default function NotificationsScreen() {
     setRequesting(false);
 
     if (status === 'denied') {
-      Alert.alert(
+      crossPlatformAlert(
         'Notifications Disabled',
         'To enable notifications, go to your device Settings and allow notifications for this app.',
         [

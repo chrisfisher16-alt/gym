@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   TextInput,
   Image,
   Platform,
@@ -15,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme';
 import { Card, Button, Divider, ScreenContainer } from '../../src/components/ui';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import {
   useMeasurementsStore,
   type BodyMeasurement,
@@ -180,7 +180,7 @@ export default function MeasurementsScreen() {
     }
 
     if (!weightKg && !heightCm && Object.values(parsed).every((v) => v == null) && !notes) {
-      Alert.alert('Empty', 'Please enter at least one measurement.');
+      crossPlatformAlert('Empty', 'Please enter at least one measurement.');
       return;
     }
 
@@ -200,31 +200,31 @@ export default function MeasurementsScreen() {
     setFormFields({});
     setNotes('');
     setEstimatedFields(new Set());
-    Alert.alert('Saved', 'Measurement recorded successfully.');
+    crossPlatformAlert('Saved', 'Measurement recorded successfully.');
   }, [weight, formFields, notes, imperial, addMeasurement, getHeightCm]);
 
   // AI estimation
   const handleAISuggest = useCallback(async () => {
     const waistVal = formFields['waistCm'];
     if (!waistVal) {
-      Alert.alert('Waist Required', 'Please enter your waist measurement first.');
+      crossPlatformAlert('Waist Required', 'Please enter your waist measurement first.');
       return;
     }
     const waistCm = parseLength(waistVal, imperial);
     if (!waistCm) {
-      Alert.alert('Invalid', 'Please enter a valid waist measurement.');
+      crossPlatformAlert('Invalid', 'Please enter a valid waist measurement.');
       return;
     }
 
     const heightCm = getHeightCm() ?? profileHeightCm;
     if (!heightCm) {
-      Alert.alert('Height Required', 'Please enter your height to use AI suggestions.');
+      crossPlatformAlert('Height Required', 'Please enter your height to use AI suggestions.');
       return;
     }
 
     const weightKg = parseWeight(weight, imperial);
     if (!weightKg) {
-      Alert.alert('Weight Required', 'Please enter your weight to use AI suggestions.');
+      crossPlatformAlert('Weight Required', 'Please enter your weight to use AI suggestions.');
       return;
     }
 
@@ -260,7 +260,7 @@ export default function MeasurementsScreen() {
       setFormFields(newFields);
       setEstimatedFields(newEstimated);
     } catch (error) {
-      Alert.alert('Error', 'Could not estimate measurements. Please try again.');
+      crossPlatformAlert('Error', 'Could not estimate measurements. Please try again.');
     } finally {
       setIsEstimating(false);
     }
@@ -273,7 +273,7 @@ export default function MeasurementsScreen() {
       const ImagePicker = require('expo-image-picker');
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow photo library access to add progress photos.');
+        crossPlatformAlert('Permission Required', 'Please allow photo library access to add progress photos.');
         return;
       }
 
@@ -285,7 +285,7 @@ export default function MeasurementsScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        Alert.alert('Label Photo', 'Select a label for this photo:', [
+        crossPlatformAlert('Label Photo', 'Select a label for this photo:', [
           {
             text: 'Front',
             onPress: () =>
@@ -309,7 +309,7 @@ export default function MeasurementsScreen() {
         ]);
       }
     } catch (error) {
-      Alert.alert('Error', 'Could not open photo picker.');
+      crossPlatformAlert('Error', 'Could not open photo picker.');
     }
   }, [addPhoto]);
 
@@ -318,7 +318,7 @@ export default function MeasurementsScreen() {
       const ImagePicker = require('expo-image-picker');
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow camera access to take progress photos.');
+        crossPlatformAlert('Permission Required', 'Please allow camera access to take progress photos.');
         return;
       }
 
@@ -329,7 +329,7 @@ export default function MeasurementsScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        Alert.alert('Label Photo', 'Select a label for this photo:', [
+        crossPlatformAlert('Label Photo', 'Select a label for this photo:', [
           {
             text: 'Front',
             onPress: () =>
@@ -353,7 +353,7 @@ export default function MeasurementsScreen() {
         ]);
       }
     } catch (error) {
-      Alert.alert('Error', 'Could not open camera.');
+      crossPlatformAlert('Error', 'Could not open camera.');
     }
   }, [addPhoto]);
 
@@ -361,7 +361,7 @@ export default function MeasurementsScreen() {
 
   const confirmDeleteMeasurement = useCallback(
     (id: string) => {
-      Alert.alert('Delete Measurement', 'Are you sure?', [
+      crossPlatformAlert('Delete Measurement', 'Are you sure?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => deleteMeasurement(id) },
       ]);
@@ -371,7 +371,7 @@ export default function MeasurementsScreen() {
 
   const confirmDeletePhoto = useCallback(
     (id: string) => {
-      Alert.alert('Delete Photo', 'Are you sure?', [
+      crossPlatformAlert('Delete Photo', 'Are you sure?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => deletePhoto(id) },
       ]);

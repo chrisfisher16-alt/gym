@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Alert,
 } from 'react-native';
+import { crossPlatformAlert } from '../../../src/lib/cross-platform-alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -83,11 +83,11 @@ export default function CreateProgramScreen() {
 
   const handleSave = () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a program name');
+      crossPlatformAlert('Error', 'Please enter a program name');
       return;
     }
     if (days.length === 0) {
-      Alert.alert('Error', 'Please add at least one day');
+      crossPlatformAlert('Error', 'Please add at least one day');
       return;
     }
 

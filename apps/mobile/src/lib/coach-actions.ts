@@ -115,6 +115,18 @@ export interface CreateWeeklyPlanAction {
   }>;
 }
 
+export interface GenerateWorkoutAction {
+  type: 'generate_workout';
+  name: string;
+  exercises: Array<{
+    exerciseId: string;
+    exerciseName: string;
+    targetSets: number;
+    targetReps: string;
+    restSeconds: number;
+  }>;
+}
+
 export type CoachAction =
   | SwapExerciseAction
   | UpdateTargetsAction
@@ -126,14 +138,71 @@ export type CoachAction =
   | SetActiveProgramAction
   | UpdateProfileAction
   | LogWaterAction
-  | CreateWeeklyPlanAction;
+  | CreateWeeklyPlanAction
+  | GenerateWorkoutAction;
 
 // ── Parsing ──────────────────────────────────────────────────────────
 
-const ACTION_REGEX = /\[ACTION\]([\s\S]*?)\[\/ACTION\]/g;
+const KNOWN_ACTION_TYPES = [
+  'create_weekly_plan',
+  'generate_workout',
+  'set_active_program',
+  'swap_exercise',
+  'add_exercise',
+  'remove_exercise',
+  'update_rest',
+  'update_program',
+  'update_targets',
+  'log_quick_meal',
+  'update_profile',
+  'log_water',
+] as const;
+
+/** Extract the first complete JSON object from a string by counting braces */
+function extractJsonObject(str: string): string | null {
+  if (!str.startsWith('{')) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return str.substring(0, i + 1);
+      }
+    }
+  }
+
+  return null; // No complete JSON object found
+}
 
 /**
- * Parse [ACTION]...[/ACTION] blocks from an AI response.
+ * Parse action blocks from an AI response.
+ * Handles three formats:
+ *   1. [ACTION]...[/ACTION]  (wrapped with closing tag)
+ *   2. [ACTION]{...}         (unwrapped JSON — AI often omits closing tag)
+ *   3. Raw JSON with a known action type (no wrapper at all)
  * Returns the cleaned text (with action blocks removed) and parsed actions.
  */
 export function parseCoachActions(response: string): {
@@ -141,28 +210,80 @@ export function parseCoachActions(response: string): {
   actions: CoachAction[];
 } {
   const actions: CoachAction[] = [];
+  let text = response;
+
+  // ── Pattern 1: [ACTION]...[/ACTION] (wrapped) ──────────────────────
+  const wrappedRegex = /\[ACTION\]([\s\S]*?)\[\/ACTION\]/g;
+  let hasWrapped = false;
   let match: RegExpExecArray | null;
 
-  // Reset regex
-  ACTION_REGEX.lastIndex = 0;
-
-  while ((match = ACTION_REGEX.exec(response)) !== null) {
+  while ((match = wrappedRegex.exec(response)) !== null) {
+    hasWrapped = true;
     try {
       const parsed = JSON.parse(match[1].trim());
-      if (parsed && parsed.type) {
+      if (parsed && typeof parsed === 'object' && parsed.type) {
         actions.push(parsed as CoachAction);
       }
     } catch {
-      // Skip invalid JSON blocks
+      // Invalid JSON, skip
     }
   }
 
-  // Strip action blocks from displayed text
-  const text = response
-    .replace(ACTION_REGEX, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  if (hasWrapped) {
+    text = text
+      .replace(wrappedRegex, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return { text, actions };
+  }
 
+  // ── Pattern 2: [ACTION]{...} (unwrapped — no closing tag) ──────────
+  const unwrappedRegex = /\[ACTION\](\{[\s\S]*)/g;
+  while ((match = unwrappedRegex.exec(response)) !== null) {
+    const jsonStr = match[1].trim();
+    const extracted = extractJsonObject(jsonStr);
+    if (extracted) {
+      try {
+        const parsed = JSON.parse(extracted);
+        if (parsed && typeof parsed === 'object' && parsed.type) {
+          actions.push(parsed as CoachAction);
+          text = text.replace('[ACTION]' + extracted, '');
+        }
+      } catch {
+        // Invalid JSON, skip
+      }
+    }
+  }
+
+  if (actions.length > 0) {
+    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    return { text, actions };
+  }
+
+  // ── Fallback: raw JSON with a known action type (no wrapper) ───────
+  const typesPattern = KNOWN_ACTION_TYPES.join('|');
+  const rawJsonRegex = new RegExp(
+    `(\\{"type"\\s*:\\s*"(?:${typesPattern})")[\\s\\S]*`,
+  );
+  const rawMatch = rawJsonRegex.exec(response);
+  if (rawMatch) {
+    // rawMatch starts at the opening brace — rebuild from there
+    const startIdx = rawMatch.index;
+    const extracted = extractJsonObject(response.substring(startIdx));
+    if (extracted) {
+      try {
+        const parsed = JSON.parse(extracted);
+        if (parsed && typeof parsed === 'object' && parsed.type) {
+          actions.push(parsed as CoachAction);
+          text = text.replace(extracted, '');
+        }
+      } catch {
+        // Invalid JSON
+      }
+    }
+  }
+
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
   return { text, actions };
 }
 
@@ -198,6 +319,8 @@ export async function executeCoachAction(
         return executeLogWater(action);
       case 'create_weekly_plan':
         return executeCreateWeeklyPlan(action);
+      case 'generate_workout':
+        return executeGenerateWorkout(action);
       default:
         return { success: false, message: 'Unknown action type' };
     }
@@ -506,6 +629,31 @@ function executeCreateWeeklyPlan(action: CreateWeeklyPlanAction): { success: boo
   return { success: true, message: `Created "${action.name}" — ${liftDays} lifting days, set as active program` };
 }
 
+function executeGenerateWorkout(action: GenerateWorkoutAction): { success: boolean; message: string } {
+  const store = useWorkoutStore.getState();
+
+  if (store.activeSession) {
+    return { success: false, message: 'A workout is already in progress. Finish or discard it first.' };
+  }
+
+  if (!action.exercises || action.exercises.length === 0) {
+    return { success: false, message: 'No exercises in the workout' };
+  }
+
+  store.startWorkout({
+    name: action.name,
+    exercises: action.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      exerciseName: e.exerciseName,
+      targetSets: e.targetSets,
+      targetReps: e.targetReps,
+      restSeconds: e.restSeconds,
+    })),
+  });
+
+  return { success: true, message: `Started "${action.name}" with ${action.exercises.length} exercises` };
+}
+
 // ── Display Helpers ──────────────────────────────────────────────────
 
 /**
@@ -566,6 +714,10 @@ export function getActionDescription(action: CoachAction): string {
     case 'create_weekly_plan': {
       const liftDays = action.days.filter((d) => d.dayType === 'lifting').length;
       return `Create plan: ${action.name} (${liftDays} lifting days)`;
+    }
+    case 'generate_workout': {
+      const exerciseCount = action.exercises?.length ?? 0;
+      return `Start workout: ${action.name} (${exerciseCount} exercises)`;
     }
     default:
       return 'Apply change';

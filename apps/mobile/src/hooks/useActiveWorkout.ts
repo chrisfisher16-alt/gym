@@ -32,6 +32,7 @@ export function useActiveWorkout() {
   const logTimedSet = useWorkoutStore((s) => s.logTimedSet);
   const startRestTimer = useWorkoutStore((s) => s.startRestTimer);
   const clearRestTimer = useWorkoutStore((s) => s.clearRestTimer);
+  const extendRestTimer = useWorkoutStore((s) => s.extendRestTimer);
   const defaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
   const setDefaultRestSeconds = useWorkoutStore((s) => s.setDefaultRestSeconds);
   const updateSessionNotes = useWorkoutStore((s) => s.updateSessionNotes);
@@ -173,7 +174,9 @@ export function useActiveWorkout() {
     // Rest timer
     startRestTimer,
     clearRestTimer,
+    extendRestTimer,
     defaultRestSeconds,
     setDefaultRestSeconds,
+    restTimerDuration: activeSession?.restTimerDuration ?? 0,
   };
 }

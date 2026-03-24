@@ -6,10 +6,17 @@ interface CardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   padded?: boolean;
+  variant?: 'default' | 'hero' | 'elevated' | string;
 }
 
-export function Card({ children, style, padded = true }: CardProps) {
+export function Card({ children, style, padded = true, variant = 'default' }: CardProps) {
   const { colors, spacing, radius } = useTheme();
+
+  const variantStyle: ViewStyle = variant === 'hero'
+    ? { borderColor: colors.primary, borderWidth: 1.5 }
+    : variant === 'elevated'
+      ? { elevation: 6, shadowOpacity: 1, shadowRadius: 12 }
+      : {};
 
   return (
     <View
@@ -22,6 +29,7 @@ export function Card({ children, style, padded = true }: CardProps) {
           shadowColor: colors.shadow,
           borderColor: colors.borderLight,
         },
+        variantStyle,
         style,
       ]}
     >

@@ -32,6 +32,17 @@ export interface AIResponse {
   output_tokens: number;
   total_tokens: number;
   finish_reason: string;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+}
+
+export interface CacheableSystemBlock {
+  text: string;
+  cacheControl?: boolean;
+}
+
+export interface CacheOptions {
+  cachedSystemBlocks?: CacheableSystemBlock[];
 }
 
 export interface AIProviderOptions {
@@ -40,6 +51,7 @@ export interface AIProviderOptions {
   json_mode?: boolean;
   tools?: AIToolDefinition[];
   tool_choice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+  cacheOptions?: CacheOptions;
 }
 
 export interface AIToolDefinition {
@@ -53,6 +65,7 @@ export interface AIToolDefinition {
 
 export interface AIProvider {
   chat(messages: AIMessage[], options?: AIProviderOptions): Promise<AIResponse>;
+  readonly isAnthropicAPI?: boolean;
 }
 
 // ── Coach Types ───────────────────────────────────────────────────

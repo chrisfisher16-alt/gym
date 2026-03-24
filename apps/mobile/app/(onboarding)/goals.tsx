@@ -34,7 +34,7 @@ export default function GoalsScreen() {
       return;
     }
     store.setSelectedGoals(selected);
-    router.push('/(onboarding)/mode');
+    router.push('/(onboarding)/schedule');
   };
 
   return (

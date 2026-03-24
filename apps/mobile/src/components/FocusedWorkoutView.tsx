@@ -15,7 +15,10 @@ import { useWorkoutStore } from '../stores/workout-store';
 import { useProfileStore } from '../stores/profile-store';
 import { getSuggestedLoad } from '../lib/suggested-load';
 import type { ActiveWorkoutSession, ActiveExercise, ActiveSet, MuscleGroup, Equipment } from '../types/workout';
+import { Image } from 'expo-image';
 import { ExerciseIllustration } from './ExerciseIllustration';
+import { ExerciseImageViewer } from './workout/ExerciseImageViewer';
+import { getExerciseImages } from '../lib/exercise-image-map';
 
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
@@ -27,7 +30,7 @@ if (Platform.OS !== 'web') {
 
 export interface FocusedWorkoutViewProps {
   activeSession: ActiveWorkoutSession;
-  logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number) => void;
+  logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number, isAutoFilled?: boolean) => void;
   completeSet: (exerciseInstanceId: string, setId: string) => void;
   startRestTimer: (durationSeconds: number) => void;
   setCurrentExerciseIndex: (index: number) => void;
@@ -78,8 +81,14 @@ export function FocusedWorkoutView({
   const currentIndex = activeSession.currentExerciseIndex;
   const exercise = activeSession.exercises[currentIndex];
 
+  // ── Form Check mode ────────────────────────────────────────────────
+  const [formCheckMode, setFormCheckMode] = useState(false);
+  const exerciseImages = useMemo(() => getExerciseImages(exercise.exerciseId), [exercise.exerciseId]);
+  const hasImages = !!exerciseImages;
+
   // ── Exercise library entry for illustration ───────────────────────
   const allExercises = useWorkoutStore((s) => s.exercises);
+  const storeDefaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
   const exerciseLib = useMemo(
     () => allExercises.find((e) => e.id === exercise.exerciseId),
     [allExercises, exercise.exerciseId],
@@ -188,7 +197,7 @@ export function FocusedWorkoutView({
       (s) => !s.isCompleted && s.id !== currentSet.id,
     );
     if (nextIncomplete && nextIncomplete.weight === undefined && nextIncomplete.reps === undefined) {
-      logSet(exercise.id, nextIncomplete.id, w, r);
+      logSet(exercise.id, nextIncomplete.id, w, r, true);
     }
 
     // 3. Superset flow: cycle to next exercise in the group
@@ -199,8 +208,8 @@ export function FocusedWorkoutView({
 
       // Check if we just completed a full round (cycled back to first member)
       if (nextMemberIdx === 0) {
-        // Full round done - start rest timer using per-exercise override or session default
-        const restTime = exercise.restSeconds ?? activeSession.defaultRestSeconds ?? 90;
+        // Full round done - start rest timer: exercise-specific → store default → 90s
+        const restTime = exercise.restSeconds ?? storeDefaultRestSeconds ?? 90;
         startRestTimer(restTime);
       }
 
@@ -210,8 +219,8 @@ export function FocusedWorkoutView({
         setCurrentExerciseIndex(globalIdx);
       }
     } else {
-      // Not in a superset - start rest timer using per-exercise override or session default
-      const restTime = exercise.restSeconds ?? activeSession.defaultRestSeconds ?? 90;
+      // Not in a superset - start rest timer: exercise-specific → store default → 90s
+      const restTime = exercise.restSeconds ?? storeDefaultRestSeconds ?? 90;
       startRestTimer(restTime);
     }
   }, [
@@ -222,6 +231,7 @@ export function FocusedWorkoutView({
     logSet,
     completeSet,
     startRestTimer,
+    storeDefaultRestSeconds,
     isInSuperset,
     supersetMembers,
     activeSession.exercises,
@@ -245,6 +255,70 @@ export function FocusedWorkoutView({
 
   return (
     <View style={styles.container}>
+      {/* ── Exercise Image Viewer ──────────────────────────────────── */}
+      {formCheckMode && exerciseImages ? (
+        <View style={{ paddingHorizontal: spacing.base }}>
+          <View style={{ flexDirection: 'row', height: 200, borderRadius: radius.lg, overflow: 'hidden' }}>
+            <View style={{ flex: 1, position: 'relative', backgroundColor: colors.surface }}>
+              <Image source={{ uri: exerciseImages.startPosition }} style={{ flex: 1 }} contentFit="contain" cachePolicy="disk" />
+              <View style={styles.formCheckLabel}>
+                <Text style={styles.formCheckLabelText}>Start</Text>
+              </View>
+            </View>
+            <View style={{ width: 2, backgroundColor: colors.background }} />
+            <View style={{ flex: 1, position: 'relative', backgroundColor: colors.surface }}>
+              <Image source={{ uri: exerciseImages.endPosition }} style={{ flex: 1 }} contentFit="contain" cachePolicy="disk" />
+              <View style={styles.formCheckLabel}>
+                <Text style={styles.formCheckLabelText}>End</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <ExerciseImageViewer
+          exerciseId={exercise.exerciseId}
+          size="focused"
+          isResting={!!activeSession.restTimerEndAt && new Date(activeSession.restTimerEndAt) > new Date()}
+          style={{ width: '100%' }}
+        />
+      )}
+
+      {/* ── Form Check toggle ──────────────────────────────────────── */}
+      {hasImages && (
+        <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
+          <TouchableOpacity
+            onPress={() => setFormCheckMode((prev) => !prev)}
+            activeOpacity={0.7}
+            style={[
+              styles.formCheckToggle,
+              {
+                backgroundColor: formCheckMode ? colors.primary : colors.surfaceSecondary,
+                borderRadius: radius.full,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs,
+              },
+            ]}
+          >
+            <Ionicons
+              name="images-outline"
+              size={14}
+              color={formCheckMode ? colors.textInverse : colors.textSecondary}
+            />
+            <Text
+              style={[
+                typography.labelSmall,
+                {
+                  color: formCheckMode ? colors.textInverse : colors.textSecondary,
+                  marginLeft: spacing.xs,
+                },
+              ]}
+            >
+              Form Check
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── Exercise Header ─────────────────────────────────────────── */}
       <View style={[styles.headerSection, { paddingHorizontal: spacing.base }]}>
         {/* Superset badge */}
@@ -625,5 +699,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  formCheckToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  formCheckLabel: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  formCheckLabelText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 11,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });

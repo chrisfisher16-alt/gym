@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -21,7 +22,7 @@ export default function SavedMealsScreen() {
   };
 
   const handleDelete = (savedMealId: string, name: string) => {
-    Alert.alert('Delete Saved Meal', `Remove "${name}" from saved meals?`, [
+    crossPlatformAlert('Delete Saved Meal', `Remove "${name}" from saved meals?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

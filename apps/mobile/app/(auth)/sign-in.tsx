@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { isSupabaseConfigured } from '../../src/lib/supabase';
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -18,7 +20,22 @@ type SignInForm = z.infer<typeof signInSchema>;
 export default function SignInScreen() {
   const { colors, spacing, typography } = useTheme();
   const signIn = useAuthStore((s) => s.signIn);
+  const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
   const [formError, setFormError] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setFormError('');
+    setGoogleLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        setFormError(error.message || 'Failed to sign in with Google.');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const {
     control,
@@ -59,6 +76,36 @@ export default function SignInScreen() {
               Welcome back. Sign in to continue.
             </Text>
           </View>
+
+          {isSupabaseConfigured && (
+            <>
+              <TouchableOpacity
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                activeOpacity={0.7}
+                style={[
+                  styles.googleButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    padding: spacing.md,
+                  },
+                ]}
+              >
+                <Ionicons name="logo-google" size={20} color={colors.text} />
+                <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                  {googleLoading ? 'Signing in...' : 'Continue with Google'}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
+                <Text style={[typography.caption, { color: colors.textTertiary, marginHorizontal: spacing.md }]}>or</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
+              </View>
+            </>
+          )}
 
           <View style={[styles.form, { gap: spacing.base }]}>
             {formError ? (
@@ -140,6 +187,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   errorBanner: {},
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    minHeight: 48,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

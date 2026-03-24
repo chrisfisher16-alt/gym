@@ -3,6 +3,10 @@ import { useWorkoutStore } from '../stores/workout-store';
 import type { ExerciseLibraryEntry, MuscleGroup, Equipment } from '../types/workout';
 import { generateId } from '../lib/workout-utils';
 
+export type ForceFilter = 'push' | 'pull' | 'static';
+export type MechanicFilter = 'compound' | 'isolation';
+export type LevelFilter = 'beginner' | 'intermediate' | 'expert';
+
 export function useExerciseLibrary() {
   const exercises = useWorkoutStore((s) => s.exercises);
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
@@ -10,6 +14,9 @@ export function useExerciseLibrary() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MuscleGroup | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
+  const [selectedForce, setSelectedForce] = useState<ForceFilter | null>(null);
+  const [selectedMechanic, setSelectedMechanic] = useState<MechanicFilter | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<LevelFilter | null>(null);
 
   const filteredExercises = useMemo(() => {
     let result = exercises;
@@ -32,8 +39,20 @@ export function useExerciseLibrary() {
       result = result.filter((e) => e.equipment === selectedEquipment);
     }
 
+    if (selectedForce) {
+      result = result.filter((e) => !e.force || e.force === selectedForce);
+    }
+
+    if (selectedMechanic) {
+      result = result.filter((e) => !e.mechanic || e.mechanic === selectedMechanic);
+    }
+
+    if (selectedLevel) {
+      result = result.filter((e) => !e.level || e.level === selectedLevel);
+    }
+
     return result;
-  }, [exercises, searchQuery, selectedCategory, selectedEquipment]);
+  }, [exercises, searchQuery, selectedCategory, selectedEquipment, selectedForce, selectedMechanic, selectedLevel]);
 
   const getExerciseById = useCallback(
     (id: string): ExerciseLibraryEntry | null => {
@@ -74,6 +93,9 @@ export function useExerciseLibrary() {
     setSearchQuery('');
     setSelectedCategory(null);
     setSelectedEquipment(null);
+    setSelectedForce(null);
+    setSelectedMechanic(null);
+    setSelectedLevel(null);
   }, []);
 
   return {
@@ -85,6 +107,12 @@ export function useExerciseLibrary() {
     setSelectedCategory,
     selectedEquipment,
     setSelectedEquipment,
+    selectedForce,
+    setSelectedForce,
+    selectedMechanic,
+    setSelectedMechanic,
+    selectedLevel,
+    setSelectedLevel,
     clearFilters,
     getExerciseById,
     createCustomExercise,

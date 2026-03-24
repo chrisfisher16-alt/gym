@@ -1,0 +1,3000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FormIQ — Design Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: '#0C0C0E',
+          s1: '#1A1A1F',
+          s2: '#252529',
+          s3: '#32323A',
+          brand: '#CFAE80',
+          'brand-h': '#DFC098',
+          't1': '#F5F0EB',
+          't2': '#9A958E',
+          't3': '#5E5A54',
+          'tab': '#141416',
+          'cal': '#C084FC',
+          'prot': '#F87171',
+          'carb': '#60A5FA',
+          'fatt': '#FBBF24',
+        },
+        fontFamily: {
+          sans: ['Satoshi', 'Inter', 'system-ui', 'sans-serif'],
+        },
+      }
+    }
+  }
+  </script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    body{font-family:'Satoshi','Inter',system-ui,sans-serif;background:#000;transition:background 0.2s ease}
+    ::-webkit-scrollbar{display:none}
+    .phone{max-width:430px;margin:0 auto;height:100dvh;max-height:932px;position:relative;overflow:hidden;
+      background:var(--bg,#0C0C0E);transition:background 0.2s ease,color 0.2s ease}
+    @media(min-width:431px){
+      body{display:flex;align-items:center;justify-content:center;min-height:100vh}
+      .phone{border-radius:44px;border:3px solid var(--phone-border,#2a2a2a);box-shadow:0 0 80px rgba(0,0,0,0.6)}
+    }
+    .hero-glow{background:var(--hero-glow,radial-gradient(ellipse at 15% 15%,rgba(207,174,128,0.06) 0%,transparent 60%))}
+    .card-b{border:var(--card-b,1px solid rgba(255,255,255,0.08));box-shadow:var(--card-shadow,none)}
+    .card-t{border-top:var(--card-t,1px solid rgba(255,255,255,0.04))}
+    .hero-b{border:var(--hero-border,1px solid rgba(207,174,128,0.20));box-shadow:var(--card-shadow,none)}
+    .divider{height:1px;background:var(--divider,rgba(255,255,255,0.05));width:100%}
+    .brand-muted-bg{background:var(--brand-m,rgba(207,174,128,0.12))}
+    .success-muted-bg{background:var(--success-m,rgba(74,222,128,0.10))}
+    .error-muted-bg{background:var(--error-m,rgba(248,113,113,0.10))}
+    .info-muted-bg{background:var(--info-m,rgba(96,165,250,0.10))}
+    .btn-press{transition:transform 0.1s ease,background-color 0.15s ease}
+    .btn-press:active{transform:scale(0.97)}
+    /* Theme transitions */
+    .theme-t{transition:background 0.2s ease,color 0.2s ease,border-color 0.2s ease,box-shadow 0.2s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes ringDraw{from{stroke-dashoffset:var(--circ)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+    .anim-up{animation:fadeUp 0.4s ease-out both}
+    .anim-fade{animation:fadeIn 0.3s ease-out both}
+    .scroll-area{overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    @keyframes setComplete{0%{background:transparent}50%{background:var(--success-m,rgba(74,222,128,0.12))}100%{background:var(--check-bg,rgba(74,222,128,0.08))}}
+    @keyframes prComplete{0%{background:transparent}50%{background:var(--pr-bg,rgba(207,174,128,0.15))}100%{background:var(--pr-bg,rgba(207,174,128,0.10))}}
+    @keyframes checkPop{0%{transform:scale(0.7)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+    @keyframes goldPulse{0%{box-shadow:0 0 0 0 var(--brand-glow,rgba(207,174,128,0.4))}70%{box-shadow:0 0 0 10px transparent}100%{box-shadow:0 0 0 0 transparent}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}}
+    @keyframes ringDeplete{from{stroke-dashoffset:0}}
+    @keyframes countDown{from{opacity:0;transform:scale(1.1)}to{opacity:1;transform:scale(1)}}
+    .set-done{animation:setComplete 0.4s ease-out forwards}
+    .set-pr{animation:prComplete 0.4s ease-out forwards}
+    .check-pop{animation:checkPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both}
+    .gold-pulse{animation:goldPulse 0.6s ease-out}
+    .summary-enter{animation:slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1) both}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback} = React;
+
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS — THEME SYSTEM
+   ═══════════════════════════════════════════ */
+const DARK = {
+  bg:'#0C0C0E', s1:'#1A1A1F', s2:'#252529', s3:'#32323A',
+  t1:'#F5F0EB', t2:'#9A958E', t3:'#5E5A54', inv:'#0C0C0E',
+  brand:'#CFAE80', brandH:'#DFC098', brandM:'rgba(207,174,128,0.12)', brandDim:'rgba(207,174,128,0.06)',
+  success:'#4ADE80', successM:'rgba(74,222,128,0.10)',
+  warning:'#FBBF24', warningM:'rgba(251,191,36,0.10)',
+  error:'#F87171', errorM:'rgba(248,113,113,0.10)',
+  info:'#60A5FA', infoM:'rgba(96,165,250,0.10)',
+  cal:'#C084FC', calL:'#D8B4FE', prot:'#F87171', carb:'#60A5FA', fat:'#FBBF24',
+  border:'rgba(255,255,255,0.08)', borderBrand:'rgba(207,174,128,0.20)',
+  divider:'rgba(255,255,255,0.05)', tabBg:'#141416', tabOff:'#5E5A54',
+  // Dark-specific
+  overlayBg:'rgba(12,12,14,0.85)', overlayHeavy:'rgba(12,12,14,0.92)',
+  barBlur:'rgba(26,26,31,0.90)', phoneBorder:'#2a2a2a',
+  cardShadow:'none', sheetShadow:'none',
+  heroGlow:'radial-gradient(ellipse at 15% 15%,rgba(207,174,128,0.06) 0%,transparent 60%)',
+  checkBg:'rgba(74,222,128,0.08)', prBg:'rgba(207,174,128,0.10)',
+};
+
+const LIGHT = {
+  bg:'#FAFAFA', s1:'#FFFFFF', s2:'#F2F2F4', s3:'#E8E8EC',
+  t1:'#1A1A1E', t2:'#6B6B70', t3:'#717176', inv:'#FFFFFF',
+  brand:'#B8944F', brandH:'#A07D3A', brandM:'rgba(184,148,79,0.10)', brandDim:'rgba(184,148,79,0.05)',
+  success:'#16A34A', successM:'rgba(22,163,74,0.08)',
+  warning:'#CA8A04', warningM:'rgba(202,138,4,0.08)',
+  error:'#DC2626', errorM:'rgba(220,38,38,0.08)',
+  info:'#2563EB', infoM:'rgba(37,99,235,0.08)',
+  cal:'#9333EA', calL:'#A855F7', prot:'#DC2626', carb:'#2563EB', fat:'#CA8A04',
+  border:'rgba(0,0,0,0.08)', borderBrand:'rgba(184,148,79,0.25)',
+  divider:'rgba(0,0,0,0.05)', tabBg:'#FFFFFF', tabOff:'#9A9A9E',
+  // Light-specific
+  overlayBg:'rgba(0,0,0,0.25)', overlayHeavy:'rgba(0,0,0,0.35)',
+  barBlur:'rgba(255,255,255,0.90)', phoneBorder:'#D4D4D8',
+  cardShadow:'0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)',
+  sheetShadow:'0 -4px 24px rgba(0,0,0,0.08)',
+  heroGlow:'radial-gradient(ellipse at 15% 15%,rgba(184,148,79,0.05) 0%,transparent 60%)',
+  checkBg:'rgba(22,163,74,0.08)', prBg:'rgba(184,148,79,0.10)',
+};
+
+// Active palette — mutable, updated by theme system
+const C = {...DARK};
+
+// Apply palette to C and CSS custom properties
+function applyTheme(palette) {
+  Object.assign(C, palette);
+  const root = document.documentElement;
+  root.style.setProperty('--bg', palette.bg);
+  root.style.setProperty('--phone-border', palette.phoneBorder);
+  root.style.setProperty('--card-b', `1px solid ${palette.border}`);
+  root.style.setProperty('--card-t', `1px solid ${palette.divider}`);
+  root.style.setProperty('--hero-border', `1px solid ${palette.borderBrand}`);
+  root.style.setProperty('--divider', palette.divider);
+  root.style.setProperty('--card-shadow', palette.cardShadow);
+  root.style.setProperty('--hero-glow', palette.heroGlow);
+  root.style.setProperty('--brand-m', palette.brandM);
+  root.style.setProperty('--success-m', palette.successM);
+  root.style.setProperty('--error-m', palette.errorM);
+  root.style.setProperty('--info-m', palette.infoM);
+  root.style.setProperty('--check-bg', palette.checkBg);
+  root.style.setProperty('--pr-bg', palette.prBg);
+  root.style.setProperty('--brand-glow', palette.brand + '66');
+  document.body.style.background = palette === LIGHT ? '#E8E8EC' : '#000';
+}
+
+// Theme context
+const ThemeCtx = React.createContext({theme:'dark',setTheme:()=>{}});
+
+/* ═══════════════════════════════════════════
+   MOCK DATA
+   ═══════════════════════════════════════════ */
+const MOCK = {
+  user: { name: 'Chris', email: 'chris.fisher16@gmail.com', joined: 'January 2026' },
+  coaching: "Solid push day yesterday — bench is trending up for the third week straight. Today is push again. Focus on controlled eccentrics and don't rush the overhead press lockout.",
+  program: {
+    name: 'Push Pull Legs', weeks: 8, currentWeek: 3, daysPerWeek: 4,
+    totalWorkouts: 32, completedWorkouts: 15,
+  },
+  weekSchedule: [
+    {day:'Mon',label:'Push',name:'Push Day — Chest & Shoulders',done:false,isToday:true,
+      muscles:['Chest','Shoulders','Triceps'],duration:'~55 min',
+      exercises:[
+        {name:'Bench Press',sets:'4×8',rest:'90s'},
+        {name:'Overhead Press',sets:'4×6',rest:'120s'},
+        {name:'Incline DB Press',sets:'3×10',rest:'90s'},
+        {name:'Cable Lateral Raise',sets:'3×15',rest:'60s'},
+        {name:'Tricep Pushdown',sets:'3×12',rest:'60s'},
+        {name:'Chest Flyes',sets:'3×12',rest:'60s'},
+      ]},
+    {day:'Tue',label:'Pull',name:'Pull Day — Back & Biceps',done:false,isToday:false,
+      muscles:['Back','Biceps','Rear Delts'],duration:'~50 min',
+      exercises:[
+        {name:'Deadlift',sets:'3×5',rest:'180s'},
+        {name:'Barbell Row',sets:'4×8',rest:'90s'},
+        {name:'Lat Pulldown',sets:'3×10',rest:'90s'},
+        {name:'Face Pulls',sets:'3×15',rest:'60s'},
+        {name:'Barbell Curl',sets:'3×10',rest:'60s'},
+      ]},
+    {day:'Wed',label:'Legs',name:'Leg Day — Quads & Hamstrings',done:false,isToday:false,
+      muscles:['Quads','Hamstrings','Glutes','Calves'],duration:'~60 min',
+      exercises:[
+        {name:'Squat',sets:'4×6',rest:'180s'},
+        {name:'Romanian Deadlift',sets:'3×10',rest:'90s'},
+        {name:'Leg Press',sets:'3×12',rest:'90s'},
+        {name:'Leg Curl',sets:'3×12',rest:'60s'},
+        {name:'Calf Raise',sets:'4×15',rest:'60s'},
+      ]},
+    {day:'Thu',label:'Rest',name:null,done:false,isToday:false,muscles:[],duration:null,exercises:[]},
+    {day:'Fri',label:'Push',name:'Push Day — Chest & Shoulders',done:false,isToday:false,
+      muscles:['Chest','Shoulders','Triceps'],duration:'~55 min',
+      exercises:[
+        {name:'Bench Press',sets:'4×8',rest:'90s'},
+        {name:'Overhead Press',sets:'4×6',rest:'120s'},
+        {name:'Incline DB Press',sets:'3×10',rest:'90s'},
+        {name:'Cable Lateral Raise',sets:'3×15',rest:'60s'},
+        {name:'Tricep Pushdown',sets:'3×12',rest:'60s'},
+        {name:'Chest Flyes',sets:'3×12',rest:'60s'},
+      ]},
+  ],
+  workout: {
+    name: 'Push Day — Chest & Shoulders',
+    program: 'Push Pull Legs', week: 3, day: 1,
+    exercises: [
+      {name:'Bench Press',sets:'4×8',rest:'90s'},
+      {name:'Overhead Press',sets:'4×6',rest:'120s'},
+      {name:'Incline DB Press',sets:'3×10',rest:'90s'},
+      {name:'Cable Lateral Raise',sets:'3×15',rest:'60s'},
+      {name:'Tricep Pushdown',sets:'3×12',rest:'60s'},
+      {name:'Chest Flyes',sets:'3×12',rest:'60s'},
+    ],
+    duration: '~55 min',
+  },
+  nutrition: {
+    calories: {current:1780, target:2400},
+    protein: {current:120, target:180},
+    carbs: {current:195, target:270},
+    fat: {current:58, target:80},
+    water: {current:48, target:80},
+    supplements: [
+      {name:'Creatine',taken:true},{name:'Vitamin D',taken:true},
+      {name:'Omega-3',taken:false},{name:'Magnesium',taken:false},
+    ],
+    meals: [
+      {type:'Breakfast',time:'7:30 AM',cal:520,items:['Oatmeal with banana','2 eggs scrambled','Black coffee']},
+      {type:'Lunch',time:'12:30 PM',cal:680,items:['Grilled chicken salad','Brown rice','Mixed veggies']},
+      {type:'Snack',time:'3:00 PM',cal:280,items:['Greek yogurt','Almonds','Apple']},
+      {type:'Dinner',time:null,cal:0,items:[]},
+    ],
+  },
+  stats: {
+    streak: 12,
+    workoutsWeek: {done:4, total:5},
+    volumeWeek: 24500,
+    streakData: [1,1,1,0,1,1,1,1,1,1,0,1,1,1],
+    volumeData: [18200,21400,0,19800,22100,24500,0],
+    weekDots: [true,true,true,false,true,false,false],
+  },
+  progress: {
+    totalWorkouts: 48, totalVolume: 142000, totalPRs: 7,
+    volumeTrend: [98000,105000,112000,108000,118000,125000,131000,128000,135000,142000,138000,145000],
+    calTrend: [2100,2350,2280,2400,2150,2300,2450,2200,2380,2100,2300,2250],
+    heatmap: [
+      [2,3,0,2,3,0,0],[0,2,3,0,2,0,1],[3,0,2,3,0,2,0],[2,3,0,0,3,2,0]
+    ],
+    muscleGroups: [
+      {name:'Chest',pct:34,get color(){return C.prot}},{name:'Back',pct:28,get color(){return C.carb}},
+      {name:'Shoulders',pct:18,get color(){return C.fat}},{name:'Legs',pct:12,get color(){return C.success}},
+      {name:'Arms',pct:8,get color(){return C.cal}},
+    ],
+    prs: [
+      {exercise:'Bench Press',weight:'100kg × 5',date:'Mar 15',gain:'↑ 5kg'},
+      {exercise:'Overhead Press',weight:'62.5kg × 6',date:'Mar 12',gain:'↑ 2.5kg'},
+      {exercise:'Squat',weight:'140kg × 3',date:'Mar 8',gain:'↑ 5kg'},
+    ],
+  },
+  achievements: [
+    {name:'First Workout',desc:'Complete your first workout',icon:'barbell',earned:true,date:'Feb 1'},
+    {name:'7-Day Streak',desc:'Train 7 days in a row',icon:'flame',earned:true,date:'Feb 14'},
+    {name:'PR Crusher',desc:'Hit 10 personal records',icon:'trophy',earned:true,date:'Mar 1'},
+    {name:'Iron Lifter',desc:'Lift 10,000 total lbs',icon:'fitness',earned:true,date:'Mar 8'},
+    {name:'Meal Prep Pro',desc:'Log meals 14 days straight',icon:'nutrition',earned:true,date:'Mar 10'},
+    {name:'Dedicated',desc:'Complete 25 workouts',icon:'ribbon',earned:true,date:'Mar 12'},
+    {name:'Century Club',desc:'Complete 100 workouts',icon:'medal',earned:false,progress:48,total:100},
+    {name:'30-Day Streak',desc:'Train 30 days in a row',icon:'flame',earned:false,progress:12,total:30},
+    {name:'Volume King',desc:'Lift 500,000 total lbs',icon:'barbell',earned:false,progress:142,total:500},
+    {name:'Macro Master',desc:'Hit all macros 7 days straight',icon:'nutrition',earned:false,progress:3,total:7},
+    {name:'Photo Logger',desc:'Take 10 progress photos',icon:'camera',earned:false,progress:4,total:10},
+    {name:'Hydration Hero',desc:'Hit water goal 14 days straight',icon:'water',earned:false,progress:5,total:14},
+  ],
+  hydration: {
+    current: 48, target: 80,
+    log: [
+      {time:'7:15 AM',amount:16},{time:'9:30 AM',amount:8},{time:'11:45 AM',amount:8},{time:'2:00 PM',amount:16},
+    ],
+  },
+};
+
+// Workout session data (mutable state initialized from this)
+// Equipment type determines progression increment
+// barbell: +2.5kg, dumbbell: +1kg, cable/machine: +2.5kg
+const WORKOUT_EXERCISES = [
+  {name:'Bench Press',targetSets:4,targetReps:8,restSec:90,equip:'barbell',
+   prev:[{w:80,r:8},{w:82.5,r:8},{w:85,r:7},{w:85,r:6}],prWeight:95},
+  {name:'Overhead Press',targetSets:4,targetReps:6,restSec:120,equip:'barbell',
+   prev:[{w:50,r:6},{w:52.5,r:6},{w:55,r:5},{w:55,r:4}],prWeight:60},
+  {name:'Incline DB Press',targetSets:3,targetReps:10,restSec:90,equip:'dumbbell',
+   prev:[{w:30,r:10},{w:30,r:10},{w:30,r:9}],prWeight:35},
+  {name:'Cable Lateral Raise',targetSets:3,targetReps:15,restSec:60,equip:'cable',
+   prev:[{w:10,r:15},{w:10,r:15},{w:10,r:14}],prWeight:12.5},
+  {name:'Tricep Pushdown',targetSets:3,targetReps:12,restSec:60,equip:'cable',
+   prev:[{w:25,r:12},{w:27.5,r:12},{w:27.5,r:10}],prWeight:30},
+  {name:'Chest Flyes',targetSets:3,targetReps:12,restSec:60,equip:'cable',
+   prev:[{w:15,r:12},{w:15,r:12},{w:15,r:11}],prWeight:17.5},
+];
+
+function getIncrement(equip) {
+  if(equip==='dumbbell') return 1;
+  return 2.5; // barbell, cable, machine
+}
+
+function initWorkoutState() {
+  return WORKOUT_EXERCISES.map(ex => {
+    // Check if all sets hit target reps last session
+    const allHitTarget = ex.prev.every(p=>p.r>=ex.targetReps);
+    const increment = getIncrement(ex.equip);
+    return {
+      ...ex,
+      sets: Array.from({length:ex.targetSets},(_,i) => {
+        const prevW = ex.prev[i]?.w || ex.prev[0]?.w || 0;
+        const suggestUp = allHitTarget && prevW > 0;
+        const weight = suggestUp ? prevW + increment : prevW;
+        return {
+          weight,
+          reps: ex.targetReps,
+          completed: false,
+          isPR: false,
+          suggested: suggestUp, // show "↑" indicator
+        };
+      })
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════
+   SVG HELPERS
+   ═══════════════════════════════════════════ */
+function smoothPath(pts, w, h, pad=0) {
+  if (!pts || !pts.length) return {line:'',area:'',dots:[]};
+  if (pts.length === 1) {
+    const x = w/2, y = h/2;
+    return {line:`M${x},${y}`,area:`M${x},${y} L${x},${h} Z`,dots:[{x,y}]};
+  }
+  const max = Math.max(...pts), min = Math.min(...pts);
+  const range = max - min || 1;
+  const coords = pts.map((v,i) => ({
+    x: pad + (i/(pts.length-1))*(w-pad*2),
+    y: pad + (1-(v-min)/range)*(h-pad*2)
+  }));
+  let d = `M${coords[0].x},${coords[0].y}`;
+  for(let i=1;i<coords.length;i++){
+    const cx=(coords[i-1].x+coords[i].x)/2;
+    d+=` C${cx},${coords[i-1].y} ${cx},${coords[i].y} ${coords[i].x},${coords[i].y}`;
+  }
+  const area = d+` L${coords[coords.length-1].x},${h} L${coords[0].x},${h} Z`;
+  return {line:d, area, dots:coords};
+}
+
+/* ═══════════════════════════════════════════
+   EXERCISE ICONS (SVG pictograms)
+   ═══════════════════════════════════════════ */
+function ExIco({name,size=24,color=C.t2}) {
+  const s = {strokeWidth:1.8,stroke:color,fill:'none',strokeLinecap:'round',strokeLinejoin:'round'};
+  const icons = {
+    'Bench Press': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <line x1="2" y1="12" x2="22" y2="12" {...s}/>
+      <rect x="1" y="9" width="3" height="6" rx="1" fill={color} opacity="0.4"/>
+      <rect x="20" y="9" width="3" height="6" rx="1" fill={color} opacity="0.4"/>
+      <path d="M8 12v4M16 12v4M8 16h8" {...s} opacity="0.5"/>
+      <circle cx="12" cy="14" r="1.5" fill={color} opacity="0.3"/>
+    </svg>,
+    'Overhead Press': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <circle cx="12" cy="16" r="2" fill={color} opacity="0.4"/>
+      <line x1="12" y1="18" x2="12" y2="22" {...s} opacity="0.4"/>
+      <line x1="4" y1="6" x2="20" y2="6" {...s}/>
+      <rect x="2" y="4" width="3" height="4" rx="1" fill={color} opacity="0.4"/>
+      <rect x="19" y="4" width="3" height="4" rx="1" fill={color} opacity="0.4"/>
+      <path d="M9 14l-1-8M15 14l1-8" {...s} opacity="0.5"/>
+    </svg>,
+    'Incline DB Press': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <path d="M7 18l3-10" {...s} opacity="0.4"/>
+      <line x1="6" y1="6" x2="10" y2="5" {...s}/><rect x="4" y="4" width="3" height="3" rx="1" fill={color} opacity="0.4" transform="rotate(-10 5.5 5.5)"/>
+      <line x1="14" y1="6" x2="18" y2="5" {...s}/><rect x="17" y="4" width="3" height="3" rx="1" fill={color} opacity="0.4" transform="rotate(10 18.5 5.5)"/>
+      <circle cx="10" cy="16" r="2" fill={color} opacity="0.3"/>
+    </svg>,
+    'Cable Lateral Raise': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <circle cx="12" cy="6" r="2" fill={color} opacity="0.4"/>
+      <line x1="12" y1="8" x2="12" y2="16" {...s} opacity="0.4"/>
+      <path d="M12 10l-8 2M12 10l8 2" {...s}/>
+      <circle cx="4" cy="12" r="1.5" fill={color} opacity="0.4"/>
+      <circle cx="20" cy="12" r="1.5" fill={color} opacity="0.4"/>
+      <path d="M9 16l-2 6M15 16l2 6" {...s} opacity="0.3"/>
+    </svg>,
+    'Tricep Pushdown': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <circle cx="12" cy="5" r="2" fill={color} opacity="0.4"/>
+      <line x1="12" y1="7" x2="12" y2="14" {...s} opacity="0.4"/>
+      <path d="M9 10l3 8 3-8" {...s}/>
+      <line x1="12" y1="2" x2="12" y2="3" {...s} opacity="0.3"/>
+      <line x1="8" y1="2" x2="16" y2="2" {...s} opacity="0.3"/>
+      <path d="M9 14l-1 8M15 14l1 8" {...s} opacity="0.3"/>
+    </svg>,
+    'Chest Flyes': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <circle cx="12" cy="10" r="2" fill={color} opacity="0.4"/>
+      <line x1="12" y1="12" x2="12" y2="20" {...s} opacity="0.4"/>
+      <path d="M12 12C8 10 4 8 2 10" {...s}/>
+      <path d="M12 12C16 10 20 8 22 10" {...s}/>
+      <circle cx="2" cy="10" r="1.5" fill={color} opacity="0.4"/>
+      <circle cx="22" cy="10" r="1.5" fill={color} opacity="0.4"/>
+    </svg>,
+    'Squat': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <circle cx="12" cy="4" r="2" fill={color} opacity="0.4"/>
+      <line x1="4" y1="6" x2="20" y2="6" {...s}/>
+      <rect x="2" y="4.5" width="3" height="3" rx="1" fill={color} opacity="0.4"/>
+      <rect x="19" y="4.5" width="3" height="3" rx="1" fill={color} opacity="0.4"/>
+      <path d="M10 8v4l-3 6M14 8v4l3 6" {...s} opacity="0.5"/>
+    </svg>,
+    'Deadlift': <svg viewBox="0 0 24 24" width={size} height={size}>
+      <circle cx="12" cy="8" r="2" fill={color} opacity="0.4"/>
+      <path d="M12 10c0 2-3 5-3 5" {...s} opacity="0.5"/>
+      <path d="M12 10c0 2 3 5 3 5" {...s} opacity="0.5"/>
+      <line x1="4" y1="18" x2="20" y2="18" {...s}/>
+      <rect x="2" y="16" width="3" height="4" rx="1" fill={color} opacity="0.4"/>
+      <rect x="19" y="16" width="3" height="4" rx="1" fill={color} opacity="0.4"/>
+      <path d="M10 14l-1 4M14 14l1 4" {...s} opacity="0.4"/>
+    </svg>,
+  };
+  // Fallback for unknown exercises
+  return icons[name] || <svg viewBox="0 0 24 24" width={size} height={size}>
+    <circle cx="12" cy="12" r="8" stroke={color} strokeWidth="1.5" fill="none" opacity="0.3"/>
+    <circle cx="12" cy="12" r="3" fill={color} opacity="0.4"/>
+  </svg>;
+}
+
+// Exercise thumbnail wrapper
+function ExThumb({name,size=40,iconSize=24}) {
+  return (
+    <div style={{width:size,height:size,borderRadius:9999,background:C.s2,
+      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+      border:`1px solid ${C.border}`}}>
+      <ExIco name={name} size={iconSize} color={C.t2}/>
+    </div>
+  );
+}
+
+// ── Empty State ──
+function EmptyState({icon,title,subtitle,cta,onCta,children}) {
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+      padding:'48px 32px',textAlign:'center',height:'100%',minHeight:320}}>
+      <div style={{width:80,height:80,borderRadius:20,background:C.s1,
+        display:'flex',alignItems:'center',justifyContent:'center',marginBottom:20,
+        border:`1px solid ${C.border}`}}>
+        <Ico name={icon||'sparkles'} size={36} color={C.t3}/>
+      </div>
+      <div style={{fontSize:22,fontWeight:700,lineHeight:'28px',color:C.t1}}>{title}</div>
+      {subtitle && <div style={{fontSize:14,fontWeight:400,lineHeight:'20px',color:C.t2,marginTop:8,maxWidth:280}}>{subtitle}</div>}
+      {cta && (
+        <div style={{marginTop:24}}>
+          <Btn onClick={onCta} icon="add">{cta}</Btn>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+// ── Achievement Badge ──
+function AchBadge({ach}) {
+  const earned = ach.earned;
+  const pct = earned ? 1 : (ach.progress||0)/(ach.total||1);
+  return (
+    <div style={{
+      padding:16,borderRadius:16,
+      background:earned ? C.brandDim : C.s1,
+      border:earned ? `1px solid ${C.borderBrand}` : `1px solid ${C.border}`,
+      display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',
+      position:'relative',overflow:'hidden',
+      boxShadow:earned ? `0 0 20px ${C.brand}14` : 'none',
+    }}>
+      {/* Glow effect for earned */}
+      {earned && <div style={{position:'absolute',top:-20,left:'50%',transform:'translateX(-50%)',
+        width:60,height:60,borderRadius:9999,background:C.brand+'26',filter:'blur(20px)'}}/> }
+      <div style={{
+        width:48,height:48,borderRadius:12,
+        background:earned ? C.brandM : C.s2,
+        display:'flex',alignItems:'center',justifyContent:'center',
+        border:earned ? `1px solid ${C.brand}4D` : `1px solid ${C.border}`,
+        position:'relative',
+      }}>
+        <Ico name={ach.icon||'trophy'} size={24} color={earned?C.brand:C.t3}/>
+      </div>
+      <div style={{fontSize:12,fontWeight:700,color:earned?C.t1:C.t2,marginTop:10,lineHeight:'16px'}}>{ach.name}</div>
+      <div style={{fontSize:10,fontWeight:400,color:C.t3,marginTop:4,lineHeight:'14px'}}>{ach.desc}</div>
+      {earned ? (
+        <div style={{fontSize:10,fontWeight:600,color:C.brand,marginTop:8}}>{ach.date}</div>
+      ) : (
+        <div style={{width:'100%',marginTop:8}}>
+          <div style={{height:4,borderRadius:2,background:C.s2,overflow:'hidden'}}>
+            <div style={{height:4,borderRadius:2,background:C.t3,width:`${pct*100}%`,transition:'width 0.3s'}}/>
+          </div>
+          <div style={{fontSize:9,fontWeight:600,color:C.t3,marginTop:4}}>{ach.progress}/{ach.total}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Segmented Toggle ──
+function SegToggle({options,value,onChange,style}) {
+  return (
+    <div style={{display:'inline-flex',borderRadius:8,background:C.s2,padding:2,...style}}>
+      {options.map(opt=>(
+        <button key={opt.value} onClick={()=>onChange(opt.value)}
+          style={{padding:'5px 12px',borderRadius:6,border:'none',cursor:'pointer',
+            fontFamily:'inherit',fontSize:11,fontWeight:600,letterSpacing:'0.02em',
+            transition:'all 0.2s',
+            background:value===opt.value?C.s3:'transparent',
+            color:value===opt.value?C.t1:C.t3,
+            boxShadow:value===opt.value?(C.cardShadow||'0 1px 3px rgba(0,0,0,0.3)'):'none',
+          }}>
+          {opt.icon && <Ico name={opt.icon} size={12} color={value===opt.value?C.t1:C.t3} style={{marginRight:4,verticalAlign:'middle'}}/>}
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SHARED COMPONENTS
+   ═══════════════════════════════════════════ */
+
+// ── Overline ──
+function Overline({children, style}) {
+  return <div style={{fontSize:11,fontWeight:700,lineHeight:'14px',letterSpacing:'0.1em',textTransform:'uppercase',color:C.brand,...style}}>{children}</div>;
+}
+
+// ── Icon (Ionicons wrapper) ──
+function Ico({name, size=20, color=C.t2, style}) {
+  return <ion-icon name={name} style={{fontSize:size,color,...style}}></ion-icon>;
+}
+
+// ── Card ──
+function Card({children, style, hero, className='', onClick}) {
+  return (
+    <div className={`${hero?'hero-b hero-glow':'card-b card-t'} ${className}`}
+      style={{background:C.s1,borderRadius:16,padding:16,...style}}
+      onClick={onClick}>
+      {children}
+    </div>
+  );
+}
+
+// ── Stat Card ──
+function StatCard({label, value, unit, children}) {
+  return (
+    <Card style={{flex:1,padding:16,display:'flex',flexDirection:'column',alignItems:'center'}}>
+      <Overline>{label}</Overline>
+      <div style={{fontSize:32,fontWeight:700,lineHeight:'38px',color:C.t1,marginTop:4,letterSpacing:'-0.01em'}}>{value}</div>
+      {unit && <div style={{fontSize:11,fontWeight:500,color:C.t2,marginTop:2}}>{unit}</div>}
+      {children}
+    </Card>
+  );
+}
+
+// ── Button ──
+function Btn({children, variant='primary', size='lg', onClick, icon, style, disabled, full=true}) {
+  const heights = {sm:36,md:44,lg:52};
+  const pads = {sm:16,md:20,lg:24};
+  const fsize = {sm:12,md:14,lg:14};
+  const variants = {
+    primary: {bg:C.brand, color:C.inv, border:'none'},
+    secondary: {bg:'transparent', color:C.t1, border:`1px solid ${C.border}`},
+    ghost: {bg:'transparent', color:C.brand, border:'none'},
+    destructive: {bg:C.errorM, color:C.error, border:`1px solid ${C.error}33`},
+  };
+  const v = variants[variant];
+  return (
+    <button className="btn-press" disabled={disabled} onClick={onClick}
+      style={{
+        height:heights[size], paddingLeft:pads[size], paddingRight:pads[size],
+        background:disabled?C.s3:v.bg, color:disabled?C.t3:v.color, border:v.border,
+        borderRadius:12, fontSize:fsize[size], fontWeight:600, lineHeight:'20px',
+        display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+        width:full?'100%':'auto', cursor:disabled?'default':'pointer',
+        opacity:disabled?0.5:1, fontFamily:'inherit', ...style,
+      }}>
+      {icon && <Ico name={icon} size={size==='sm'?16:size==='md'?18:20} color={disabled?C.t3:v.color}/>}
+      {children}
+    </button>
+  );
+}
+
+// ── Pill ──
+function Pill({children, icon, iconColor, onClick, style, bg}) {
+  return (
+    <button className="btn-press" onClick={onClick}
+      style={{
+        display:'flex',alignItems:'center',gap:4,
+        background:bg||C.s2,borderRadius:8,border:'none',
+        paddingTop:8,paddingBottom:8,paddingLeft:12,paddingRight:12,
+        cursor:'pointer',fontFamily:'inherit',...style,
+      }}>
+      {icon && <Ico name={icon} size={16} color={iconColor||C.brand}/>}
+      <span style={{fontSize:12,fontWeight:600,lineHeight:'16px',color:C.t2}}>{children}</span>
+    </button>
+  );
+}
+
+// ── Progress Ring (SVG) ──
+function ProgressRing({size=120,stroke=8,progress=0,color=C.cal,trackColor=C.s2,children,glowColor}) {
+  const r = (size-stroke)/2;
+  const circ = 2*Math.PI*r;
+  const offset = circ*(1-Math.min(progress,1));
+  const gradId = `rg-${size}-${color.replace(/[^a-zA-Z0-9]/g,'')}`;
+  return (
+    <div style={{position:'relative',width:size,height:size}}>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={color}/>
+            <stop offset="100%" stopColor={color} stopOpacity="0.6"/>
+          </linearGradient>
+        </defs>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackColor} strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={`url(#${gradId})`} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          style={{'--circ':circ,animation:'ringDraw 0.8s ease-out',filter:glowColor?`drop-shadow(0 0 6px ${glowColor})`:'none'}}/>
+      </svg>
+      {children && <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>{children}</div>}
+    </div>
+  );
+}
+
+// ── MacroBar ──
+function MacroBar({label, current, target, color}) {
+  const pct = Math.min(current/target,1);
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{label}</span>
+        <span><span style={{fontSize:13,fontWeight:400,color:C.t1}}>{current}g</span><span style={{fontSize:13,color:C.t3}}> / {target}g</span></span>
+      </div>
+      <div style={{height:6,borderRadius:3,background:C.s2,overflow:'hidden'}}>
+        <div style={{height:6,borderRadius:3,background:color,width:`${pct*100}%`,transition:'width 0.4s ease-out'}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Sparkline (SVG) ──
+let _spIdx=0;
+function Sparkline({data,width=100,height=28,color=C.brand,style}) {
+  if(!data||!data.length) return null;
+  const {line,dots} = smoothPath(data,width,height,2);
+  const gradId = React.useMemo(()=>`sp-${++_spIdx}`,[]);
+  return (
+    <svg width={width} height={height} style={{display:'block',...style}}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.2"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={smoothPath(data,width,height,2).area} fill={`url(#${gradId})`}/>
+      <path d={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      {dots.length>0 && <circle cx={dots[dots.length-1].x} cy={dots[dots.length-1].y} r="2.5" fill={color}/>}
+    </svg>
+  );
+}
+
+// ── Area Chart (larger, with labels) ──
+let _acIdx=0;
+function AreaChart({data,width=362,height=140,color=C.brand,labels,refLine,style}) {
+  const {line,area,dots} = smoothPath(data,width,height-24,8);
+  const gradId = React.useMemo(()=>`ac-${++_acIdx}`,[]);
+  const max = Math.max(...data), min = Math.min(...data);
+  const refY = refLine ? 8 + (1-(refLine-min)/(max-min||1))*(height-32) : null;
+  return (
+    <div style={style}>
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.15"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gradId})`}/>
+        <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"/>
+        {refY && <line x1="0" y1={refY} x2={width} y2={refY} stroke={C.t3} strokeWidth="1" strokeDasharray="4,4"/>}
+        {dots.length>0 && <circle cx={dots[dots.length-1].x} cy={dots[dots.length-1].y} r="4" fill={color} style={{filter:`drop-shadow(0 0 4px ${color})`}}/>}
+      </svg>
+      {labels && (
+        <div style={{display:'flex',justifyContent:'space-between',marginTop:6}}>
+          {labels.map((l,i)=><span key={i} style={{fontSize:11,fontWeight:500,color:C.t3}}>{l}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Heatmap ──
+function Heatmap({data,cellSize=14,gap=3}) {
+  const days = ['M','T','W','T','F','S','S'];
+  const intensities = ['transparent',C.brand+'26',C.brand+'59',C.brand+'B3'];
+  return (
+    <div>
+      <div style={{display:'flex',gap,marginBottom:gap}}>
+        {days.map((d,i)=><div key={i} style={{width:cellSize,textAlign:'center',fontSize:10,fontWeight:500,color:C.t3}}>{d}</div>)}
+      </div>
+      {data.map((week,wi)=>(
+        <div key={wi} style={{display:'flex',gap,marginBottom:gap}}>
+          {week.map((val,di)=>(
+            <div key={di} style={{width:cellSize,height:cellSize,borderRadius:3,background:val===0?C.s2:intensities[val]||C.brand}}/>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Badge/Pill for PRs ──
+function PRBadge({text}) {
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:4,background:C.brandM,border:`1px solid ${C.borderBrand}`,
+      borderRadius:8,paddingLeft:8,paddingRight:8,paddingTop:4,paddingBottom:4}}>
+      <Ico name="trophy" size={14} color={C.brand}/>
+      <span style={{fontSize:11,fontWeight:700,color:C.brand,letterSpacing:'0.05em'}}>{text}</span>
+    </span>
+  );
+}
+
+function GainPill({text,positive=true}) {
+  return (
+    <span style={{fontSize:12,fontWeight:600,color:positive?C.success:C.error,
+      background:positive?C.successM:C.errorM,borderRadius:9999,paddingLeft:8,paddingRight:8,paddingTop:3,paddingBottom:3}}>
+      {text}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   TODAY SCREEN
+   ═══════════════════════════════════════════ */
+function TodayScreen({onStartWorkout,onShowPreview,onShowHydration,isEmpty,
+  wkActive,wkExercises,wkElapsed,onResume,wkCompleted,wkCompletedData,onViewSummary,onShowProfile}) {
+  const nut = MOCK.nutrition;
+  const st = MOCK.stats;
+  const calPct = nut.calories.current/nut.calories.target;
+
+  // Profile avatar component
+  const Avatar = () => (
+    <button onClick={onShowProfile} aria-label="Profile" style={{width:44,height:44,borderRadius:9999,background:C.brandM,
+      display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',
+      border:`1px solid ${C.borderBrand}`,fontSize:15,fontWeight:700,color:C.brand,fontFamily:'inherit'}}>
+      {MOCK.user.name[0]}
+    </button>
+  );
+
+  if(isEmpty) return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      <div style={{display:'flex',justifyContent:'flex-end',padding:'12px 16px 0'}}><Avatar/></div>
+      <div style={{padding:'8px 16px 0'}}>
+        <Overline>TUESDAY, MARCH 18</Overline>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1,marginTop:4}}>Welcome to FormIQ</div>
+        <div style={{fontSize:15,fontWeight:500,lineHeight:'22px',color:C.t2,marginTop:12}}>
+          Your fitness journey starts here. Set up your profile and first program to get personalized coaching.
+        </div>
+      </div>
+      <div style={{padding:'20px 16px 0'}}>
+        <EmptyState icon="barbell-outline" title="No Workout Scheduled"
+          subtitle="Start a program or create a custom workout to see your daily plan here."
+          cta="Browse Programs" onCta={onStartWorkout}/>
+      </div>
+      <div style={{padding:'20px 16px 0'}}>
+        <Card style={{padding:20,display:'flex',alignItems:'center',gap:16}}>
+          <div style={{width:48,height:48,borderRadius:12,background:C.s2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico name="nutrition-outline" size={24} color={C.t3}/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:16,fontWeight:600,color:C.t1}}>Set Nutrition Goals</div>
+            <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>Configure your calorie and macro targets</div>
+          </div>
+          <Ico name="chevron-forward" size={16} color={C.t3}/>
+        </Card>
+      </div>
+    </div>
+  );
+
+  // Compute workout progress for in-progress state
+  const wkDone = wkExercises ? wkExercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).length,0) : 0;
+  const wkTotal = wkExercises ? wkExercises.reduce((a,e)=>a+e.sets.length,0) : 0;
+  const wkExDone = wkExercises ? wkExercises.filter(e=>e.sets.every(s=>s.completed)).length : 0;
+
+  // Hero card state: 'ready' | 'active' | 'completed'
+  const heroState = wkCompleted ? 'completed' : wkActive ? 'active' : 'ready';
+
+  const heroStyles = {
+    ready: {borderColor:C.borderBrand},
+    active: {borderColor:C.success+'40',boxShadow:`0 0 24px ${C.success}10`},
+    completed: {borderColor:C.success+'30'},
+  };
+
+  return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'flex-end',padding:'12px 16px 0'}}><Avatar/></div>
+
+      {/* Greeting + Coaching */}
+      <div style={{padding:'8px 16px 0'}} className="anim-up">
+        <Overline>TUESDAY, MARCH 18</Overline>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1,marginTop:4,letterSpacing:'-0.01em'}}>
+          Good morning, {MOCK.user.name}
+        </div>
+        <div style={{fontSize:15,fontWeight:500,lineHeight:'22px',color:C.t2,marginTop:12}}>
+          {MOCK.coaching}
+        </div>
+      </div>
+
+      {/* Hero Card — Today's Workout (3 states) */}
+      <div style={{padding:'20px 16px 0'}} className="anim-up">
+        <Card hero style={{padding:24,cursor:'pointer',...heroStyles[heroState]}}
+          onClick={heroState==='active'?onResume:heroState==='completed'?onViewSummary:onShowPreview}>
+
+          {heroState === 'active' ? (
+            <>
+              <Overline style={{color:C.success}}>WORKOUT IN PROGRESS</Overline>
+              <div style={{fontSize:22,fontWeight:600,lineHeight:'28px',color:C.t1,marginTop:8}}>
+                {MOCK.workout.name}
+              </div>
+              <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:4}}>
+                {wkExDone} of {wkExercises?.length||0} exercises · {wkDone} sets logged · {fmt(wkElapsed)}
+              </div>
+              {/* Progress bar */}
+              <div style={{marginTop:16,height:6,borderRadius:3,background:C.s2,overflow:'hidden'}}>
+                <div style={{height:6,borderRadius:3,background:C.success,width:`${wkTotal?Math.round(wkDone/wkTotal*100):0}%`,
+                  transition:'width 0.3s'}}/>
+              </div>
+              <div style={{marginTop:20}} onClick={e=>e.stopPropagation()}>
+                <Btn onClick={onResume} icon="play"
+                  style={{background:C.success,borderColor:C.success}}>Resume Workout</Btn>
+              </div>
+            </>
+          ) : heroState === 'completed' ? (
+            <>
+              <Overline style={{color:C.success}}>WORKOUT COMPLETE</Overline>
+              <div style={{fontSize:22,fontWeight:600,lineHeight:'28px',color:C.t1,marginTop:8}}>
+                {MOCK.workout.name}
+              </div>
+              <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:4}}>
+                {wkCompletedData?.duration||'--'} · {wkCompletedData?.sets||0} sets · {wkCompletedData?.volume||'--'}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:12}}>
+                <Ico name="checkmark-circle" size={20} color={C.success}/>
+                <span style={{fontSize:14,fontWeight:600,color:C.success}}>Great work today</span>
+              </div>
+              <div style={{marginTop:16}} onClick={e=>e.stopPropagation()}>
+                <Btn variant="secondary" onClick={onViewSummary} icon="document-text-outline">View Summary</Btn>
+              </div>
+            </>
+          ) : (
+            <>
+              <Overline>TODAY'S WORKOUT</Overline>
+              <div style={{fontSize:22,fontWeight:600,lineHeight:'28px',color:C.t1,marginTop:8}}>
+                {MOCK.workout.name}
+              </div>
+              <div style={{fontSize:13,fontWeight:400,lineHeight:'18px',color:C.t2,marginTop:4}}>
+                {MOCK.workout.exercises.length} exercises · {MOCK.workout.duration} · Week {MOCK.workout.week}, Day {MOCK.workout.day}
+              </div>
+              <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:8}}>
+                {MOCK.workout.exercises.slice(0,3).map((ex,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
+                    <ExThumb name={ex.name} size={28} iconSize={16}/>
+                    <span style={{fontSize:13,fontWeight:400,color:C.t2}}>{ex.name} · {ex.sets}</span>
+                  </div>
+                ))}
+                <span style={{fontSize:11,fontWeight:500,color:C.t3,marginLeft:38}}>
+                  and {MOCK.workout.exercises.length-3} more
+                </span>
+              </div>
+              <div style={{marginTop:20}} onClick={e=>e.stopPropagation()}>
+                <Btn onClick={onStartWorkout} icon="play">Start Workout</Btn>
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
+
+      {/* Nutrition Snapshot */}
+      <div style={{padding:'20px 16px 0'}} className="anim-up" >
+        <Overline>NUTRITION</Overline>
+        <Card style={{marginTop:12}}>
+          <div style={{display:'flex',gap:20,alignItems:'center'}}>
+            {/* Calorie Ring */}
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+              <ProgressRing size={72} stroke={5} progress={calPct} color={C.cal} glowColor={C.cal+'4D'}>
+                <span style={{fontSize:12,fontWeight:600,color:C.t1}}>{Math.round(calPct*100)}%</span>
+              </ProgressRing>
+              <span style={{fontSize:11,fontWeight:500,color:C.t2,marginTop:4}}>{nut.calories.current} cal</span>
+            </div>
+            {/* Macro Bars */}
+            <div style={{flex:1,display:'flex',flexDirection:'column',gap:8}}>
+              <MacroBar label="Protein" current={nut.protein.current} target={nut.protein.target} color={C.prot}/>
+              <MacroBar label="Carbs" current={nut.carbs.current} target={nut.carbs.target} color={C.carb}/>
+              <MacroBar label="Fat" current={nut.fat.current} target={nut.fat.target} color={C.fat}/>
+            </div>
+          </div>
+
+          {/* Quick Action Pills */}
+          <div className="divider" style={{marginTop:12}}/>
+          <div style={{display:'flex',gap:8,marginTop:12}}>
+            <Pill icon="add-outline" iconColor={C.brand}>Log Meal</Pill>
+            <Pill icon="water" iconColor={C.info} onClick={onShowHydration}>Water: {nut.water.current}oz</Pill>
+            <Pill icon="medical-outline" iconColor={C.warning}>Supps: {nut.supplements.filter(s=>s.taken).length}/{nut.supplements.length}</Pill>
+          </div>
+        </Card>
+      </div>
+
+      {/* Momentum Strip */}
+      <div style={{padding:'20px 16px 0'}} className="anim-up" >
+        <Overline>THIS WEEK</Overline>
+        <div style={{display:'flex',gap:12,marginTop:12}}>
+          <StatCard label="STREAK" value={st.streak} unit="days">
+            <Sparkline data={st.streakData.map(v=>v+0.1)} width={80} height={24} color={C.brand} style={{marginTop:8}}/>
+          </StatCard>
+          <StatCard label="WORKOUTS" value={`${st.workoutsWeek.done}/${st.workoutsWeek.total}`} unit="this week">
+            <div style={{display:'flex',gap:4,marginTop:8}}>
+              {st.weekDots.map((d,i)=>(
+                <div key={i} style={{width:8,height:8,borderRadius:4,background:d?C.brand:C.s2}}/>
+              ))}
+            </div>
+          </StatCard>
+          <StatCard label="VOLUME" value="24.5k" unit="lbs">
+            <Sparkline data={st.volumeData.map(v=>v||1)} width={80} height={24} color={C.brand} style={{marginTop:8}}/>
+          </StatCard>
+        </div>
+      </div>
+
+      <div style={{height:32}}/>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   NUTRITION SCREEN
+   ═══════════════════════════════════════════ */
+function NutritionScreen({onShowHydration,isEmpty}) {
+  const [dateIdx, setDateIdx] = useState(0);
+  const nut = MOCK.nutrition;
+  const calPct = nut.calories.current/nut.calories.target;
+  const remaining = nut.calories.target - nut.calories.current;
+
+  if(isEmpty) return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      <div style={{padding:'32px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1}}>Nutrition</div>
+        <Ico name="settings-outline" size={24} color={C.t2}/>
+      </div>
+      <EmptyState icon="nutrition-outline" title="Start Tracking"
+        subtitle="Log your meals and supplements to see daily nutrition breakdowns, macro tracking, and trends over time."
+        cta="Log First Meal">
+        <div style={{display:'flex',gap:12,marginTop:16}}>
+          <Pill icon="water" iconColor={C.info} onClick={onShowHydration}>Log Water</Pill>
+          <Pill icon="medical-outline" iconColor={C.warning}>Supplements</Pill>
+        </div>
+      </EmptyState>
+    </div>
+  );
+
+  const mealBadgeColors = {Breakfast:C.warningM, Lunch:C.infoM, Dinner:C.brandM, Snack:C.s2};
+  const mealBadgeText = {Breakfast:C.warning, Lunch:C.info, Dinner:C.brand, Snack:C.t2};
+
+  return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      {/* Header */}
+      <div style={{padding:'32px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1}}>Nutrition</div>
+        <Ico name="settings-outline" size={24} color={C.t2}/>
+      </div>
+
+      {/* Date Selector */}
+      <div style={{padding:'16px 16px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <button onClick={()=>setDateIdx(dateIdx-1)} style={{background:'none',border:'none',cursor:'pointer',padding:8}}>
+          <Ico name="chevron-back" size={20} color={C.t2}/>
+        </button>
+        <span style={{fontSize:14,fontWeight:600,color:C.t1}}>
+          {dateIdx===0?'Today, Mar 18':dateIdx===-1?'Mon, Mar 17':'Sun, Mar 16'}
+        </span>
+        <button onClick={()=>setDateIdx(Math.min(dateIdx+1,0))} style={{background:'none',border:'none',cursor:'pointer',padding:8,opacity:dateIdx===0?0.3:1}}>
+          <Ico name="chevron-forward" size={20} color={C.t2}/>
+        </button>
+      </div>
+
+      {/* Calorie + Macro Card */}
+      <div style={{padding:'16px 16px 0'}}>
+        <Card style={{padding:20}}>
+          <div style={{display:'flex',alignItems:'center',gap:20}}>
+            {/* Ring */}
+            <ProgressRing size={120} stroke={8} progress={calPct} color={C.cal} glowColor={C.cal+'4D'}>
+              <span style={{fontSize:32,fontWeight:700,lineHeight:'38px',color:C.t1,letterSpacing:'-0.01em'}}>{nut.calories.current.toLocaleString()}</span>
+              <span style={{fontSize:11,fontWeight:500,color:C.t2}}>of {nut.calories.target.toLocaleString()}</span>
+            </ProgressRing>
+            {/* Summary */}
+            <div style={{flex:1}}>
+              <div style={{fontSize:18,fontWeight:600,lineHeight:'24px',color:C.t1}}>{remaining}</div>
+              <div style={{fontSize:13,fontWeight:400,color:C.t2}}>calories remaining</div>
+              <div style={{fontSize:13,fontWeight:400,color:C.success,marginTop:8}}>On track for today</div>
+            </div>
+          </div>
+          <div className="divider" style={{marginTop:16}}/>
+          <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:12}}>
+            <MacroBar label="Protein" current={nut.protein.current} target={nut.protein.target} color={C.prot}/>
+            <MacroBar label="Carbs" current={nut.carbs.current} target={nut.carbs.target} color={C.carb}/>
+            <MacroBar label="Fat" current={nut.fat.current} target={nut.fat.target} color={C.fat}/>
+          </div>
+        </Card>
+      </div>
+
+      {/* Meals */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>MEALS</Overline>
+        <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:12}}>
+          {nut.meals.map((meal,i)=>(
+            <Card key={i} className={meal.items.length?'':''}
+              style={{padding:16,cursor:meal.items.length?'pointer':'default'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:14,fontWeight:600,color:C.t1}}>{meal.type}</span>
+                    <span style={{fontSize:10,fontWeight:600,color:mealBadgeText[meal.type],
+                      background:mealBadgeColors[meal.type],borderRadius:9999,paddingLeft:6,paddingRight:6,paddingTop:2,paddingBottom:2}}>
+                      {meal.type.toUpperCase()}
+                    </span>
+                  </div>
+                  {meal.time && <span style={{fontSize:11,fontWeight:500,color:C.t3,marginTop:2,display:'block'}}>{meal.time}</span>}
+                </div>
+                {meal.cal > 0 && (
+                  <div style={{textAlign:'right'}}>
+                    <span style={{fontSize:20,fontWeight:700,color:C.t1}}>{meal.cal}</span>
+                    <span style={{fontSize:11,fontWeight:500,color:C.t3,marginLeft:2}}>cal</span>
+                  </div>
+                )}
+              </div>
+              {meal.items.length > 0 ? (
+                <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:6}}>
+                  {meal.items.map((item,j)=>(
+                    <div key={j} style={{fontSize:13,fontWeight:400,color:C.t2}}>{item}</div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{marginTop:12,textAlign:'center',paddingTop:8,paddingBottom:8}}>
+                  <button style={{fontSize:13,fontWeight:600,color:C.brand,background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>
+                    + Log {meal.type}
+                  </button>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Supplements */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>SUPPLEMENTS</Overline>
+        <Card style={{marginTop:12}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {nut.supplements.map((sup,i)=>(
+              <button key={i} className="btn-press" style={{
+                display:'flex',alignItems:'center',gap:6,
+                borderRadius:9999,paddingLeft:12,paddingRight:12,paddingTop:8,paddingBottom:8,
+                border:'none',cursor:'pointer',fontFamily:'inherit',
+                background:sup.taken?C.successM:C.s2,
+                ...(sup.taken?{border:`1px solid ${C.success}25`}:{border:`1px solid ${C.border}`}),
+              }}>
+                <Ico name={sup.taken?'checkmark-circle':'ellipse-outline'} size={16} color={sup.taken?C.success:C.t3}/>
+                <span style={{fontSize:12,fontWeight:600,color:sup.taken?C.t1:C.t2}}>{sup.name}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* Hydration */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>HYDRATION</Overline>
+        <Card style={{marginTop:12,cursor:'pointer'}} onClick={onShowHydration}>
+          <div style={{display:'flex',alignItems:'center',gap:16}}>
+            <ProgressRing size={56} stroke={4} progress={MOCK.hydration.current/MOCK.hydration.target}
+              color={C.info} glowColor={C.info+'33'}>
+              <Ico name="water" size={18} color={C.info}/>
+            </ProgressRing>
+            <div style={{flex:1}}>
+              <div style={{fontSize:18,fontWeight:700,color:C.t1}}>{MOCK.hydration.current} oz</div>
+              <div style={{fontSize:12,fontWeight:400,color:C.t2}}>of {MOCK.hydration.target} oz goal</div>
+              <div style={{width:'100%',height:4,borderRadius:2,background:C.s2,marginTop:8,overflow:'hidden'}}>
+                <div style={{width:`${Math.min(100,MOCK.hydration.current/MOCK.hydration.target*100)}%`,height:'100%',
+                  borderRadius:2,background:C.info,transition:'width 0.3s'}}/>
+              </div>
+            </div>
+            <Ico name="chevron-forward" size={20} color={C.t3}/>
+          </div>
+        </Card>
+      </div>
+
+      <div style={{height:100}}/>
+
+      {/* FAB */}
+      <button className="btn-press" style={{
+        position:'absolute',right:16,bottom:92,
+        display:'flex',alignItems:'center',gap:4,
+        height:52,borderRadius:9999,paddingLeft:20,paddingRight:20,
+        background:C.brand,border:'none',cursor:'pointer',
+        boxShadow:'0 4px 12px rgba(0,0,0,0.3)',fontFamily:'inherit',
+      }}>
+        <Ico name="add" size={24} color={C.inv}/>
+        <span style={{fontSize:14,fontWeight:600,color:C.inv}}>Log Meal</span>
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   PROGRESS SCREEN
+   ═══════════════════════════════════════════ */
+function ProgressScreen({isEmpty}) {
+  const [segment, setSegment] = useState('workout');
+  const [range, setRange] = useState('1M');
+  const pr = MOCK.progress;
+
+  const segments = ['workout','nutrition','body'];
+  const ranges = ['1W','1M','3M','1Y'];
+  const volumeLabels = ['Jan','','Feb','','Mar','','Apr','','May','','Jun',''];
+
+  if(isEmpty) return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      <div style={{padding:'32px 16px 0'}}>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1}}>Progress</div>
+      </div>
+      <EmptyState icon="analytics-outline" title="No Data Yet"
+        subtitle="Complete your first workout and log meals to unlock charts, trends, PRs, and achievement badges.">
+        <div style={{marginTop:32,width:'100%',maxWidth:280}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+            <span style={{fontSize:11,fontWeight:600,color:C.t3}}>GETTING STARTED</span>
+            <span style={{fontSize:11,fontWeight:600,color:C.brand}}>0/3</span>
+          </div>
+          {[
+            {label:'Complete first workout',icon:'barbell-outline',done:false},
+            {label:'Log first meal',icon:'nutrition-outline',done:false},
+            {label:'Set body measurements',icon:'body-outline',done:false},
+          ].map((item,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',
+              borderBottom:i<2?`1px solid ${C.border}`:'none'}}>
+              <div style={{width:28,height:28,borderRadius:8,background:C.s2,
+                display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Ico name={item.icon} size={14} color={C.t3}/>
+              </div>
+              <span style={{fontSize:13,fontWeight:500,color:C.t2}}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </EmptyState>
+    </div>
+  );
+
+  return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      {/* Header */}
+      <div style={{padding:'32px 16px 0'}}>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1}}>Progress</div>
+      </div>
+
+      {/* Segmented Control */}
+      <div style={{padding:'16px 16px 0'}}>
+        <div className="card-b" style={{display:'flex',background:C.s1,borderRadius:12,padding:3}}>
+          {segments.map(s=>(
+            <button key={s} className="btn-press" onClick={()=>setSegment(s)}
+              style={{
+                flex:1,padding:'8px 16px',borderRadius:9,border:segment===s?`1px solid ${C.borderBrand}`:'1px solid transparent',
+                background:segment===s?C.s2:'transparent',cursor:'pointer',fontFamily:'inherit',
+                fontSize:12,fontWeight:600,color:segment===s?C.brand:C.t2,textTransform:'capitalize',
+              }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Date Range */}
+      <div style={{padding:'16px 16px 0',display:'flex',gap:8}}>
+        {ranges.map(r=>(
+          <button key={r} className="btn-press" onClick={()=>setRange(r)}
+            style={{
+              padding:'6px 12px',borderRadius:8,border:'none',cursor:'pointer',fontFamily:'inherit',
+              background:range===r?C.s1:'transparent',fontSize:12,fontWeight:600,
+              color:range===r?C.brand:C.t3,
+            }}>
+            {r}
+          </button>
+        ))}
+      </div>
+
+      {segment === 'workout' && (
+        <>
+          {/* Stats Row */}
+          <div style={{padding:'20px 16px 0',display:'flex',gap:12}}>
+            <StatCard label="WORKOUTS" value={pr.totalWorkouts} unit="total"/>
+            <StatCard label="VOLUME" value="142k" unit="lbs"/>
+            <StatCard label="PRS" value={pr.totalPRs} unit="new">
+              <Ico name="trophy" size={16} color={C.brand} style={{marginTop:4}}/>
+            </StatCard>
+          </div>
+
+          {/* Volume Trend Chart */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>VOLUME TREND</Overline>
+            <Card style={{marginTop:12,padding:16}}>
+              <AreaChart data={pr.volumeTrend} height={140} color={C.brand}
+                labels={volumeLabels} refLine={120000}/>
+              <div className="divider" style={{marginTop:12}}/>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:12}}>
+                <span style={{fontSize:13,fontWeight:400,color:C.t2}}>Total: 142,000 lbs</span>
+                <GainPill text="↑ 12% vs last month"/>
+              </div>
+            </Card>
+          </div>
+
+          {/* Heatmap */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>CONSISTENCY</Overline>
+            <Card style={{marginTop:12,padding:16}}>
+              <Heatmap data={pr.heatmap}/>
+            </Card>
+          </div>
+
+          {/* Muscle Groups */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>MUSCLE GROUPS</Overline>
+            <Card style={{marginTop:12,padding:16}}>
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                {pr.muscleGroups.map((mg,i)=>(
+                  <div key={i}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                      <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{mg.name}</span>
+                      <span style={{fontSize:13,fontWeight:400,color:C.t1}}>{mg.pct}%</span>
+                    </div>
+                    <div style={{height:6,borderRadius:3,background:C.s2,overflow:'hidden'}}>
+                      <div style={{height:6,borderRadius:3,background:mg.color,width:`${mg.pct}%`}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          {/* Recent PRs */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>RECENT PRS</Overline>
+            <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:12}}>
+              {pr.prs.map((p,i)=>(
+                <Card key={i} style={{padding:16,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}>
+                  <div style={{width:40,height:40,borderRadius:8,background:C.brandM,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Ico name="trophy" size={20} color={C.brand}/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:18,fontWeight:600,color:C.t1}}>{p.exercise}</div>
+                    <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>{p.weight} · {p.date}</div>
+                  </div>
+                  <GainPill text={p.gain}/>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          {/* Achievements */}
+          <div style={{padding:'20px 16px 0'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <Overline>ACHIEVEMENTS</Overline>
+              <span style={{fontSize:11,fontWeight:600,color:C.t3}}>
+                {MOCK.achievements.filter(a=>a.earned).length}/{MOCK.achievements.length} earned
+              </span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
+              {MOCK.achievements.map((ach,i)=>(
+                <AchBadge key={i} ach={ach}/>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {segment === 'nutrition' && (
+        <>
+          {/* Adherence Score */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Card style={{padding:24,display:'flex',flexDirection:'column',alignItems:'center'}}>
+              <Overline>ADHERENCE</Overline>
+              <div style={{fontSize:56,fontWeight:300,lineHeight:'64px',color:C.t1,marginTop:8,letterSpacing:'-0.02em'}}>84%</div>
+              <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:4}}>days within calorie target</div>
+            </Card>
+          </div>
+
+          {/* Calorie Trend */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>CALORIES</Overline>
+            <Card style={{marginTop:12,padding:16}}>
+              <AreaChart data={pr.calTrend} height={140} color={C.cal}
+                labels={['Mon','','Wed','','Fri','','Sun','','Tue','','Thu','']}
+                refLine={2400}/>
+            </Card>
+          </div>
+
+          {/* Macro Averages */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>MACRO AVERAGES</Overline>
+            <div style={{display:'flex',gap:12,marginTop:12}}>
+              {[
+                {label:'Protein',val:'156g',data:[140,148,155,160,152,158,156],color:C.prot},
+                {label:'Carbs',val:'242g',data:[230,245,238,250,235,248,242],color:C.carb},
+                {label:'Fat',val:'72g',data:[68,74,70,76,71,73,72],color:C.fat},
+              ].map((m,i)=>(
+                <Card key={i} style={{flex:1,padding:12,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                  <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{m.label}</span>
+                  <span style={{fontSize:20,fontWeight:700,color:C.t1,marginTop:4}}>{m.val}</span>
+                  <span style={{fontSize:11,fontWeight:500,color:C.t3}}>avg/day</span>
+                  <Sparkline data={m.data} width={70} height={24} color={m.color} style={{marginTop:6}}/>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {segment === 'body' && (
+        <>
+          {/* Weight Trend */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Card style={{padding:20}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                  <Overline>WEIGHT</Overline>
+                  <div style={{fontSize:32,fontWeight:700,lineHeight:'38px',color:C.t1,marginTop:4}}>82.5</div>
+                  <div style={{fontSize:13,fontWeight:400,color:C.t2}}>kg · as of Mar 17</div>
+                </div>
+                <GainPill text="↓ 1.2kg"/>
+              </div>
+              <AreaChart data={[85.2,84.8,84.5,84.1,83.8,83.5,83.6,83.2,82.8,82.5]} height={120} color={C.brand}
+                labels={['Feb','','','','','','Mar','','','']} style={{marginTop:16}}/>
+            </Card>
+          </div>
+
+          {/* Measurements */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>MEASUREMENTS</Overline>
+            <Card style={{marginTop:12,padding:16,display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:600,color:C.t1}}>Body Measurements</div>
+                <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>Last updated Mar 10</div>
+              </div>
+              <Ico name="chevron-forward" size={16} color={C.t3}/>
+            </Card>
+          </div>
+
+          {/* Progress Photos */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>PHOTOS</Overline>
+            <Card style={{marginTop:12,padding:16,display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:600,color:C.t1}}>Progress Photos</div>
+                <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>4 photos</div>
+              </div>
+              <Ico name="chevron-forward" size={16} color={C.t3}/>
+            </Card>
+          </div>
+
+          {/* Weekly Check-In */}
+          <div style={{padding:'20px 16px 0'}}>
+            <Overline>WEEKLY CHECK-IN</Overline>
+            <Card hero style={{marginTop:12,padding:24}}>
+              <div style={{fontSize:15,fontWeight:500,lineHeight:'22px',color:C.t2}}>
+                This week you completed 4 of 5 planned workouts with a total volume of 24,500 lbs.
+                Your bench press is trending up consistently — consider testing a new 1RM soon.
+                Protein intake averaged 156g, slightly below your 180g target.
+              </div>
+              <div style={{display:'flex',gap:16,marginTop:16}}>
+                {[
+                  {label:'Workouts',val:'4/5'},
+                  {label:'Volume',val:'24.5k'},
+                  {label:'PRs',val:'2'},
+                ].map((s,i)=>(
+                  <div key={i} style={{textAlign:'center'}}>
+                    <div style={{fontSize:20,fontWeight:700,color:C.t1}}>{s.val}</div>
+                    <div style={{fontSize:11,fontWeight:500,color:C.t2}}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
+
+      <div style={{height:32}}/>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   PLACEHOLDER SCREENS
+   ═══════════════════════════════════════════ */
+function WorkoutTabScreen({onStartWorkout,isEmpty,onDayPillTap,wkActive,onResume}) {
+  if(isEmpty) return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      <div style={{padding:'32px 16px 0'}}>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1}}>Workout</div>
+      </div>
+      <EmptyState icon="barbell-outline" title="No Programs Yet"
+        subtitle="Choose a training program or build your own from scratch. Your workout history and progress will appear here."
+        cta="Start Empty Workout" onCta={onStartWorkout}>
+        <div style={{marginTop:16}}>
+          <Btn variant="ghost" icon="sparkles">AI-Generate a Program</Btn>
+        </div>
+      </EmptyState>
+      <div style={{padding:'0 16px'}}>
+        <Overline>LIBRARY</Overline>
+        <div style={{display:'flex',gap:12,marginTop:12,overflowX:'auto',paddingBottom:4}}>
+          {[
+            {label:'Programs',icon:'barbell-outline'},
+            {label:'Exercises',icon:'fitness-outline'},
+            {label:'Templates',icon:'document-outline'},
+          ].map((item,i)=>(
+            <Card key={i} style={{minWidth:110,padding:12,display:'flex',flexDirection:'column',alignItems:'center',cursor:'pointer'}}>
+              <div style={{width:40,height:40,borderRadius:8,background:C.s2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Ico name={item.icon} size={20} color={C.t2}/>
+              </div>
+              <span style={{fontSize:12,fontWeight:600,color:C.t1,marginTop:8}}>{item.label}</span>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="scroll-area" style={{height:'100%',paddingBottom:100}}>
+      <div style={{padding:'32px 16px 0'}}>
+        <div style={{fontSize:28,fontWeight:700,lineHeight:'34px',color:C.t1}}>Workout</div>
+      </div>
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>ACTIVE PROGRAM</Overline>
+        <Card style={{marginTop:12,padding:16}}>
+          <div style={{fontSize:18,fontWeight:600,color:C.t1}}>{MOCK.program.name}</div>
+          <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:4}}>Week {MOCK.program.currentWeek} of {MOCK.program.weeks} · {MOCK.program.daysPerWeek} days/week</div>
+          <div style={{height:6,borderRadius:3,background:C.s2,marginTop:12,overflow:'hidden'}}>
+            <div style={{height:6,borderRadius:3,background:C.brand,width:`${Math.round(MOCK.program.completedWorkouts/MOCK.program.totalWorkouts*100)}%`}}/>
+          </div>
+          <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:8}}>{MOCK.program.completedWorkouts} of {MOCK.program.totalWorkouts} workouts completed</div>
+
+          {/* Day pills */}
+          <div style={{display:'flex',gap:8,marginTop:16}}>
+            {MOCK.weekSchedule.map((ws,i)=>{
+              const isToday = ws.isToday;
+              const rest = ws.label==='Rest';
+              return (
+                <div key={i} onClick={()=>{
+                    if(rest) return;
+                    if(isToday && wkActive) { onResume(); return; }
+                    if(isToday) { onStartWorkout(); return; }
+                    onDayPillTap(ws);
+                  }}
+                  style={{
+                    flex:1,padding:'8px 4px',borderRadius:8,textAlign:'center',
+                    cursor:rest?'default':'pointer',
+                    background: ws.done?C.successM : isToday?(wkActive?C.successM:C.brandM) : rest?'transparent' : C.s2,
+                    border: isToday?`1px solid ${wkActive?C.success+'40':C.borderBrand}` : ws.done?`1px solid ${C.success}25` : `1px solid transparent`,
+                  }}>
+                  <div style={{fontSize:11,fontWeight:500,color:C.t3}}>{ws.day}</div>
+                  <div style={{fontSize:12,fontWeight:600,marginTop:2,
+                    color: ws.done?C.success : isToday?(wkActive?C.success:C.brand) : rest?C.t3 : C.t2}}>
+                    {rest?'—':ws.label}
+                  </div>
+                  {ws.done && <Ico name="checkmark-circle" size={10} color={C.success} style={{marginTop:2}}/>}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+
+      {/* Quick Start */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>QUICK START</Overline>
+        <div style={{display:'flex',gap:12,marginTop:12}}>
+          <Btn variant="secondary" icon="add-outline" onClick={onStartWorkout} style={{flex:1}}>Empty Workout</Btn>
+          <Btn variant="secondary" icon="sparkles" style={{flex:1,color:C.cal,borderColor:C.cal+'33'}}>AI Workout</Btn>
+        </div>
+      </div>
+
+      {/* Weekly Volume */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>WEEKLY VOLUME</Overline>
+        <Card style={{marginTop:12,padding:16}}>
+          <AreaChart data={MOCK.stats.volumeData.map(v=>v||500)} height={100} color={C.brand}
+            labels={['M','T','W','T','F','S','S']}/>
+          <div className="divider" style={{marginTop:12}}/>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:12}}>
+            <span style={{fontSize:13,fontWeight:400,color:C.t2}}>Total: 24,500 lbs</span>
+            <GainPill text="↑ 12% vs last week"/>
+          </div>
+        </Card>
+      </div>
+
+      {/* Recent */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>RECENT</Overline>
+        <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:12}}>
+          {[
+            {name:'Push Day',date:'Mon, Mar 17',dur:'52 min',prs:2},
+            {name:'Pull Day',date:'Sat, Mar 15',dur:'48 min',prs:1},
+            {name:'Leg Day',date:'Thu, Mar 13',dur:'61 min',prs:0},
+          ].map((w,i)=>(
+            <Card key={i} style={{padding:16,display:'flex',alignItems:'center',cursor:'pointer'}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:18,fontWeight:600,color:C.t1}}>{w.name}</div>
+                <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>{w.date} · {w.dur}</div>
+              </div>
+              {w.prs>0 && <PRBadge text={`${w.prs} PR${w.prs>1?'s':''}`}/>}
+              <Ico name="chevron-forward" size={16} color={C.t3} style={{marginLeft:12}}/>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Library */}
+      <div style={{padding:'20px 16px 0'}}>
+        <Overline>LIBRARY</Overline>
+        <div style={{display:'flex',gap:12,marginTop:12,overflowX:'auto',paddingBottom:4}}>
+          {[
+            {label:'Programs',icon:'barbell-outline'},
+            {label:'Exercises',icon:'fitness-outline'},
+            {label:'History',icon:'time-outline'},
+            {label:'Templates',icon:'document-outline'},
+          ].map((item,i)=>(
+            <Card key={i} style={{minWidth:110,padding:12,display:'flex',flexDirection:'column',alignItems:'center',cursor:'pointer'}}>
+              <div style={{width:40,height:40,borderRadius:8,background:C.s2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Ico name={item.icon} size={20} color={C.t2}/>
+              </div>
+              <span style={{fontSize:12,fontWeight:600,color:C.t1,marginTop:8}}>{item.label}</span>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <div style={{height:32}}/>
+    </div>
+  );
+}
+
+function CoachScreen({isEmpty}) {
+  return (
+    <div style={{height:'100%'}}>
+      <EmptyState icon="chatbubble-ellipses-outline"
+        title={isEmpty ? 'Meet Your AI Coach' : 'Coach'}
+        subtitle={isEmpty
+          ? 'Get personalized workout advice, form tips, and nutrition guidance. Complete a few workouts first to unlock smart coaching.'
+          : 'AI coaching chat — ask about training, nutrition, form checks, and recovery. Coming soon.'}
+        cta={isEmpty ? 'Complete First Workout' : null}/>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   WORKOUT FLOW — ACTIVE SESSION
+   ═══════════════════════════════════════════ */
+
+// ── Format seconds to mm:ss ──
+function fmt(s){const m=Math.floor(s/60);const sec=s%60;return `${m}:${sec.toString().padStart(2,'0')}`}
+
+// ── Stepper (weight/reps +/- control) ──
+function Stepper({value,onChange,step=2.5,min=0,label}) {
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+      <div style={{display:'flex',alignItems:'center',gap:2}}>
+        <button className="btn-press" onClick={()=>onChange(Math.max(min,value-step))}
+          style={{width:44,height:44,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:20,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>−</button>
+        <div aria-live="polite"
+          style={{minWidth:56,height:44,borderRadius:8,background:C.s2,border:`1px solid transparent`,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:20,fontWeight:700,color:C.t1,fontFamily:'inherit',
+            padding:'0 4px'}}>
+          {value%1===0?value:value.toFixed(1)}
+        </div>
+        <button className="btn-press" onClick={()=>onChange(value+step)}
+          style={{width:44,height:44,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:20,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>+</button>
+      </div>
+      {label && <span style={{fontSize:11,fontWeight:500,color:C.t3}}>{label}</span>}
+    </div>
+  );
+}
+
+// ── Set Row (inline in exercise card) ──
+function SetRow({set,idx,prevSet,onToggle,onWeight,onReps}) {
+  const [justCompleted, setJustCompleted] = useState(false);
+  const [justPR, setJustPR] = useState(false);
+
+  const handleToggle = () => {
+    if(!set.completed){
+      setJustCompleted(true);
+      if(set.isPR) setJustPR(true);
+      setTimeout(()=>{setJustCompleted(false);setJustPR(false)},500);
+    }
+    onToggle();
+  };
+
+  return (
+    <div className={justCompleted?(justPR?'set-pr':'set-done'):''}
+      style={{
+        display:'flex',alignItems:'center',gap:2,padding:'6px 8px',borderRadius:8,marginBottom:4,
+        background:set.completed?(set.isPR?C.brandM:C.successM):'transparent',
+        transition:'background 0.3s ease',
+      }}>
+      {/* Set # */}
+      <div style={{width:28,fontSize:12,fontWeight:600,color:C.t3,textAlign:'center'}}>{idx+1}</div>
+      {/* Prev */}
+      <div style={{width:52,fontSize:11,fontWeight:500,color:C.t3,textAlign:'center'}}>
+        {prevSet?`${prevSet.w}×${prevSet.r}`:'—'}
+      </div>
+      {/* Weight */}
+      <div style={{flex:1,display:'flex',justifyContent:'center',gap:1}}>
+        <button className="btn-press" onClick={()=>onWeight(Math.max(0,set.weight-2.5))}
+          style={{width:32,height:38,borderRadius:6,background:C.s2,border:'none',cursor:'pointer',
+            fontSize:14,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>−</button>
+        <div style={{minWidth:48,height:38,borderRadius:6,background:set.suggested&&!set.completed?C.successM:C.s2,
+          display:'flex',alignItems:'center',justifyContent:'center',position:'relative',
+          fontSize:16,fontWeight:700,color:C.t1,padding:'0 2px',
+          border:set.suggested&&!set.completed?`1px solid ${C.success}25`:'1px solid transparent'}}>
+          {set.weight%1===0?set.weight:set.weight.toFixed(1)}
+          {set.suggested&&!set.completed && <span style={{fontSize:9,color:C.success,marginLeft:1,fontWeight:700}}>↑</span>}
+        </div>
+        <button className="btn-press" onClick={()=>onWeight(set.weight+2.5)}
+          style={{width:32,height:38,borderRadius:6,background:C.s2,border:'none',cursor:'pointer',
+            fontSize:14,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>+</button>
+      </div>
+      {/* Reps */}
+      <div style={{flex:1,display:'flex',justifyContent:'center',gap:1}}>
+        <button className="btn-press" onClick={()=>onReps(Math.max(1,set.reps-1))}
+          style={{width:32,height:38,borderRadius:6,background:C.s2,border:'none',cursor:'pointer',
+            fontSize:14,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>−</button>
+        <div style={{minWidth:40,height:38,borderRadius:6,background:C.s2,display:'flex',alignItems:'center',justifyContent:'center',
+          fontSize:16,fontWeight:700,color:C.t1}}>{set.reps}</div>
+        <button className="btn-press" onClick={()=>onReps(set.reps+1)}
+          style={{width:32,height:38,borderRadius:6,background:C.s2,border:'none',cursor:'pointer',
+            fontSize:14,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>+</button>
+      </div>
+      {/* Check */}
+      <button className={`btn-press ${justCompleted?'check-pop':''}`} onClick={handleToggle}
+        style={{width:44,height:38,borderRadius:8,border:'none',cursor:'pointer',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          background:set.completed?(set.isPR?C.brand:C.success):C.s2,
+          transition:'background 0.15s ease'}}>
+        <Ico name={set.completed?'checkmark':'checkmark-outline'} size={22}
+          color={set.completed?C.inv:C.t3}/>
+      </button>
+    </div>
+  );
+}
+
+// ── Exercise Card (contains all sets for one exercise) ──
+function ExerciseCard({exercise,exIdx,onToggleSet,onSetWeight,onSetReps,onAddSet,onFocusSet}) {
+  return (
+    <Card style={{padding:16,marginBottom:16}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <ExThumb name={exercise.name} size={40} iconSize={24}/>
+          <div>
+            <div style={{fontSize:18,fontWeight:600,lineHeight:'24px',color:C.t1}}>{exercise.name}</div>
+            <div style={{fontSize:11,fontWeight:500,color:C.t3,marginTop:2}}>
+              {exercise.targetSets}×{exercise.targetReps} reps · {exercise.restSec}s rest
+            </div>
+          </div>
+        </div>
+        <button onClick={()=>onFocusSet(exIdx,0)}
+          style={{padding:'6px 10px',borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+            display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
+          <Ico name="expand-outline" size={14} color={C.brand}/>
+          <span style={{fontSize:11,fontWeight:600,color:C.brand}}>Focus</span>
+        </button>
+      </div>
+
+      {/* Column Headers */}
+      <div style={{display:'flex',alignItems:'center',gap:2,padding:'8px 8px 4px',marginTop:8}}>
+        <div style={{width:28,fontSize:10,fontWeight:600,color:C.t3,textAlign:'center'}}>SET</div>
+        <div style={{width:52,fontSize:10,fontWeight:600,color:C.t3,textAlign:'center'}}>PREV</div>
+        <div style={{flex:1,fontSize:10,fontWeight:600,color:C.t3,textAlign:'center'}}>KG</div>
+        <div style={{flex:1,fontSize:10,fontWeight:600,color:C.t3,textAlign:'center'}}>REPS</div>
+        <div style={{width:44}}></div>
+      </div>
+
+      {/* Set Rows */}
+      {exercise.sets.map((set,si)=>(
+        <SetRow key={si} set={set} idx={si} prevSet={exercise.prev[si]}
+          onToggle={()=>onToggleSet(exIdx,si)}
+          onWeight={(v)=>onSetWeight(exIdx,si,v)}
+          onReps={(v)=>onSetReps(exIdx,si,v)}/>
+      ))}
+
+      {/* Add Set */}
+      <button className="btn-press" onClick={()=>onAddSet(exIdx)}
+        style={{width:'100%',height:36,borderRadius:8,marginTop:4,
+          border:`1px dashed ${C.border}`,background:'transparent',
+          fontSize:12,fontWeight:600,color:C.t3,cursor:'pointer',fontFamily:'inherit'}}>
+        + Add Set
+      </button>
+    </Card>
+  );
+}
+
+// ── Active Workout Screen (List View) ──
+function ActiveWorkoutScreen({exercises,elapsed,onEnd,onFinish,onToggleSet,onSetWeight,onSetReps,onAddSet,
+  viewMode,onViewChange,focusExIdx,focusSetIdx,onFocusNav,onFocusComplete}) {
+  const totalSets = exercises.reduce((a,e)=>a+e.sets.length,0);
+  const doneSets = exercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).length,0);
+  const exRefs = useRef([]);
+  const scrollRef = useRef(null);
+  const [navIdx, setNavIdx] = useState(0);
+
+  const navTo = (dir) => {
+    const next = Math.max(0,Math.min(exercises.length-1,navIdx+dir));
+    setNavIdx(next);
+    const el = exRefs.current[next];
+    if(el && scrollRef.current) {
+      scrollRef.current.scrollTo({top:el.offsetTop-16,behavior:'smooth'});
+    }
+  };
+
+  // When toggle switches to Focus, use current navIdx
+  const handleViewChange = (v) => {
+    if(v==='focused' && viewMode!=='focused') {
+      onFocusNav(navIdx, findNextIncompleteSet(exercises[navIdx]));
+    }
+    onViewChange(v);
+  };
+
+  // Find the next incomplete set for an exercise, or 0
+  function findNextIncompleteSet(ex) {
+    if(!ex) return 0;
+    const idx = ex.sets.findIndex(s=>!s.completed);
+    return idx >= 0 ? idx : 0;
+  }
+
+  const focusEx = exercises[focusExIdx];
+  const focusSet = focusEx ? focusEx.sets[focusSetIdx] : null;
+  const focusPrev = focusEx ? focusEx.prev[focusSetIdx] : null;
+
+  return (
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:C.bg}}>
+      {/* Top Bar */}
+      <div style={{
+        display:'flex',alignItems:'center',justifyContent:'space-between',
+        padding:'10px 16px',borderBottom:`1px solid ${C.border}`,
+        background:C.barBlur,backdropFilter:'blur(24px)',flexShrink:0,
+      }}>
+        <button onClick={onEnd} style={{fontSize:14,fontWeight:600,color:C.error,background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',minWidth:44}}>
+          End
+        </button>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{fontSize:14,fontWeight:600,color:C.t1}}>Push Day</div>
+            <span style={{fontSize:11,fontWeight:500,color:C.t2,fontVariantNumeric:'tabular-nums'}}>{fmt(elapsed)}</span>
+          </div>
+          <SegToggle
+            options={[
+              {value:'list',label:'List'},
+              {value:'focused',label:'Focus'},
+            ]}
+            value={viewMode}
+            onChange={handleViewChange}
+          />
+        </div>
+        <div style={{minWidth:44,display:'flex',justifyContent:'flex-end'}}>
+          <button style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
+            <Ico name="add" size={24} color={C.brand}/>
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'list' ? (
+        <>
+          {/* Exercise List */}
+          <div ref={scrollRef} className="scroll-area" style={{flex:1,padding:16}}>
+            {exercises.map((ex,ei)=>(
+              <div key={ei} ref={el=>exRefs.current[ei]=el}>
+                <ExerciseCard exercise={ex} exIdx={ei}
+                  onToggleSet={onToggleSet} onSetWeight={onSetWeight}
+                  onSetReps={onSetReps} onAddSet={onAddSet} onFocusSet={(ei2,si2)=>{
+                    onFocusNav(ei2,si2);
+                    onViewChange('focused');
+                  }}/>
+              </div>
+            ))}
+            <div style={{height:80}}/>
+          </div>
+
+          {/* Bottom Toolbar - List */}
+          <div style={{
+            display:'flex',alignItems:'center',justifyContent:'space-between',
+            padding:'8px 16px',borderTop:`1px solid ${C.border}`,
+            background:C.barBlur,backdropFilter:'blur(24px)',flexShrink:0,
+            paddingBottom:12,
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <button className="btn-press" onClick={()=>navTo(-1)}
+                style={{width:36,height:36,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',opacity:navIdx===0?0.3:1}}>
+                <Ico name="chevron-back" size={18} color={C.t2}/>
+              </button>
+              <span style={{fontSize:12,fontWeight:600,color:C.t2,minWidth:40,textAlign:'center'}}>
+                {navIdx+1} of {exercises.length}
+              </span>
+              <button className="btn-press" onClick={()=>navTo(1)}
+                style={{width:36,height:36,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',opacity:navIdx>=exercises.length-1?0.3:1}}>
+                <Ico name="chevron-forward" size={18} color={C.t2}/>
+              </button>
+            </div>
+            <div style={{fontSize:12,fontWeight:500,color:C.t3}}>{doneSets}/{totalSets} sets</div>
+            <Btn variant="primary" size="md" onClick={onFinish}
+              disabled={doneSets===0} full={false}
+              style={{paddingLeft:20,paddingRight:20}}>
+              Finish
+            </Btn>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Inline Focus View */}
+          {focusEx && focusSet ? (
+            <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+              {/* Exercise Context */}
+              <div style={{textAlign:'center',padding:'16px 24px 0',display:'flex',flexDirection:'column',alignItems:'center'}}>
+                <ExThumb name={focusEx.name} size={64} iconSize={32}/>
+                <div style={{fontSize:24,fontWeight:700,lineHeight:'30px',color:C.t1,marginTop:10}}>{focusEx.name}</div>
+                <div style={{fontSize:14,fontWeight:500,color:C.t2,marginTop:4}}>
+                  Set {focusSetIdx+1} of {focusEx.sets.length} · Target: {focusEx.targetReps} reps
+                </div>
+                {focusPrev && (
+                  <div style={{fontSize:12,fontWeight:400,color:C.t3,marginTop:6}}>
+                    Last session: {focusPrev.w}kg x {focusPrev.r}
+                  </div>
+                )}
+              </div>
+
+              {/* Large Input Area */}
+              <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6}}>
+                {/* Weight */}
+                <div style={{fontSize:52,fontWeight:300,lineHeight:'60px',color:C.t1,letterSpacing:'-0.02em'}}>
+                  {focusSet.weight%1===0?focusSet.weight:focusSet.weight.toFixed(1)}
+                </div>
+                <div style={{fontSize:14,fontWeight:500,color:C.t3}}>kg</div>
+                <div style={{display:'flex',gap:10,marginTop:10}}>
+                  {[-5,-2.5,2.5,5].map(delta=>(
+                    <button key={delta} className="btn-press"
+                      onClick={()=>onSetWeight(focusExIdx,focusSetIdx,Math.max(0,focusSet.weight+delta))}
+                      style={{width:52,height:48,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+                        fontSize:16,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>
+                      {delta>0?'+':''}{delta}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{width:36,height:1,background:C.border,margin:'16px 0'}}/>
+
+                {/* Reps */}
+                <div style={{fontSize:52,fontWeight:300,lineHeight:'60px',color:C.t1,letterSpacing:'-0.02em'}}>
+                  {focusSet.reps}
+                </div>
+                <div style={{fontSize:14,fontWeight:500,color:C.t3}}>reps</div>
+                <div style={{display:'flex',gap:10,marginTop:10}}>
+                  {[-3,-1,1,3].map(delta=>(
+                    <button key={delta} className="btn-press"
+                      onClick={()=>onSetReps(focusExIdx,focusSetIdx,Math.max(1,focusSet.reps+delta))}
+                      style={{width:52,height:48,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+                        fontSize:16,fontWeight:700,color:C.t1,fontFamily:'inherit'}}>
+                      {delta>0?'+':''}{delta}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Complete Set CTA */}
+              <div style={{padding:'12px 24px 0'}}>
+                <Btn variant={focusSet.completed?'secondary':'primary'} size="lg" full
+                  onClick={()=>onFocusComplete(focusExIdx,focusSetIdx)}>
+                  {focusSet.completed ? 'Undo Set' : 'Complete Set'}
+                </Btn>
+                {focusSet.isPR && (
+                  <div style={{textAlign:'center',marginTop:8}}>
+                    <PRBadge text="NEW PR"/>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Bottom Toolbar - Focus */}
+          <div style={{
+            display:'flex',alignItems:'center',justifyContent:'space-between',
+            padding:'8px 16px',borderTop:`1px solid ${C.border}`,
+            background:C.barBlur,backdropFilter:'blur(24px)',flexShrink:0,
+            paddingBottom:12,
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <button className="btn-press" onClick={()=>{
+                  if(focusSetIdx > 0) onFocusNav(focusExIdx, focusSetIdx-1);
+                  else if(focusExIdx > 0) {
+                    const prevEx = exercises[focusExIdx-1];
+                    onFocusNav(focusExIdx-1, prevEx.sets.length-1);
+                  }
+                }}
+                style={{width:36,height:36,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  opacity:(focusExIdx===0&&focusSetIdx===0)?0.3:1}}>
+                <Ico name="chevron-back" size={18} color={C.t2}/>
+              </button>
+              <span style={{fontSize:12,fontWeight:600,color:C.t2,minWidth:60,textAlign:'center'}}>
+                {focusExIdx+1}.{focusSetIdx+1} of {exercises.length}
+              </span>
+              <button className="btn-press" onClick={()=>{
+                  if(focusEx && focusSetIdx < focusEx.sets.length-1) onFocusNav(focusExIdx, focusSetIdx+1);
+                  else if(focusExIdx < exercises.length-1) onFocusNav(focusExIdx+1, 0);
+                }}
+                style={{width:36,height:36,borderRadius:8,background:C.s2,border:'none',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  opacity:(focusExIdx>=exercises.length-1&&focusSetIdx>=(focusEx?.sets.length||1)-1)?0.3:1}}>
+                <Ico name="chevron-forward" size={18} color={C.t2}/>
+              </button>
+            </div>
+            <div style={{fontSize:12,fontWeight:500,color:C.t3}}>{doneSets}/{totalSets} sets</div>
+            <Btn variant="primary" size="md" onClick={onFinish}
+              disabled={doneSets===0} full={false}
+              style={{paddingLeft:20,paddingRight:20}}>
+              Finish
+            </Btn>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Workout Preview Sheet ──
+function WorkoutPreviewSheet({onStart,onClose}) {
+  const wk = MOCK.workout;
+  // Map exercises to WORKOUT_EXERCISES for previous data
+  const detailed = WORKOUT_EXERCISES;
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',justifyContent:'flex-end',
+      background:C.overlayBg,backdropFilter:'blur(20px)'}}
+      onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="summary-enter" style={{
+        background:C.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+        padding:'8px 24px 32px',maxHeight:'90%',overflow:'auto',boxShadow:C.sheetShadow,
+      }}>
+        {/* Drag handle */}
+        <div style={{width:36,height:4,borderRadius:2,background:C.t3,opacity:0.3,margin:'0 auto 16px'}}/>
+
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div>
+            <Overline>{wk.program} · Week {wk.week}, Day {wk.day}</Overline>
+            <div style={{fontSize:24,fontWeight:700,lineHeight:'30px',color:C.t1,marginTop:4}}>{wk.name}</div>
+            <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:4}}>
+              {wk.exercises.length} exercises · {wk.duration} estimated
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:C.s2,border:'none',cursor:'pointer',
+            width:44,height:44,borderRadius:9999,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ico name="close" size={18} color={C.t2}/>
+          </button>
+        </div>
+
+        {/* Muscle group tags */}
+        <div style={{display:'flex',gap:6,marginTop:16,flexWrap:'wrap'}}>
+          {['Chest','Shoulders','Triceps'].map(m=>(
+            <span key={m} style={{fontSize:11,fontWeight:600,color:C.brand,background:C.brandM,
+              borderRadius:9999,padding:'4px 10px'}}>  {m}</span>
+          ))}
+        </div>
+
+        <div className="divider" style={{marginTop:16}}/>
+
+        {/* Exercise List */}
+        <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:2}}>
+          {detailed.map((ex,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',
+              borderBottom:i<detailed.length-1?`1px solid ${C.border}`:'none'}}>
+              <ExThumb name={ex.name} size={40} iconSize={22}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.t1}}>{ex.name}</div>
+                <div style={{fontSize:12,fontWeight:400,color:C.t3,marginTop:2}}>
+                  {ex.targetSets} sets x {ex.targetReps} reps · {ex.restSec}s rest
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.t2}}>
+                  {ex.prev[0]?.w || '--'}kg
+                </div>
+                <div style={{fontSize:10,fontWeight:500,color:C.t3,marginTop:1}}>prev best</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Summary stats */}
+        <div className="divider" style={{marginTop:16}}/>
+        <div style={{display:'flex',gap:12,marginTop:16}}>
+          <div style={{flex:1,textAlign:'center',padding:12,borderRadius:12,background:C.s2}}>
+            <div style={{fontSize:20,fontWeight:700,color:C.t1}}>{detailed.reduce((a,e)=>a+e.targetSets,0)}</div>
+            <div style={{fontSize:11,fontWeight:500,color:C.t3,marginTop:2}}>Total Sets</div>
+          </div>
+          <div style={{flex:1,textAlign:'center',padding:12,borderRadius:12,background:C.s2}}>
+            <div style={{fontSize:20,fontWeight:700,color:C.t1}}>{Math.round(detailed.reduce((a,e)=>a+e.prev.reduce((b,p)=>b+p.w*p.r,0),0)/1000*10)/10}k</div>
+            <div style={{fontSize:11,fontWeight:500,color:C.t3,marginTop:2}}>Est. Volume</div>
+          </div>
+          <div style={{flex:1,textAlign:'center',padding:12,borderRadius:12,background:C.s2}}>
+            <div style={{fontSize:20,fontWeight:700,color:C.t1}}>{wk.duration}</div>
+            <div style={{fontSize:11,fontWeight:500,color:C.t3,marginTop:2}}>Duration</div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div style={{marginTop:24}}>
+          <Btn onClick={onStart} icon="play">Start Workout</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Hydration Detail Sheet ──
+function HydrationDetailSheet({onClose}) {
+  const hyd = MOCK.hydration;
+  const waterOz = MOCK.nutrition.water;
+  const [log, setLog] = useState(hyd.log);
+  const [current, setCurrent] = useState(hyd.current);
+  const pct = Math.min(current / hyd.target, 1);
+
+  const addWater = (oz) => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    setLog(prev=>[...prev,{time:timeStr,amount:oz}]);
+    setCurrent(prev=>{
+      const next=prev+oz;
+      // Sync back to mock data so parent screens reflect the update
+      MOCK.hydration.current=next;
+      MOCK.hydration.log=[...MOCK.hydration.log,{time:timeStr,amount:oz}];
+      MOCK.nutrition.water.current=next;
+      return next;
+    });
+  };
+
+  // Build timeline markers (6AM to 10PM)
+  const hours = [6,8,10,12,14,16,18,20,22];
+  const hourLabels = ['6a','8a','10a','12p','2p','4p','6p','8p','10p'];
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',justifyContent:'flex-end',
+      background:C.overlayBg,backdropFilter:'blur(20px)'}}
+      onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="summary-enter" style={{
+        background:C.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+        padding:'8px 24px 32px',maxHeight:'90%',overflow:'auto',boxShadow:C.sheetShadow,
+      }}>
+        {/* Drag handle */}
+        <div style={{width:36,height:4,borderRadius:2,background:C.t3,opacity:0.3,margin:'0 auto 16px'}}/>
+
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <Overline>HYDRATION</Overline>
+            <div style={{fontSize:24,fontWeight:700,lineHeight:'30px',color:C.t1,marginTop:4}}>Water Intake</div>
+          </div>
+          <button onClick={onClose} style={{background:C.s2,border:'none',cursor:'pointer',
+            width:44,height:44,borderRadius:9999,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ico name="close" size={18} color={C.t2}/>
+          </button>
+        </div>
+
+        {/* Progress Ring */}
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginTop:24}}>
+          <ProgressRing size={160} stroke={10} progress={pct}
+            color={pct>=1?C.success:C.info} glowColor={pct>=1?C.success+'40':C.info+'40'}>
+            <span style={{fontSize:36,fontWeight:700,color:C.t1}}>{current}</span>
+            <span style={{fontSize:12,fontWeight:500,color:C.t2}}>of {hyd.target} oz</span>
+          </ProgressRing>
+          <div style={{fontSize:14,fontWeight:500,color:pct>=1?C.success:C.t2,marginTop:12}}>
+            {pct>=1 ? 'Goal reached!' : `${hyd.target-current} oz remaining`}
+          </div>
+        </div>
+
+        {/* Quick Add Buttons */}
+        <div style={{display:'flex',gap:10,marginTop:24}}>
+          {[8,12,16,24].map(oz=>(
+            <button key={oz} className="btn-press" onClick={()=>addWater(oz)}
+              style={{flex:1,height:52,borderRadius:12,background:C.s2,border:`1px solid ${C.border}`,
+                cursor:'pointer',fontFamily:'inherit',display:'flex',flexDirection:'column',alignItems:'center',
+                justifyContent:'center',gap:2}}>
+              <Ico name="water" size={16} color={C.info}/>
+              <span style={{fontSize:13,fontWeight:700,color:C.t1}}>{oz}oz</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="divider" style={{marginTop:20}}/>
+
+        {/* Timeline visualization */}
+        <div style={{marginTop:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.t3,marginBottom:12}}>TODAY'S TIMELINE</div>
+          <div style={{position:'relative',height:32,background:C.s2,borderRadius:8,overflow:'hidden'}}>
+            {/* Hour markers */}
+            {hours.map((h,i)=>(
+              <div key={h} style={{position:'absolute',left:`${((h-6)/16)*100}%`,top:0,bottom:0,
+                width:1,background:C.border}}>
+                <span style={{position:'absolute',bottom:-16,left:-8,fontSize:9,fontWeight:500,color:C.t3,whiteSpace:'nowrap'}}>
+                  {hourLabels[i]}
+                </span>
+              </div>
+            ))}
+            {/* Log entries as marks */}
+            {log.map((entry,i)=>{
+              // Parse time to position
+              const match = entry.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if(!match) return null;
+              let hr = parseInt(match[1]);
+              const min = parseInt(match[2]);
+              const ampm = match[3].toUpperCase();
+              if(ampm==='PM' && hr!==12) hr+=12;
+              if(ampm==='AM' && hr===12) hr=0;
+              const pos = Math.max(0,Math.min(100,((hr+min/60-6)/16)*100));
+              const barH = Math.min(100, (entry.amount/24)*100);
+              return (
+                <div key={i} style={{position:'absolute',left:`${pos}%`,bottom:0,
+                  width:8,height:`${barH}%`,minHeight:6,background:C.info,borderRadius:4,
+                  transform:'translateX(-50%)',opacity:0.8}}
+                  title={`${entry.time}: ${entry.amount}oz`}/>
+              );
+            })}
+          </div>
+          <div style={{height:18}}/> {/* Space for labels */}
+        </div>
+
+        <div className="divider" style={{marginTop:12}}/>
+
+        {/* Log entries list */}
+        <div style={{marginTop:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.t3,marginBottom:12}}>LOG</div>
+          <div style={{display:'flex',flexDirection:'column',gap:0}}>
+            {log.slice().reverse().map((entry,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                padding:'10px 0',borderBottom:i<log.length-1?`1px solid ${C.border}`:'none'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:32,height:32,borderRadius:8,background:C.infoM,
+                    display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Ico name="water" size={16} color={C.info}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:600,color:C.t1}}>{entry.amount} oz</div>
+                    <div style={{fontSize:11,fontWeight:500,color:C.t3}}>{entry.time}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {log.length===0 && (
+              <div style={{textAlign:'center',padding:'24px 0'}}>
+                <Ico name="water-outline" size={32} color={C.t3}/>
+                <div style={{fontSize:13,fontWeight:500,color:C.t3,marginTop:8}}>No water logged yet today</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Confirm Dialog ──
+function ConfirmDialog({title,body,confirmLabel,cancelLabel,onConfirm,onCancel,destructive}) {
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',
+      background:C.overlayBg,backdropFilter:'blur(12px)',padding:32}}>
+      <div className="summary-enter" style={{
+        background:C.s1,borderRadius:20,padding:24,maxWidth:320,width:'100%',
+        border:`1px solid ${C.border}`,boxShadow:C.cardShadow,
+      }}>
+        <div style={{fontSize:18,fontWeight:700,color:C.t1,lineHeight:'24px'}}>{title}</div>
+        <div style={{fontSize:14,fontWeight:400,color:C.t2,marginTop:8,lineHeight:'20px'}}>{body}</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:20}}>
+          <Btn variant={destructive?'destructive':'primary'} onClick={onConfirm}>
+            {confirmLabel||'Confirm'}
+          </Btn>
+          <Btn variant="ghost" onClick={onCancel}>{cancelLabel||'Cancel'}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Profile / Settings Sheet ──
+function ProfileSheet({onClose}) {
+  const u = MOCK.user;
+  const {themePref,setTheme} = React.useContext(ThemeCtx);
+
+  const SettingsRow = ({icon,label,value,chevron,danger,children}) => (
+    <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',cursor:'pointer'}}>
+      <Ico name={icon} size={20} color={danger?C.error:C.t2}/>
+      <span style={{flex:1,fontSize:14,fontWeight:500,color:danger?C.error:C.t1}}>{label}</span>
+      {children || (<>
+        {value && <span style={{fontSize:13,fontWeight:400,color:C.t3}}>{value}</span>}
+        {chevron && <Ico name="chevron-forward" size={16} color={C.t3}/>}
+      </>)}
+    </div>
+  );
+
+  const sections = [
+    {title:'Preferences',rows:[
+      {icon:'barbell-outline',label:'Units',value:'Metric (kg)',chevron:true},
+      {icon:'timer-outline',label:'Default Rest Timer',value:'90s',chevron:true},
+      {icon:'notifications-outline',label:'Notifications',value:'On',chevron:true},
+      {icon:'musical-notes-outline',label:'Workout Sounds',value:'On',chevron:true},
+    ]},
+    {title:'Data',rows:[
+      {icon:'cloud-upload-outline',label:'Sync Status',value:'Up to date'},
+      {icon:'download-outline',label:'Export Data',chevron:true},
+      {icon:'refresh-outline',label:'Restore Backup',chevron:true},
+    ]},
+    {title:'Account',rows:[
+      {icon:'log-out-outline',label:'Sign Out',chevron:true},
+      {icon:'trash-outline',label:'Delete Account',chevron:true,danger:true},
+    ]},
+  ];
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',justifyContent:'flex-end',
+      background:C.overlayBg,backdropFilter:'blur(20px)'}}
+      onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="summary-enter" style={{
+        background:C.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+        padding:'8px 24px 32px',maxHeight:'92%',overflow:'auto',
+        boxShadow:C.sheetShadow,
+      }}>
+        <div style={{width:36,height:4,borderRadius:2,background:C.t3,opacity:0.3,margin:'0 auto 20px'}}/>
+
+        {/* Profile Header */}
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <div style={{width:56,height:56,borderRadius:9999,background:C.brandM,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            border:`2px solid ${C.borderBrand}`,fontSize:22,fontWeight:700,color:C.brand}}>
+            {u.name[0]}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:20,fontWeight:700,color:C.t1}}>{u.name}</div>
+            <div style={{fontSize:13,fontWeight:400,color:C.t2}}>{u.email}</div>
+            <div style={{fontSize:11,fontWeight:500,color:C.t3,marginTop:2}}>Member since {u.joined}</div>
+          </div>
+          <button onClick={onClose} style={{background:C.s2,border:'none',cursor:'pointer',
+            width:44,height:44,borderRadius:9999,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ico name="close" size={18} color={C.t2}/>
+          </button>
+        </div>
+
+        <div className="divider" style={{marginTop:20}}/>
+
+        {/* Theme Section */}
+        <div style={{marginTop:20}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',
+            color:C.t3,marginBottom:12}}>Theme</div>
+          <div style={{display:'flex',borderRadius:12,background:C.s2,padding:3,gap:3}}>
+            {[
+              {val:'dark',label:'Dark',icon:'moon-outline'},
+              {val:'light',label:'Light',icon:'sunny-outline'},
+              {val:'system',label:'System',icon:'desktop-outline'},
+            ].map(opt=>(
+              <button key={opt.val} onClick={()=>setTheme(opt.val)}
+                style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+                  padding:'10px 8px',borderRadius:9,border:'none',cursor:'pointer',fontFamily:'inherit',
+                  background:themePref===opt.val?C.s1:'transparent',
+                  boxShadow:themePref===opt.val?C.cardShadow:'none',
+                  border:themePref===opt.val?`1px solid ${C.border}`:'1px solid transparent',
+                  transition:'all 0.2s',
+                }}>
+                <Ico name={opt.icon} size={16} color={themePref===opt.val?C.brand:C.t3}/>
+                <span style={{fontSize:12,fontWeight:600,
+                  color:themePref===opt.val?C.t1:C.t3}}>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Other Settings Sections */}
+        {sections.map((section,si)=>(
+          <div key={si} style={{marginTop:20}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',
+              color:C.t3,marginBottom:8}}>{section.title}</div>
+            <div style={{background:C.s2,borderRadius:12,overflow:'hidden'}}>
+              {section.rows.map((item,ii)=>(
+                <div key={ii} style={{borderBottom:ii<section.rows.length-1?`1px solid ${C.border}`:'none'}}>
+                  <SettingsRow {...item}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div style={{textAlign:'center',marginTop:24}}>
+          <span style={{fontSize:11,fontWeight:500,color:C.t3}}>FormIQ v1.0.0</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Day Preview Sheet ──
+function DayPreviewSheet({dayData,onStart,onClose,wkActive}) {
+  if(!dayData||!dayData.name) return null;
+  const isRest = dayData.label==='Rest';
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',justifyContent:'flex-end',
+      background:C.overlayBg,backdropFilter:'blur(20px)'}}
+      onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="summary-enter" style={{
+        background:C.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+        padding:'8px 24px 32px',maxHeight:'85%',overflow:'auto',boxShadow:C.sheetShadow,
+      }}>
+        <div style={{width:36,height:4,borderRadius:2,background:C.t3,opacity:0.3,margin:'0 auto 16px'}}/>
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div>
+            <Overline>{dayData.day.toUpperCase()}</Overline>
+            <div style={{fontSize:22,fontWeight:700,color:C.t1,marginTop:4}}>{dayData.name}</div>
+            <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:4}}>
+              {dayData.exercises.length} exercises · {dayData.duration}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:C.s2,border:'none',cursor:'pointer',
+            width:44,height:44,borderRadius:9999,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ico name="close" size={18} color={C.t2}/>
+          </button>
+        </div>
+
+        {dayData.muscles && dayData.muscles.length>0 && (
+          <div style={{display:'flex',gap:6,marginTop:12,flexWrap:'wrap'}}>
+            {dayData.muscles.map(m=>(
+              <span key={m} style={{fontSize:11,fontWeight:600,color:C.brand,background:C.brandM,
+                borderRadius:9999,padding:'4px 10px'}}>{m}</span>
+            ))}
+          </div>
+        )}
+
+        <div className="divider" style={{marginTop:16}}/>
+
+        <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:2}}>
+          {dayData.exercises.map((ex,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',
+              borderBottom:i<dayData.exercises.length-1?`1px solid ${C.border}`:'none'}}>
+              <ExThumb name={ex.name} size={36} iconSize={20}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.t1}}>{ex.name}</div>
+                <div style={{fontSize:12,fontWeight:400,color:C.t3,marginTop:2}}>{ex.sets} · {ex.rest} rest</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {dayData.done ? (
+          <div style={{marginTop:20,textAlign:'center'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:8}}>
+              <Ico name="checkmark-circle" size={20} color={C.success}/>
+              <span style={{fontSize:14,fontWeight:600,color:C.success}}>Completed</span>
+            </div>
+            <Btn variant="ghost" onClick={onClose}>Close</Btn>
+          </div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:20}}>
+            <Btn onClick={()=>onStart(dayData)}>Start This Workout</Btn>
+            <Btn variant="ghost" onClick={onClose}>Close</Btn>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Rest Timer Overlay ──
+function RestTimerOverlay({duration,remaining,nextExercise,onSkip,onAddTime,onPreset,activeDuration}) {
+  const r = 106;
+  const circ = 2*Math.PI*r;
+  const progress = remaining/duration;
+  const offset = circ*(1-progress);
+  const isLow = remaining <= 5;
+
+  const presets = [60,90,120,180];
+  const presetLabels = ['60s','90s','2m','3m'];
+
+  return (
+    <div style={{
+      position:'absolute',inset:0,zIndex:100,
+      background:C.overlayHeavy,backdropFilter:'blur(32px)',
+      display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+    }}>
+      {/* Ring */}
+      <div style={{position:'relative',width:220,height:220}}>
+        <svg width={220} height={220} style={{transform:'rotate(-90deg)'}}>
+          <circle cx={110} cy={110} r={r} fill="none" stroke={C.s2} strokeWidth={4}/>
+          <circle cx={110} cy={110} r={r} fill="none" stroke={C.brand} strokeWidth={4}
+            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+            style={{transition:'stroke-dashoffset 1s linear',
+              filter:isLow?`drop-shadow(0 0 8px ${C.brand})`:`drop-shadow(0 0 4px ${C.brand}4D)`}}/>
+        </svg>
+        <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+          <div style={{fontSize:56,fontWeight:300,lineHeight:'64px',color:isLow?C.brand:C.t1,
+            letterSpacing:'-0.02em',fontVariantNumeric:'tabular-nums',
+            transition:'color 0.3s ease'}}>
+            {fmt(remaining)}
+          </div>
+          <div style={{fontSize:15,fontWeight:500,color:C.t2,marginTop:4}}>Rest</div>
+        </div>
+      </div>
+
+      {/* Up Next */}
+      {nextExercise && (
+        <div style={{marginTop:40,textAlign:'center'}}>
+          <Overline>UP NEXT</Overline>
+          <div style={{fontSize:18,fontWeight:600,color:C.t1,marginTop:4}}>{nextExercise.name}</div>
+          <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>
+            {nextExercise.targetSets}×{nextExercise.targetReps}
+          </div>
+        </div>
+      )}
+
+      {/* Presets */}
+      <div style={{display:'flex',gap:8,marginTop:32}}>
+        {presets.map((p,i)=>(
+          <button key={p} className="btn-press" onClick={()=>onPreset(p)}
+            style={{borderRadius:9999,paddingLeft:16,paddingRight:16,paddingTop:10,paddingBottom:10,
+              background:activeDuration===p?C.brandM:C.s2,
+              border:activeDuration===p?`1px solid ${C.borderBrand}`:`1px solid transparent`,
+              fontSize:13,fontWeight:600,color:activeDuration===p?C.brand:C.t2,
+              cursor:'pointer',fontFamily:'inherit'}}>
+            {presetLabels[i]}
+          </button>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div style={{display:'flex',gap:12,marginTop:24}}>
+        <Btn variant="ghost" size="md" onClick={onAddTime} full={false} style={{paddingLeft:20,paddingRight:20}}>
+          +30s
+        </Btn>
+        <Btn variant="secondary" size="md" onClick={onSkip} full={false} style={{paddingLeft:20,paddingRight:20}}>
+          Skip
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── Workout Summary Sheet ──
+function WorkoutSummary({exercises,elapsed,onDone,isProgramComplete}) {
+  const [mood, setMood] = useState(null);
+  const totalSets = exercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).length,0);
+  const totalVolume = exercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).reduce((b,s)=>b+s.weight*s.reps,0),0);
+  const prs = exercises.flatMap(e=>e.sets.filter(s=>s.isPR).map(s=>({exercise:e.name,weight:s.weight,reps:s.reps})));
+  const moods = ['😫','😕','😐','🙂','💪'];
+
+  return (
+    <div style={{position:'absolute',inset:0,zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end',
+      background:C.overlayHeavy,backdropFilter:'blur(24px)'}}>
+      <div className="summary-enter" style={{
+        background:C.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+        padding:'8px 24px 32px',maxHeight:'85%',overflow:'auto',boxShadow:C.sheetShadow,
+      }}>
+        {/* Drag handle */}
+        <div style={{width:36,height:4,borderRadius:2,background:C.t3,opacity:0.3,margin:'0 auto 20px'}}/>
+
+        <Overline>WORKOUT COMPLETE</Overline>
+        <div style={{fontSize:28,fontWeight:700,color:C.t1,marginTop:4}}>Push Day</div>
+        <div style={{fontSize:13,fontWeight:400,color:C.t2,marginTop:2}}>Mar 18, 2026 · {fmt(elapsed)}</div>
+
+        {/* Stats Grid */}
+        <div style={{display:'flex',flexWrap:'wrap',gap:12,marginTop:20}}>
+          {[
+            {label:'Duration',value:fmt(elapsed)},
+            {label:'Volume',value:`${(totalVolume/1000).toFixed(1)}k lbs`},
+            {label:'Sets',value:totalSets},
+            {label:'PRs',value:prs.length,highlight:prs.length>0},
+          ].map((s,i)=>(
+            <div key={i} style={{flex:'1 1 40%',background:C.s2,borderRadius:12,padding:16,textAlign:'center'}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.brand,letterSpacing:'0.1em',textTransform:'uppercase'}}>{s.label}</div>
+              <div style={{fontSize:32,fontWeight:700,color:s.highlight?C.brand:C.t1,marginTop:4,lineHeight:'38px'}}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* PRs */}
+        {prs.length > 0 && (
+          <div style={{marginTop:20}}>
+            <Overline>NEW PERSONAL RECORDS</Overline>
+            {prs.map((p,i)=>(
+              <Card key={i} style={{marginTop:12,padding:16,display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:40,height:40,borderRadius:8,background:C.brandM,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <Ico name="trophy" size={20} color={C.brand}/>
+                </div>
+                <div>
+                  <div style={{fontSize:18,fontWeight:600,color:C.t1}}>{p.exercise}</div>
+                  <div style={{fontSize:13,fontWeight:400,color:C.t2}}>{p.weight}kg × {p.reps}</div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Mood */}
+        <div style={{marginTop:20}}>
+          <Overline>HOW DID IT FEEL?</Overline>
+          <div style={{display:'flex',gap:12,justifyContent:'center',marginTop:12}}>
+            {moods.map((m,i)=>(
+              <button key={i} className="btn-press" onClick={()=>setMood(i)}
+                style={{width:48,height:48,borderRadius:8,fontSize:24,
+                  background:mood===i?C.brandM:C.s2,
+                  border:mood===i?`1px solid ${C.borderBrand}`:'1px solid transparent',
+                  cursor:'pointer',transform:mood===i?'scale(1.1)':'scale(1)',
+                  transition:'all 0.15s ease'}}>
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Program Complete Section */}
+        {isProgramComplete && (
+          <div style={{marginTop:20}}>
+            <div className="divider"/>
+            <div style={{marginTop:20,padding:20,borderRadius:16,
+              background:C.brandDim,border:`1px solid ${C.borderBrand}`}}>
+              <Overline>PROGRAM COMPLETE</Overline>
+              <div style={{fontSize:20,fontWeight:700,color:C.t1,marginTop:6}}>
+                {MOCK.program.name} — {MOCK.program.weeks} weeks
+              </div>
+              <div style={{display:'flex',gap:12,marginTop:16}}>
+                {[
+                  {label:'Workouts',value:MOCK.program.totalWorkouts},
+                  {label:'Volume',value:'142k'},
+                  {label:'PRs',value:'7'},
+                  {label:'Consistency',value:'84%'},
+                ].map((s,i)=>(
+                  <div key={i} style={{flex:1,textAlign:'center'}}>
+                    <div style={{fontSize:18,fontWeight:700,color:C.brand}}>{s.value}</div>
+                    <div style={{fontSize:10,fontWeight:600,color:C.t3,marginTop:2}}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:16}}>
+                <Btn onClick={onDone} icon="compass-outline">Choose Next Program</Btn>
+                <Btn variant="ghost" onClick={onDone}>Repeat Program</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Done */}
+        {!isProgramComplete && (
+          <div style={{marginTop:24}}>
+            <Btn onClick={onDone}>Done</Btn>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   TAB BAR
+   ═══════════════════════════════════════════ */
+function TabBar({active, onChange}) {
+  const tabs = [
+    {id:'today',label:'Today',icon:'today-outline',iconActive:'today'},
+    {id:'workout',label:'Workout',icon:'barbell-outline',iconActive:'barbell'},
+    {id:'nutrition',label:'Nutrition',icon:'nutrition-outline',iconActive:'nutrition'},
+    {id:'coach',label:'Coach',icon:'chatbubble-ellipses-outline',iconActive:'chatbubble-ellipses'},
+    {id:'progress',label:'Progress',icon:'trending-up-outline',iconActive:'trending-up'},
+  ];
+  return (
+    <div style={{
+      position:'absolute',bottom:0,left:0,right:0,height:60,
+      background:C.tabBg,borderTop:`1px solid ${C.border}`,
+      display:'flex',alignItems:'center',paddingBottom:4,zIndex:50,
+    }}>
+      {tabs.map(tab=>{
+        const isActive = active===tab.id;
+        return (
+          <button key={tab.id} onClick={()=>onChange(tab.id)}
+            style={{
+              flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,
+              background:'none',border:'none',cursor:'pointer',paddingTop:6,
+            }}>
+            {isActive && (
+              <div style={{position:'absolute',top:-1,width:32,height:2,borderRadius:1,background:C.brand}}/>
+            )}
+            <div style={{
+              ...(isActive?{background:C.brandM,borderRadius:9999,padding:'4px 16px'}:{padding:'4px 16px'}),
+            }}>
+              <Ico name={isActive?tab.iconActive:tab.icon} size={24} color={isActive?C.brand:C.tabOff}/>
+            </div>
+            <span style={{fontSize:11,fontWeight:isActive?700:500,color:isActive?C.brand:C.tabOff}}>
+              {tab.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   APP
+   ═══════════════════════════════════════════ */
+function App() {
+  const [tab, setTab] = useState('today');
+  const [isEmpty, setIsEmpty] = useState(false);
+
+  // Theme state: 'dark' | 'light' | 'system'
+  const [themePref, setThemePref] = useState('dark');
+  const [sysTheme, setSysTheme] = useState(
+    window.matchMedia('(prefers-color-scheme:light)').matches ? 'light' : 'dark'
+  );
+  const activeTheme = themePref === 'system' ? sysTheme : themePref;
+
+  // Listen for system theme changes
+  useEffect(()=>{
+    const mq = window.matchMedia('(prefers-color-scheme:light)');
+    const handler = (e) => setSysTheme(e.matches?'light':'dark');
+    mq.addEventListener('change', handler);
+    return ()=>mq.removeEventListener('change', handler);
+  },[]);
+
+  // Apply theme on mount and when preference changes
+  useEffect(()=>{
+    applyTheme(activeTheme==='light'?LIGHT:DARK);
+  },[activeTheme]);
+
+  // Workout flow state
+  const [wkActive, setWkActive] = useState(false);
+  const [wkView, setWkView] = useState('list'); // 'list' | 'focused'
+  const [wkExercises, setWkExercises] = useState(null);
+  const [wkElapsed, setWkElapsed] = useState(0);
+  const [focusEx, setFocusEx] = useState(0);
+  const [focusSet, setFocusSet] = useState(0);
+  const [showSummary, setShowSummary] = useState(false);
+
+  // Sheet state
+  const [showPreview, setShowPreview] = useState(false);
+  const [showHydration, setShowHydration] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showDayPreview, setShowDayPreview] = useState(null); // dayData object or null
+  const [showConfirm, setShowConfirm] = useState(null); // {title,body,...} or null
+
+  // Workout completion tracking
+  const [wkCompleted, setWkCompleted] = useState(false);
+  const [wkCompletedData, setWkCompletedData] = useState(null);
+  const [isProgramComplete, setIsProgramComplete] = useState(false);
+
+  // Rest timer state
+  const [restActive, setRestActive] = useState(false);
+  const [restDuration, setRestDuration] = useState(90);
+  const [restRemaining, setRestRemaining] = useState(90);
+  const [restNextEx, setRestNextEx] = useState(null);
+
+  // Elapsed timer
+  useEffect(()=>{
+    if(!wkActive||showSummary) return;
+    const id = setInterval(()=>setWkElapsed(e=>e+1),1000);
+    return ()=>clearInterval(id);
+  },[wkActive,showSummary]);
+
+  // Rest countdown
+  useEffect(()=>{
+    if(!restActive) return;
+    if(restRemaining<=0){ setRestActive(false); return; }
+    const id = setInterval(()=>setRestRemaining(r=>r-1),1000);
+    return ()=>clearInterval(id);
+  },[restActive,restRemaining]);
+
+  // Start workout
+  const startWorkout = () => {
+    setShowPreview(false);
+    setShowDayPreview(null);
+    setWkExercises(initWorkoutState());
+    setWkElapsed(0);
+    setWkView('list');
+    setShowSummary(false);
+    setRestActive(false);
+    setWkCompleted(false);
+    setWkCompletedData(null);
+    setIsProgramComplete(false);
+    setWkActive(true);
+    setTab('_workout');
+  };
+
+  // Start a different day's workout (from day pill preview)
+  const startDayWorkout = (dayData) => {
+    if(wkActive && wkExercises) {
+      const loggedSets = wkExercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).length,0);
+      setShowDayPreview(null);
+      setShowConfirm({
+        title: 'Replace active workout?',
+        body: `You have a workout in progress (${MOCK.workout.name} — ${loggedSets} sets logged). Starting a new workout will discard your current progress. This can't be undone.`,
+        confirmLabel: 'Discard & Start',
+        cancelLabel: 'Keep Current',
+        destructive: true,
+        onConfirm: () => {
+          setShowConfirm(null);
+          startWorkout();
+        },
+        onCancel: () => setShowConfirm(null),
+      });
+    } else {
+      startWorkout();
+    }
+  };
+
+  // End/discard workout (user chose to abandon)
+  const endWorkout = () => {
+    setWkActive(false);
+    setWkExercises(null);
+    setRestActive(false);
+    setShowSummary(false);
+    setTab('today');
+  };
+
+  // Complete workout → track completion data, show summary
+  const finishWorkout = () => {
+    setRestActive(false);
+    if(wkExercises) {
+      const totalSets = wkExercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).length,0);
+      const totalVolume = wkExercises.reduce((a,e)=>a+e.sets.filter(s=>s.completed).reduce((b,s)=>b+s.weight*s.reps,0),0);
+      setWkCompletedData({
+        duration: fmt(wkElapsed),
+        sets: totalSets,
+        volume: `${(totalVolume/1000).toFixed(1)}k lbs`,
+      });
+    }
+    setShowSummary(true);
+  };
+
+  // After summary dismissed → mark workout as completed today
+  const dismissSummary = () => {
+    setWkActive(false);
+    setWkCompleted(true);
+    setShowSummary(false);
+    setTab('today');
+  };
+
+  // View summary of completed workout (re-show sheet)
+  const viewCompletedSummary = () => {
+    if(wkExercises && wkCompletedData) {
+      setWkActive(true);
+      setShowSummary(true);
+      setTab('_workout');
+    }
+  };
+
+  // Update a set's weight (clears suggested flag on manual change)
+  const setWeight = (ei,si,val) => {
+    setWkExercises(prev=>{
+      const next=[...prev];
+      next[ei]={...next[ei],sets:[...next[ei].sets]};
+      next[ei].sets[si]={...next[ei].sets[si],weight:val,suggested:false};
+      return next;
+    });
+  };
+
+  // Update a set's reps
+  const setReps = (ei,si,val) => {
+    setWkExercises(prev=>{
+      const next=[...prev];
+      next[ei]={...next[ei],sets:[...next[ei].sets]};
+      next[ei].sets[si]={...next[ei].sets[si],reps:val};
+      return next;
+    });
+  };
+
+  // Toggle set completion
+  const toggleSet = (ei,si) => {
+    setWkExercises(prev=>{
+      const next=[...prev];
+      const ex = {...next[ei],sets:[...next[ei].sets]};
+      const set = {...ex.sets[si]};
+      set.completed = !set.completed;
+      // PR detection on complete
+      if(set.completed && set.weight > ex.prWeight) {
+        set.isPR = true;
+      } else if(!set.completed) {
+        set.isPR = false;
+      }
+      ex.sets[si] = set;
+      next[ei] = ex;
+      return next;
+    });
+
+    // Start rest timer on set completion
+    if(wkExercises && !wkExercises[ei].sets[si].completed) {
+      const restSec = wkExercises[ei].restSec || 90;
+      setRestDuration(restSec);
+      setRestRemaining(restSec);
+      // Find next exercise for preview
+      const nextUncompleted = wkExercises.find((e,i)=>i>ei && e.sets.some(s=>!s.completed));
+      setRestNextEx(nextUncompleted || (ei < wkExercises.length-1 ? wkExercises[ei+1] : null));
+      setRestActive(true);
+    }
+  };
+
+  // Focused view complete
+  const focusComplete = (ei,si) => {
+    toggleSet(ei,si);
+    // Advance to next set
+    if(wkExercises) {
+      const ex = wkExercises[ei];
+      if(!ex.sets[si].completed) {
+        // Was completing (not undoing)
+        if(si < ex.sets.length-1) {
+          setFocusSet(si+1);
+        } else if(ei < wkExercises.length-1) {
+          setFocusEx(ei+1);
+          setFocusSet(0);
+        }
+      }
+    }
+  };
+
+  // Add set to exercise
+  const addSet = (ei) => {
+    setWkExercises(prev=>{
+      const next=[...prev];
+      const ex = {...next[ei],sets:[...next[ei].sets]};
+      const lastSet = ex.sets[ex.sets.length-1];
+      ex.sets.push({weight:lastSet?.weight||0,reps:ex.targetReps,completed:false,isPR:false});
+      next[ei] = ex;
+      return next;
+    });
+  };
+
+  // Navigate focus to specific exercise/set
+  const focusNav = (ei,si) => {
+    setFocusEx(ei);
+    setFocusSet(si);
+  };
+
+  // Rest timer controls
+  const skipRest = () => setRestActive(false);
+  const addRestTime = () => {
+    // Only extend remaining time, adjust duration to match so ring animation stays smooth
+    setRestRemaining(r=>r+30);
+    setRestDuration(d=>Math.max(d, restRemaining+30));
+  };
+  const presetRest = (sec) => {
+    setRestDuration(sec);
+    setRestRemaining(sec);
+  };
+
+  // What to render in the workout area
+  const renderWorkout = () => {
+    if(!wkExercises) return null;
+
+    return (
+      <div style={{height:'100%',position:'relative'}}>
+        <ActiveWorkoutScreen
+          exercises={wkExercises} elapsed={wkElapsed}
+          onEnd={endWorkout} onFinish={finishWorkout}
+          onToggleSet={toggleSet} onSetWeight={setWeight}
+          onSetReps={setReps} onAddSet={addSet}
+          viewMode={wkView} onViewChange={setWkView}
+          focusExIdx={focusEx} focusSetIdx={focusSet}
+          onFocusNav={focusNav} onFocusComplete={focusComplete}/>
+
+        {/* Rest Timer Overlay */}
+        {restActive && (
+          <RestTimerOverlay
+            duration={restDuration} remaining={restRemaining}
+            nextExercise={restNextEx}
+            onSkip={skipRest} onAddTime={addRestTime}
+            onPreset={presetRest} activeDuration={restDuration}/>
+        )}
+
+        {/* Workout Summary */}
+        {showSummary && (
+          <WorkoutSummary exercises={wkExercises} elapsed={wkElapsed}
+            onDone={dismissSummary} isProgramComplete={isProgramComplete}/>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <ThemeCtx.Provider value={{theme:activeTheme,themePref,setTheme:setThemePref}}>
+    <div className="phone" style={{display:'flex',flexDirection:'column'}}>
+      {/* Safe area top spacer */}
+      <div style={{height:47,background:C.bg,flexShrink:0}}/>
+
+      {/* Content */}
+      <div style={{flex:1,position:'relative',overflow:'hidden'}}>
+        {/* Workout screen (shown when active AND on workout view) */}
+        {wkActive && (
+          <div style={{height:'100%',display:tab==='_workout'?'block':'none'}}>
+            {renderWorkout()}
+          </div>
+        )}
+        <div style={{height:'100%',display:tab==='today'?'block':'none'}}>
+          <TodayScreen onStartWorkout={startWorkout} onShowPreview={()=>setShowPreview(true)}
+            onShowHydration={()=>setShowHydration(true)} isEmpty={isEmpty}
+            wkActive={wkActive} wkExercises={wkExercises} wkElapsed={wkElapsed}
+            onResume={()=>setTab('_workout')}
+            wkCompleted={wkCompleted} wkCompletedData={wkCompletedData}
+            onViewSummary={viewCompletedSummary}
+            onShowProfile={()=>setShowProfile(true)}/>
+        </div>
+        <div style={{height:'100%',display:tab==='workout'?'block':'none'}}>
+          <WorkoutTabScreen onStartWorkout={startWorkout} isEmpty={isEmpty}
+            onDayPillTap={(ws)=>setShowDayPreview(ws)}
+            wkActive={wkActive}
+            onResume={()=>setTab('_workout')}/>
+        </div>
+        <div style={{height:'100%',display:tab==='nutrition'?'block':'none'}}>
+          <NutritionScreen onShowHydration={()=>setShowHydration(true)} isEmpty={isEmpty}/>
+        </div>
+        <div style={{height:'100%',display:tab==='coach'?'block':'none'}}>
+          <CoachScreen isEmpty={isEmpty}/>
+        </div>
+        <div style={{height:'100%',display:tab==='progress'?'block':'none'}}>
+          <ProgressScreen isEmpty={isEmpty}/>
+        </div>
+      </div>
+
+      {/* Tab Bar */}
+      <TabBar active={tab==='_workout'?'workout':tab} onChange={(t)=>{
+        if(t==='workout' && wkActive) setTab('_workout');
+        else setTab(t);
+      }}/>
+
+      {/* Safe area bottom spacer */}
+      <div style={{height:0,background:C.tabBg,flexShrink:0}}/>
+
+      {/* Overlay Sheets */}
+      {showPreview && (
+        <WorkoutPreviewSheet
+          onStart={startWorkout}
+          onClose={()=>setShowPreview(false)}/>
+      )}
+      {showHydration && (
+        <HydrationDetailSheet onClose={()=>setShowHydration(false)}/>
+      )}
+      {showProfile && (
+        <ProfileSheet onClose={()=>setShowProfile(false)}/>
+      )}
+      {showDayPreview && (
+        <DayPreviewSheet dayData={showDayPreview}
+          onStart={startDayWorkout}
+          onClose={()=>setShowDayPreview(null)}
+          wkActive={wkActive}/>
+      )}
+      {showConfirm && (
+        <ConfirmDialog {...showConfirm}/>
+      )}
+
+      {/* Debug Toggle */}
+      {!wkActive && (
+        <button onClick={()=>setIsEmpty(e=>!e)}
+          style={{position:'fixed',bottom:80,left:12,zIndex:500,
+            width:36,height:36,borderRadius:9999,
+            background:isEmpty?C.error:C.s2,border:`1px solid ${isEmpty?C.error+'4D':C.border}`,
+            cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:C.cardShadow||'0 2px 8px rgba(0,0,0,0.3)',transition:'all 0.2s'}}>
+          <Ico name={isEmpty?'eye-off':'eye'} size={16} color={isEmpty?C.inv:C.t3}/>
+        </button>
+      )}
+    </div>
+    </ThemeCtx.Provider>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   RENDER
+   ═══════════════════════════════════════════ */
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
