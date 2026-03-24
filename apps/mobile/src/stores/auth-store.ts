@@ -25,6 +25,8 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+let _authSubscription: { unsubscribe: () => void } | null = null;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
@@ -61,7 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           profile: profile ?? null,
           coachPreferences: coachPrefs ?? null,
-          isOnboarded: !!profile?.display_name,
+          isOnboarded: !!profile?.onboarding_completed,
         });
       }
     } catch {
@@ -70,8 +72,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: false });
     }
 
+    // Tear down previous listener to avoid accumulation
+    if (_authSubscription) {
+      _authSubscription.unsubscribe();
+      _authSubscription = null;
+    }
+
     // Set up auth state change listener for OAuth and session persistence
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       set({ session, user: session?.user ?? null });
       if (session?.user) {
         const { data: profile } = await supabase
@@ -87,12 +95,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           profile: profile ?? null,
           coachPreferences: coachPrefs ?? null,
-          isOnboarded: !!profile?.display_name,
+          isOnboarded: !!profile?.onboarding_completed,
         });
       } else {
         set({ profile: null, coachPreferences: null, isOnboarded: false });
       }
     });
+    _authSubscription = subscription;
   },
 
   setSession: (session) => {
@@ -100,7 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setProfile: (profile) => {
-    set({ profile, isOnboarded: !!profile?.display_name });
+    set({ profile, isOnboarded: !!profile?.onboarding_completed });
   },
 
   setCoachPreferences: (prefs) => {
@@ -117,7 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // 1. Update auth-store profile immediately
     const updated: Profile = { ...profile, ...partial, updated_at: new Date().toISOString() };
-    set({ profile: updated, isOnboarded: !!updated.display_name });
+    set({ profile: updated, isOnboarded: !!updated.onboarding_completed });
 
     // 2. Write to profile-store cache (camelCase mirror) for offline reads
     try {
@@ -138,11 +147,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // 3. Supabase upsert (fire-and-forget)
     if (isSupabaseConfigured && user) {
-      Promise.resolve(
-        supabase
-          .from('profiles')
-          .upsert({ ...updated, id: user.id }),
-      ).catch(() => {}); // non-blocking
+      supabase
+        .from('profiles')
+        .upsert({ ...updated, id: user.id })
+        .then(({ error: upsertErr }) => {
+          if (upsertErr) console.warn('Profile upsert failed:', upsertErr.message);
+        });
     }
   },
 
@@ -157,7 +167,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
 
     if (profile) {
-      set({ profile, isOnboarded: !!profile.display_name });
+      set({ profile, isOnboarded: !!profile.onboarding_completed });
 
       // Mirror to profile-store cache
       try {
@@ -238,6 +248,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             refresh_token,
           });
           if (sessionError) return { error: sessionError };
+          await get().initialize();
         } else {
           return { error: new Error('No tokens received from Google sign-in. Check Supabase redirect URL configuration.') };
         }
@@ -255,6 +266,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) return { error };
+      await get().initialize();
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -268,6 +280,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
+    try { const { useOnboardingStore } = require('./onboarding-store'); useOnboardingStore.getState().reset(); } catch {}
+    try { const { useProfileStore } = require('./profile-store'); useProfileStore.getState().reset(); } catch {}
+    try { const { useWorkoutStore } = require('./workout-store'); useWorkoutStore.getState().reset?.(); } catch {}
+    try { const { useNutritionStore } = require('./nutrition-store'); useNutritionStore.getState().reset?.(); } catch {}
+    try { const { useCoachStore } = require('./coach-store'); useCoachStore.getState().reset?.(); } catch {}
+    try { const { useNotificationStore } = require('./notification-store'); useNotificationStore.getState().reset?.(); } catch {}
     set({
       session: null,
       user: null,

@@ -99,7 +99,7 @@ const AI_CONFIG_KEY = '@ai/config';
 
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'groq',
-  model: 'llama-3.1-8b-instant',
+  model: 'llama-3.3-70b-versatile',
 };
 
 let cachedConfig: AIConfig | null = null;
@@ -182,6 +182,14 @@ const CLAUDE_PROXY_URL = `${PROXY_BASE}/api/anthropic`;
 const GROQ_PROXY_URL = `${PROXY_BASE}/api/groq`;
 const OPENAI_PROXY_URL = `${PROXY_BASE}/api/openai`;
 
+function assertProxyConfigured(): void {
+  if (!PROXY_BASE) {
+    throw new Error(
+      'AI proxy not configured. Set EXPO_PUBLIC_PROXY_BASE_URL in your .env file, or add your own API key in AI Settings.',
+    );
+  }
+}
+
 /** Whether a config has a user-provided API key. */
 function hasUserKey(config: AIConfig): boolean {
   return !!config.apiKey && config.apiKey.length > 5;
@@ -190,6 +198,7 @@ function hasUserKey(config: AIConfig): boolean {
 function getClaudeBaseUrl(config: AIConfig): string {
   // Always use proxy on web (CORS), or on native when no user key
   if (Platform.OS === 'web' || !hasUserKey(config)) {
+    assertProxyConfigured();
     return CLAUDE_PROXY_URL;
   }
   return config.baseUrl || PROVIDER_DEFAULTS.claude.baseUrl;
@@ -203,6 +212,7 @@ function getOpenAICompatibleUrl(config: AIConfig): string {
   }
   // On web or when no user key, route through proxy
   if (Platform.OS === 'web' || !hasUserKey(config)) {
+    assertProxyConfigured();
     if (config.provider === 'groq') return GROQ_PROXY_URL;
     if (config.provider === 'openai') return OPENAI_PROXY_URL;
   }

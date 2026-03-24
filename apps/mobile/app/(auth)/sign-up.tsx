@@ -10,6 +10,14 @@ import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { isSupabaseConfigured } from '../../src/lib/supabase';
 
+function friendlyAuthError(msg: string): string {
+  if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
+  if (msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
+  if (msg.includes('User already registered')) return 'An account with this email already exists.';
+  if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.';
+  return 'Something went wrong. Please try again.';
+}
+
 const signUpSchema = z
   .object({
     email: z.string().email('Please enter a valid email'),
@@ -41,7 +49,7 @@ export default function SignUpScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        setFormError(error.message || 'Failed to sign in with Google.');
+        setFormError(friendlyAuthError(error.message || ''));
       }
     } finally {
       setGoogleLoading(false);
@@ -66,7 +74,7 @@ export default function SignUpScreen() {
     setFormError('');
     const { error } = await signUp(data.email, data.password);
     if (error) {
-      setFormError(error.message || 'Failed to create account. Please try again.');
+      setFormError(friendlyAuthError(error.message || ''));
     } else {
       router.replace('/');
     }

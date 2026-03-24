@@ -11,6 +11,7 @@ import { Badge, Card, Button, BottomSheet } from '../../src/components/ui';
 import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import { getExerciseHistory } from '../../src/lib/workout-db';
 import { useWorkoutStore } from '../../src/stores/workout-store';
+import { useProfileStore } from '../../src/stores/profile-store';
 import { formatFullDate, formatWeight } from '../../src/lib/workout-utils';
 import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
 
@@ -28,7 +29,8 @@ export default function ExerciseDetailScreen() {
   const exercise = getExerciseById(exerciseId ?? '');
   const record = getRecordForExercise(exerciseId ?? '');
   const recentHistory = getExerciseHistory(exerciseId ?? '', history, 5);
-  const unit = 'lbs'; // TODO: from user prefs
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
   if (!exercise) {
     return (

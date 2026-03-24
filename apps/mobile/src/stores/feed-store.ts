@@ -33,7 +33,7 @@ interface FeedState {
     body: string;
     metadata: Record<string, any>;
     sessionId?: string;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   toggleLike: (feedItemId: string) => Promise<void>;
   deleteItem: (feedItemId: string) => Promise<void>;
 }
@@ -130,11 +130,11 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   },
 
   postWorkoutCompletion: async ({ title, body, metadata, sessionId }) => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) return false;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) return false;
 
       const { error } = await supabase.from('social_feed').insert({
         user_id: user.id,
@@ -148,9 +148,13 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
       if (error) {
         console.error('Feed post error:', error);
+        return false;
       }
+
+      return true;
     } catch (err) {
       console.error('Feed post exception:', err);
+      return false;
     }
   },
 

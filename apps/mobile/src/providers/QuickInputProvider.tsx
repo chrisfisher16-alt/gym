@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import { QuickInputPill } from '../components/ui/QuickInputPill';
 
 // ── Context ──────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ export function QuickInputProvider({ children }: { children: React.ReactNode }) 
   return (
     <QuickInputContext.Provider value={value}>
       {children}
-      {visible && <QuickInputPill />}
+      {visible && Platform.OS !== 'web' && <QuickInputPill />}
     </QuickInputContext.Provider>
   );
 }

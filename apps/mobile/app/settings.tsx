@@ -11,6 +11,7 @@ import { useNotificationStore } from '../src/stores/notification-store';
 import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useEntitlement } from '../src/hooks/useEntitlement';
 import { APP_CONFIG } from '@health-coach/shared';
+import Constants from 'expo-constants';
 import { useThemeStore, type ColorMode } from '../src/stores/theme-store';
 import { useSpaceStore, type TrainingSpace } from '../src/stores/space-store';
 import { SpaceSwitcher, SpaceEditor } from '../src/components/ui';
@@ -284,7 +285,7 @@ export default function SettingsScreen() {
         <SettingRow
           icon="information-circle-outline"
           label="About"
-          value="v1.0.0"
+          value={`v${Constants.expoConfig?.version ?? '1.0.0'}`}
           colors={colors}
           typography={typography}
           spacing={spacing}

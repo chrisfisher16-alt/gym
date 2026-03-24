@@ -10,6 +10,14 @@ import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { isSupabaseConfigured } from '../../src/lib/supabase';
 
+function friendlyAuthError(msg: string): string {
+  if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
+  if (msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
+  if (msg.includes('User already registered')) return 'An account with this email already exists.';
+  if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.';
+  return 'Something went wrong. Please try again.';
+}
+
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -30,7 +38,9 @@ export default function SignInScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        setFormError(error.message || 'Failed to sign in with Google.');
+        setFormError(friendlyAuthError(error.message || ''));
+      } else {
+        router.replace('/');
       }
     } finally {
       setGoogleLoading(false);
@@ -50,7 +60,7 @@ export default function SignInScreen() {
     setFormError('');
     const { error } = await signIn(data.email, data.password);
     if (error) {
-      setFormError(error.message || 'Failed to sign in. Please try again.');
+      setFormError(friendlyAuthError(error.message || ''));
     } else {
       router.replace('/');
     }
@@ -157,6 +167,15 @@ export default function SignInScreen() {
               loading={isSubmitting}
               style={{ marginTop: spacing.sm }}
             />
+
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/forgot-password')}
+              style={{ alignSelf: 'center', marginTop: spacing.md }}
+            >
+              <Text style={[typography.bodySmall, { color: colors.primary }]}>
+                Forgot password?
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.footer, { marginTop: spacing['2xl'] }]}>

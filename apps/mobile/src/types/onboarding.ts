@@ -217,12 +217,12 @@ export const ATTRIBUTION_OPTIONS: {
 
 export const DAY_PILLS: { value: Weekday; label: string; short: string }[] = [
   { value: 'monday', label: 'Monday', short: 'M' },
-  { value: 'tuesday', label: 'Tuesday', short: 'T' },
+  { value: 'tuesday', label: 'Tuesday', short: 'Tu' },
   { value: 'wednesday', label: 'Wednesday', short: 'W' },
-  { value: 'thursday', label: 'Thursday', short: 'T' },
+  { value: 'thursday', label: 'Thursday', short: 'Th' },
   { value: 'friday', label: 'Friday', short: 'F' },
-  { value: 'saturday', label: 'Saturday', short: 'S' },
-  { value: 'sunday', label: 'Sunday', short: 'S' },
+  { value: 'saturday', label: 'Saturday', short: 'Sa' },
+  { value: 'sunday', label: 'Sunday', short: 'Su' },
 ];
 
 // ── Detailed Equipment List ─────────────────────────────────────────

@@ -446,7 +446,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     };
 
     set({ dailyLogs });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   addMealItem: (mealId, item) => {
@@ -466,7 +466,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   editMealItem: (mealId, itemId, updates) => {
@@ -492,7 +492,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   removeMealItem: (mealId, itemId) => {
@@ -513,7 +513,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   deleteMeal: (mealId) => {
@@ -531,7 +531,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   quickAddCalories: (name, calories, protein_g, carbs_g, fat_g, mealType) => {
@@ -575,14 +575,14 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set((state) => ({
       savedMeals: [...state.savedMeals, saved],
     }));
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   deleteSavedMeal: (savedMealId) => {
     set((state) => ({
       savedMeals: state.savedMeals.filter((m) => m.id !== savedMealId),
     }));
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   logSavedMeal: (savedMealId, mealType) => {
@@ -635,14 +635,14 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set((state) => ({
       userSupplements: [...state.userSupplements, supp],
     }));
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   removeUserSupplement: (userSupplementId) => {
     set((state) => ({
       userSupplements: state.userSupplements.filter((s) => s.id !== userSupplementId),
     }));
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   logSupplement: (userSupplementId) => {
@@ -680,7 +680,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       },
       userSupplements,
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   unlogSupplement: (userSupplementId) => {
@@ -698,7 +698,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   // ── Water ───────────────────────────────────────────────────────
@@ -722,7 +722,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, waterIntake_oz: log.waterIntake_oz + amount_oz },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   setWater: (amount_oz) => {
@@ -744,7 +744,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, waterIntake_oz: Math.max(0, amount_oz) },
       },
     });
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   // ── Targets ─────────────────────────────────────────────────────
@@ -765,8 +765,8 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     } else {
       set({ targets });
     }
-    AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(targets));
-    get().persistAll();
+    AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(targets)).catch(console.warn);
+    get().persistAll().catch(console.warn);
   },
 
   // ── Recipes ─────────────────────────────────────────────────────
@@ -785,14 +785,14 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set((state) => ({
       recipes: [...state.recipes, recipe],
     }));
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   deleteRecipe: (recipeId) => {
     set((state) => ({
       recipes: state.recipes.filter((r) => r.id !== recipeId),
     }));
-    get().persistAll();
+    get().persistAll().catch(console.warn);
   },
 
   logRecipe: (recipeId, mealType) => {
@@ -821,6 +821,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       AsyncStorage.setItem(STORAGE_KEYS.SAVED_MEALS, JSON.stringify(state.savedMeals)),
       AsyncStorage.setItem(STORAGE_KEYS.SUPPLEMENTS, JSON.stringify(state.userSupplements)),
       AsyncStorage.setItem(STORAGE_KEYS.RECIPES, JSON.stringify(state.recipes)),
+      AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(state.targets)),
     ]);
   },
 }));

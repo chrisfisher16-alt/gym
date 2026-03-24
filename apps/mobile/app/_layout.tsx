@@ -32,6 +32,7 @@ function CommandPaletteSheet() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const [ready, setReady] = useState(false);
 
   // Set up cross-store reactive subscriptions
@@ -121,7 +122,7 @@ export default function RootLayout() {
         <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy', presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
-      <StatusBar style={useThemeStore.getState().resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
     </ToastProvider>
     </QuickInputProvider>
     </CoachPeekProvider>

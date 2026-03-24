@@ -53,11 +53,11 @@ interface MeasurementsState {
 
   // Actions
   initialize: () => Promise<void>;
-  addMeasurement: (measurement: Omit<BodyMeasurement, 'id'>) => void;
-  addWeightFromHealthSync: (weightKg: number, date: string) => void;
-  deleteMeasurement: (id: string) => void;
-  addPhoto: (photo: Omit<ProgressPhoto, 'id'>) => void;
-  deletePhoto: (id: string) => void;
+  addMeasurement: (measurement: Omit<BodyMeasurement, 'id'>) => Promise<void>;
+  addWeightFromHealthSync: (weightKg: number, date: string) => Promise<void>;
+  deleteMeasurement: (id: string) => Promise<void>;
+  addPhoto: (photo: Omit<ProgressPhoto, 'id'>) => Promise<void>;
+  deletePhoto: (id: string) => Promise<void>;
 }
 
 // ── Store ──────────────────────────────────────────────────────────
@@ -96,73 +96,63 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     }
   },
 
-  addMeasurement: (measurement) => {
-    set((state) => {
-      const newMeasurement: BodyMeasurement = {
-        ...measurement,
-        id: generateId(),
-      };
-      const measurements = [...state.measurements, newMeasurement].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-      );
-      AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
-      return { measurements };
-    });
+  addMeasurement: async (measurement) => {
+    const newMeasurement: BodyMeasurement = {
+      ...measurement,
+      id: generateId(),
+    };
+    const measurements = [...get().measurements, newMeasurement].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+    set({ measurements });
+    await AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
   },
 
-  addWeightFromHealthSync: (weightKg, date) => {
-    set((state) => {
-      // Deduplicate: skip if a health_sync entry for the same date already exists with the same weight
-      const dateStr = date.split('T')[0];
-      const exists = state.measurements.some(
-        (m) =>
-          m.source === 'health_sync' &&
-          m.date.split('T')[0] === dateStr &&
-          m.weightKg === weightKg,
-      );
-      if (exists) return state;
+  addWeightFromHealthSync: async (weightKg, date) => {
+    const state = get();
+    const dateStr = date.split('T')[0];
+    const exists = state.measurements.some(
+      (m) =>
+        m.source === 'health_sync' &&
+        m.date.split('T')[0] === dateStr &&
+        m.weightKg === weightKg,
+    );
+    if (exists) return;
 
-      const newMeasurement: BodyMeasurement = {
-        id: generateId(),
-        date,
-        weightKg,
-        source: 'health_sync',
-      };
-      const measurements = [...state.measurements, newMeasurement].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-      );
-      AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
-      return { measurements };
-    });
+    const newMeasurement: BodyMeasurement = {
+      id: generateId(),
+      date,
+      weightKg,
+      source: 'health_sync',
+    };
+    const measurements = [...state.measurements, newMeasurement].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+    set({ measurements });
+    await AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
   },
 
-  deleteMeasurement: (id) => {
-    set((state) => {
-      const measurements = state.measurements.filter((m) => m.id !== id);
-      AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
-      return { measurements };
-    });
+  deleteMeasurement: async (id) => {
+    const measurements = get().measurements.filter((m) => m.id !== id);
+    set({ measurements });
+    await AsyncStorage.setItem(STORAGE_KEYS.DATA, JSON.stringify(measurements));
   },
 
-  addPhoto: (photo) => {
-    set((state) => {
-      const newPhoto: ProgressPhoto = {
-        ...photo,
-        id: generateId(),
-      };
-      const photos = [...state.photos, newPhoto].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-      );
-      AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
-      return { photos };
-    });
+  addPhoto: async (photo) => {
+    const newPhoto: ProgressPhoto = {
+      ...photo,
+      id: generateId(),
+    };
+    const photos = [...get().photos, newPhoto].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+    set({ photos });
+    await AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
   },
 
-  deletePhoto: (id) => {
-    set((state) => {
-      const photos = state.photos.filter((p) => p.id !== id);
-      AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
-      return { photos };
-    });
+  deletePhoto: async (id) => {
+    const photos = get().photos.filter((p) => p.id !== id);
+    set({ photos });
+    await AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
   },
 }));

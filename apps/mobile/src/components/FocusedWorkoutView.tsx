@@ -101,7 +101,7 @@ export function FocusedWorkoutView({
   const unit = isMetric ? 'kg' : 'lbs';
 
   const suggestion = useMemo(
-    () => getSuggestedLoad(exercise.exerciseId, '8-12', exercise.sets.length, history, isMetric),
+    () => getSuggestedLoad(exercise.exerciseId, exercise.targetReps ?? '8-12', exercise.sets.length, history, isMetric),
     [exercise.exerciseId, exercise.sets.length, history, isMetric],
   );
 
@@ -145,6 +145,8 @@ export function FocusedWorkoutView({
 
   // ── Input handlers ─────────────────────────────────────────────────
 
+  const weightStep = isMetric ? 2.5 : 5;
+
   const incrementWeight = useCallback(
     (delta: number) => {
       setLocalWeight((prev) => {
@@ -168,9 +170,12 @@ export function FocusedWorkoutView({
   // ── Animations ────────────────────────────────────────────────────
   const logBtnScale = useRef(new Animated.Value(1)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
+  const isLoggingRef = useRef(false);
 
   // ── Log Set handler ────────────────────────────────────────────────
   const handleLogSet = useCallback(() => {
+    if (isLoggingRef.current) return;
+    isLoggingRef.current = true;
     if (!currentSet) return;
 
     const w = parseFloat(localWeight);
@@ -223,6 +228,7 @@ export function FocusedWorkoutView({
       const restTime = exercise.restSeconds ?? storeDefaultRestSeconds ?? 90;
       startRestTimer(restTime);
     }
+    setTimeout(() => { isLoggingRef.current = false; }, 300);
   }, [
     currentSet,
     localWeight,
@@ -439,7 +445,7 @@ export function FocusedWorkoutView({
             </Text>
             <View style={styles.inputRow}>
               <TouchableOpacity
-                onPress={() => incrementWeight(-5)}
+                onPress={() => incrementWeight(-weightStep)}
                 style={[
                   styles.bigIncBtn,
                   { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
@@ -468,7 +474,7 @@ export function FocusedWorkoutView({
                 selectTextOnFocus
               />
               <TouchableOpacity
-                onPress={() => incrementWeight(5)}
+                onPress={() => incrementWeight(weightStep)}
                 style={[
                   styles.bigIncBtn,
                   { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },

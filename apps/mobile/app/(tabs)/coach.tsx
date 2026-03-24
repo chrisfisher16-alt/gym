@@ -79,7 +79,7 @@ export default function CoachTab() {
     if (tier === 'free') {
       checkAIMessageLimit().then(setAIUsage);
     }
-  }, [tier]);
+  }, [tier, messages.length]);
 
   const currentMessages = activeConversation
     ? messages.filter((m) => m.conversation_id === activeConversation.id)
@@ -136,9 +136,10 @@ export default function CoachTab() {
   const handlePromptSelect = useCallback(
     (prompt: string) => {
       if (isLoading) return;
+      if (tier === 'free' && aiUsage && !aiUsage.allowed) return;
       sendMessage(prompt);
     },
-    [isLoading, sendMessage],
+    [isLoading, sendMessage, tier, aiUsage],
   );
 
   const handleNewConversation = useCallback(() => {

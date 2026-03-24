@@ -72,7 +72,7 @@ interface CoachState {
   // Actions
   initialize: () => Promise<void>;
   sendMessage: (text: string, context?: CoachContext, imageUri?: string) => Promise<void>;
-  startConversation: (context?: CoachContext) => void;
+  startConversation: (context?: CoachContext) => Promise<void>;
   loadConversation: (conversationId: string) => Promise<void>;
   loadHistory: () => Promise<void>;
   clearError: () => void;
@@ -293,7 +293,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     }
   },
 
-  startConversation: (context = 'general') => {
+  startConversation: async (context = 'general') => {
     const conversation: CoachConversation = {
       id: generateId('conv'),
       context,
@@ -308,7 +308,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       error: null,
     }));
 
-    AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(conversation));
+    await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(conversation));
+    await AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify([conversation, ...get().conversations.filter(c => c.id !== conversation.id)]));
   },
 
   loadConversation: async (conversationId: string) => {
@@ -323,10 +324,14 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const allMessages: CoachMessage[] = stored ? JSON.parse(stored) : [];
       const messages = allMessages.filter((m) => m.conversation_id === conversationId);
 
-      set({
-        activeConversation: conversation,
-        messages,
-        error: null,
+      set((s) => {
+        // Keep messages from other conversations, replace/add messages for this conversation
+        const otherMessages = s.messages.filter((m) => m.conversation_id !== conversationId);
+        return {
+          activeConversation: conversation,
+          messages: [...otherMessages, ...messages],
+          error: null,
+        };
       });
     } catch {
       // Fall back to whatever is in state

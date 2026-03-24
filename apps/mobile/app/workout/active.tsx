@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
 import { useWorkoutStore } from '../../src/stores/workout-store';
+import { useProfileStore } from '../../src/stores/profile-store';
 import type { ActiveExercise, ExerciseLibraryEntry, CompletedSession } from '../../src/types/workout';
 import { CommandCenterCard } from '../../src/components/workout/CommandCenterCard';
 import { RestTimerOverlay } from '../../src/components/workout/RestTimerOverlay';
@@ -119,6 +120,8 @@ export default function ActiveWorkoutScreen() {
   const [cooldownDismissed, setCooldownDismissed] = useState(false);
   const [drilledExerciseIndex, setDrilledExerciseIndex] = useState<number | null>(null);
 
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
   const exerciseLibrary = useWorkoutStore((s) => s.exercises);
   const uncompleteSet = useWorkoutStore((s) => s.uncompleteSet);
   const workoutPhase = useWorkoutPhase();
@@ -288,13 +291,13 @@ export default function ActiveWorkoutScreen() {
     setCooldownDismissed(true);
   }, [workoutFocus, exerciseLibrary, addExerciseToSession]);
 
-  const doFinish = () => {
+  const doFinish = async () => {
     clearUndoStack();
-    // Set showReplay BEFORE completeWorkout — completeWorkout synchronously
-    // sets activeSession to null via zustand, which triggers a re-render.
+    // Set showReplay BEFORE completeWorkout — completeWorkout now awaits
+    // AsyncStorage writes, but sets activeSession to null synchronously.
     // Without this flag already true, the !activeSession guard navigates away.
     setShowReplay(true);
-    const result = completeWorkout();
+    const result = await completeWorkout();
     if (result) {
       successNotification();
       setCompletedSession(result);
@@ -596,7 +599,7 @@ export default function ActiveWorkoutScreen() {
             Sets: {completedSets}
           </Text>
           <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-            Volume: {totalVolume.toLocaleString()} lbs
+            Volume: {totalVolume.toLocaleString()} {unit}
           </Text>
           <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
             Exercises: {activeSession.exercises.filter((e) => !e.isSkipped).length}

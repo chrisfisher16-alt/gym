@@ -197,7 +197,9 @@ export default function RecipesScreen() {
   // ── Common Handlers ────────────────────────────────────────────────
 
   const handleLogRecipe = (recipeId: string) => {
-    logRecipe(recipeId, 'lunch' as MealType);
+    const hour = new Date().getHours();
+    const mealType: MealType = hour < 10 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+    logRecipe(recipeId, mealType);
     if (Platform.OS !== 'web') {
       crossPlatformAlert('Logged', 'Recipe has been logged as a meal.');
     }

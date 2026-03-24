@@ -445,7 +445,7 @@ export default function PaywallScreen() {
         <View style={{ marginTop: spacing.lg }}>
           <TouchableOpacity
             onPress={() => {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              if (Platform.OS !== 'web') LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               setPromoExpanded(!promoExpanded);
             }}
             style={{ alignItems: 'center', paddingVertical: spacing.sm }}

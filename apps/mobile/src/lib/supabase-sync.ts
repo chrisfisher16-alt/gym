@@ -16,6 +16,7 @@ async function getNetInfo() {
 
 const SYNC_QUEUE_KEY = '@formiq/sync_queue';
 const SYNC_STATUS_KEY = '@formiq/sync_status';
+const DEAD_LETTER_KEY = '@formiq/sync_dead_letter';
 
 export type SyncItemType =
   | 'session_create'
@@ -172,7 +173,13 @@ export async function processQueue(): Promise<{ processed: number; failed: numbe
         remaining.push(item);
       } else {
         failed++;
-        console.warn(`Dropping sync item after ${item.maxRetries} retries:`, item.type);
+        console.warn(`Moving sync item to dead letter after ${item.maxRetries} retries:`, item.type);
+        try {
+          const dlRaw = await AsyncStorage.getItem(DEAD_LETTER_KEY);
+          const deadLetter: SyncQueueItem[] = dlRaw ? JSON.parse(dlRaw) : [];
+          deadLetter.push(item);
+          await AsyncStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(deadLetter));
+        } catch {}
       }
     }
   }
@@ -187,6 +194,31 @@ export async function processQueue(): Promise<{ processed: number; failed: numbe
 
   _isProcessing = false;
   return { processed, failed };
+}
+
+export async function getDeadLetterQueue(): Promise<SyncQueueItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(DEAD_LETTER_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function retryDeadLetterQueue(): Promise<{ processed: number; failed: number }> {
+  const deadLetter = await getDeadLetterQueue();
+  if (deadLetter.length === 0) return { processed: 0, failed: 0 };
+
+  // Move items back to the main queue with reset retry counts
+  const queue = await getQueue();
+  for (const item of deadLetter) {
+    item.retryCount = 0;
+    queue.push(item);
+  }
+  await saveQueue(queue);
+  await AsyncStorage.removeItem(DEAD_LETTER_KEY);
+
+  return processQueue();
 }
 
 // ─── Pull from Supabase ────────────────────────────────────────────────────────

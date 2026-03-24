@@ -170,7 +170,7 @@ export default function AISettingsScreen() {
   }, [config]);
 
   const handleSelectModel = useCallback((modelId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (Platform.OS !== 'web') LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     updateConfig({ model: modelId });
     setModelDropdownOpen(false);
   }, [updateConfig]);

@@ -29,6 +29,7 @@ const STORAGE_KEYS = {
   PERSONAL_RECORDS: '@workout/personal_records',
   DEFAULT_REST_SECONDS: '@workout/default_rest_seconds',
   PROGRAM_COMPLETIONS: '@workout/program_completions',
+  AUTO_REST_TIMER: '@workout/auto_rest_timer',
 } as const;
 
 // ── State ───────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ interface WorkoutState {
   todayWorkoutStatus: () => 'pending' | 'active' | 'completed';
 
   // Actions - Workout Completion
-  completeWorkout: () => CompletedSession | null;
+  completeWorkout: () => Promise<CompletedSession | null>;
   cancelWorkout: () => void;
 
   // Actions - Session Metadata
@@ -279,7 +280,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   addProgram: (program) => {
     set((state) => {
       const programs = [...state.programs, program];
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
       return { programs };
     });
   },
@@ -290,15 +291,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const programs = state.programs.map((p) =>
         p.id === updated.id ? updated : p,
       );
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
       return { programs };
     });
   },
 
   deleteProgram: (programId) => {
+    const program = get().programs.find((p) => p.id === programId);
+    if (program && !program.customized) return; // Don't delete seed programs
     set((state) => {
       const programs = state.programs.filter((p) => p.id !== programId);
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
       return { programs };
     });
   },
@@ -309,7 +312,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ...p,
         isActive: p.id === programId,
       }));
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
       return { programs };
     });
     // Re-sync workout reminder days to match the new active program.
@@ -535,6 +538,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         activeSession: { ...state.activeSession, exercises },
       };
     });
+    get().persistActiveSession();
   },
 
   removeSet: (exerciseInstanceId, setId) => {
@@ -694,8 +698,10 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         .filter((e) => e.id !== exerciseInstanceId)
         .map((e, i) => ({ ...e, order: i }));
 
+      const currentIdx = state.activeSession.currentExerciseIndex ?? 0;
+      const clampedIdx = Math.min(currentIdx, Math.max(0, exercises.length - 1));
       return {
-        activeSession: { ...state.activeSession, exercises },
+        activeSession: { ...state.activeSession, exercises, currentExerciseIndex: clampedIdx },
       };
     });
     get().persistActiveSession();
@@ -809,7 +815,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           ...exercise,
           sets: exercise.sets.map((s) => {
             if (s.id !== setId) return s;
-            return { ...s, durationSeconds };
+            return { ...s, durationSeconds, isCompleted: true, completedAt: new Date().toISOString() };
           }),
         };
       });
@@ -935,6 +941,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   setAutoRestTimer: (enabled) => {
     set({ autoRestTimer: enabled });
+    AsyncStorage.setItem(STORAGE_KEYS.AUTO_REST_TIMER, JSON.stringify(enabled)).catch(console.warn);
   },
 
   startRestTimer: (durationSeconds) => {
@@ -1006,7 +1013,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   // ── Workout Completion ──────────────────────────────────────────
 
-  completeWorkout: () => {
+  completeWorkout: async () => {
     const state = get();
     if (!state.activeSession) return null;
 
@@ -1020,8 +1027,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     set({ activeSession: null, history });
 
-    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
-    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+    await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
 
     return completed;
   },
@@ -1036,7 +1043,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   deleteSession: (sessionId) => {
     const history = get().history.filter((s) => s.id !== sessionId);
     set({ history });
-    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history)).catch(console.warn);
   },
 
   // ── Session Metadata ────────────────────────────────────────────
@@ -1046,6 +1053,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, notes } };
     });
+    get().persistActiveSession();
   },
 
   updateSessionMood: (mood) => {
@@ -1053,6 +1061,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, mood } };
     });
+    get().persistActiveSession();
   },
 
   updateSessionName: (name) => {
@@ -1060,6 +1069,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, name } };
     });
+    get().persistActiveSession();
   },
 
   // ── Program Progress ───────────────────────────────────────────
@@ -1100,7 +1110,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(
         STORAGE_KEYS.PROGRAM_COMPLETIONS,
         JSON.stringify(programCompletions),
-      );
+      ).catch(console.warn);
       return { programCompletions };
     });
   },
@@ -1115,7 +1125,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(
         STORAGE_KEYS.EXERCISES,
         JSON.stringify(customExercises),
-      );
+      ).catch(console.warn);
       return { exercises };
     });
   },

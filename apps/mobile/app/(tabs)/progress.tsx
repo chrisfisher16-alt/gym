@@ -142,7 +142,33 @@ export default function ProgressTab() {
 
   const displayTotalWorkouts = demo ? 10 : totalWorkouts;
   const displayTotalVolume = demo ? demoHistory.reduce((s, h) => s + h.totalVolume, 0) : totalVolume;
-  const displayStreak = demo ? DEMO_STREAK.currentStreak : 0;
+  const displayStreak = useMemo(() => {
+    if (demo) return DEMO_STREAK.currentStreak;
+    const h = history ?? [];
+    if (h.length === 0) return 0;
+    // Get unique workout dates sorted descending
+    const dates = [...new Set(h.map((s: any) => {
+      const d = new Date(s.completedAt);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }))].sort().reverse();
+    let streak = 0;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const yesterday = new Date(now.getTime() - 86400000);
+    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+    if (dates[0] !== todayStr && dates[0] !== yesterdayStr) return 0;
+    let expected = new Date(dates[0]);
+    for (const d of dates) {
+      const expStr = `${expected.getFullYear()}-${String(expected.getMonth() + 1).padStart(2, '0')}-${String(expected.getDate()).padStart(2, '0')}`;
+      if (d === expStr) {
+        streak++;
+        expected = new Date(expected.getTime() - 86400000);
+      } else if (d < expStr) {
+        break;
+      }
+    }
+    return streak;
+  }, [demo, history]);
   const displayPRs = demo ? demoPRs : allRecords;
   const displayRecentPRs = demo
     ? demoPRs.map((pr) => ({
@@ -317,7 +343,7 @@ export default function ProgressTab() {
 
     const now = new Date();
     for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const log = dailyLogs[dateStr];
       if (!log || !log.meals || log.meals.length === 0) continue;
 
@@ -346,21 +372,13 @@ export default function ProgressTab() {
   // ── Exercises with PRs for strength progress ───────────────────
 
   const exerciseOptions = useMemo(() => {
-    const names: Record<string, string> = {
-      'bench-press': 'Bench Press',
-      squat: 'Barbell Squat',
-      deadlift: 'Deadlift',
-      'overhead-press': 'Overhead Press',
-      'barbell-row': 'Barbell Row',
-      'lat-pulldown': 'Lat Pulldown',
-      'barbell-curl': 'Barbell Curl',
-      'incline-db-press': 'Incline DB Press',
-    };
+    const lookupName = (id: string) =>
+      exercises.find((e: any) => e.id === id)?.name ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
     if (demo) {
-      return demoPRs.map((pr) => ({ id: pr.exerciseId, name: names[pr.exerciseId] ?? pr.exerciseId }));
+      return demoPRs.map((pr) => ({ id: pr.exerciseId, name: lookupName(pr.exerciseId) }));
     }
-    return allRecords.map((pr) => ({ id: pr.exerciseId, name: names[pr.exerciseId] ?? pr.exerciseId }));
-  }, [demo, demoPRs, allRecords]);
+    return allRecords.map((pr) => ({ id: pr.exerciseId, name: lookupName(pr.exerciseId) }));
+  }, [demo, demoPRs, allRecords, exercises]);
 
   const selectedPRData = useMemo(() => {
     if (!selectedExercise) return null;
@@ -388,16 +406,8 @@ export default function ProgressTab() {
       date: string;
     }> = [];
 
-    const exNames: Record<string, string> = {
-      'bench-press': 'Bench Press',
-      squat: 'Barbell Squat',
-      deadlift: 'Deadlift',
-      'overhead-press': 'Overhead Press',
-      'barbell-row': 'Barbell Row',
-      'lat-pulldown': 'Lat Pulldown',
-      'barbell-curl': 'Barbell Curl',
-      'incline-db-press': 'Incline DB Press',
-    };
+    const lookupName = (id: string) =>
+      exercises.find((e: any) => e.id === id)?.name ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
     const records = demo ? demoPRs : allRecords;
 
@@ -405,7 +415,7 @@ export default function ProgressTab() {
       if (record.heaviestWeight) {
         prs.push({
           exerciseId: record.exerciseId,
-          exerciseName: exNames[record.exerciseId] ?? record.exerciseId,
+          exerciseName: lookupName(record.exerciseId),
           weight: record.heaviestWeight.weight,
           reps: record.heaviestWeight.reps,
           date: record.heaviestWeight.date,
@@ -416,7 +426,7 @@ export default function ProgressTab() {
     return prs
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
-  }, [demo, demoPRs, allRecords]);
+  }, [demo, demoPRs, allRecords, exercises]);
 
   // ── Inline Insight (workout / streak) ──────────────────────────
   const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
@@ -915,25 +925,44 @@ export default function ProgressTab() {
           </View>
           {/* Change Indicator */}
           <View style={[styles.changeRow, { marginTop: spacing.md }]}>
-            <Ionicons
-              name={monthlyComparison.change >= 0 ? 'arrow-up' : 'arrow-down'}
-              size={16}
-              color={monthlyComparison.change >= 0 ? colors.success : colors.error}
-            />
-            <Text
-              style={[
-                typography.label,
-                {
-                  color: monthlyComparison.change >= 0 ? colors.success : colors.error,
-                  marginLeft: 4,
-                },
-              ]}
-            >
-              {Math.abs(Math.round(monthlyComparison.change))}%
-            </Text>
-            <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.xs }]}>
-              vs last month
-            </Text>
+            {monthlyComparison.previous === 0 && monthlyComparison.current > 0 ? (
+              <>
+                <Ionicons name="sparkles" size={16} color={colors.success} />
+                <Text
+                  style={[
+                    typography.label,
+                    { color: colors.success, marginLeft: 4 },
+                  ]}
+                >
+                  New
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.xs }]}>
+                  first month tracked
+                </Text>
+              </>
+            ) : (
+              <>
+                <Ionicons
+                  name={monthlyComparison.change >= 0 ? 'arrow-up' : 'arrow-down'}
+                  size={16}
+                  color={monthlyComparison.change >= 0 ? colors.success : colors.error}
+                />
+                <Text
+                  style={[
+                    typography.label,
+                    {
+                      color: monthlyComparison.change >= 0 ? colors.success : colors.error,
+                      marginLeft: 4,
+                    },
+                  ]}
+                >
+                  {Math.abs(Math.round(monthlyComparison.change))}%
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.xs }]}>
+                  vs last month
+                </Text>
+              </>
+            )}
           </View>
         </Card>
       </View>

@@ -103,12 +103,12 @@ export const darkColors: typeof lightColors = {
   // Text
   text: '#F5F5F5',
   textSecondary: '#A0A0A0',
-  textTertiary: '#6B6B6B',
+  textTertiary: '#808080',
   textInverse: '#0D0D0D',
 
   // Border
   border: '#2A2A2A',
-  borderLight: '#1A1A1A',
+  borderLight: '#252525',
 
   // Status
   success: '#10B981',

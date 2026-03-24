@@ -30,6 +30,7 @@ export function RestTimerBar() {
     restTimerDuration,
     clearRestTimer,
     startRestTimer,
+    extendRestTimer,
     activeSession,
   } = useActiveWorkout();
   const updateExerciseRestTimerMode = useWorkoutStore((s) => s.updateExerciseRestTimerMode);
@@ -211,7 +212,7 @@ export function RestTimerBar() {
         <View style={styles.actionsSection}>
           {!isCompleted && (
             <TouchableOpacity
-              onPress={() => startRestTimer(restSecondsLeft + 30)}
+              onPress={() => extendRestTimer(30)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={[
                 styles.actionBtn,

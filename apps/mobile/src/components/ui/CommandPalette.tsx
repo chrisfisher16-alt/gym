@@ -677,7 +677,7 @@ export function CommandPalette({ visible, onClose }: CommandPaletteProps) {
                         { color: colors.textTertiary, marginTop: spacing.md, textAlign: 'center' },
                       ]}
                     >
-                      No results for &ldquo;{query}&rdquo;
+                      No results for "{query}"
                     </Text>
                   </View>
                 ) : null

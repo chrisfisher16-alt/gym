@@ -160,7 +160,7 @@ export default function CompleteScreen() {
           )}
 
           <View style={[styles.summary, { marginTop: spacing['2xl'], gap: spacing.md }]}>
-            <SummaryRow label="Name" value={onboarding.displayName} colors={colors} typography={typography} spacing={spacing} />
+            <SummaryRow label="Name" value={onboarding.displayName || user?.email?.split('@')[0] || 'User'} colors={colors} typography={typography} spacing={spacing} />
             <SummaryRow
               label="Goal"
               value={

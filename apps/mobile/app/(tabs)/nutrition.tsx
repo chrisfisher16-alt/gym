@@ -232,8 +232,13 @@ export default function NutritionTab() {
 
   // ── Swipe: Delete meal (with confirmation + brief toast) ──
   const handleDeleteMealSwipe = useCallback((meal: MealEntry) => {
-    deleteMeal(meal.id);
-    showToast('Meal deleted', 'info', 2000);
+    crossPlatformAlert('Delete Meal', 'Are you sure you want to delete this meal?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => {
+        deleteMeal(meal.id);
+        showToast('Meal deleted', 'info', 2000);
+      }},
+    ]);
   }, [deleteMeal, showToast]);
 
   // ── Quick Actions for meal long-press ──
@@ -632,7 +637,7 @@ export default function NutritionTab() {
               ]}
             />
             {(() => {
-              const waterProgress = Math.min(waterIntake / waterTarget, 1);
+              const waterProgress = waterTarget > 0 ? Math.min(waterIntake / waterTarget, 1) : 0;
               return (
                 <View
                   style={[
@@ -656,7 +661,7 @@ export default function NutritionTab() {
             <View style={styles.waterRingCenter}>
               <Ionicons name="water" size={18} color="#3B82F6" />
               <Text style={[typography.labelSmall, { color: colors.textSecondary, marginTop: 2 }]}>
-                {Math.round((waterIntake / waterTarget) * 100)}%
+                {waterTarget > 0 ? Math.round((waterIntake / waterTarget) * 100) : 0}%
               </Text>
             </View>
           </View>
