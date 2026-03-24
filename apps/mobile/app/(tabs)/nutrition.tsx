@@ -772,18 +772,18 @@ export default function NutritionTab() {
                     {
                       backgroundColor: '#3B82F6',
                       borderRadius: radius.md,
-                      opacity: customWaterAmount && parseInt(customWaterAmount) > 0 ? 1 : 0.5,
+                      opacity: customWaterAmount && parseInt(customWaterAmount, 10) > 0 ? 1 : 0.5,
                     },
                   ]}
                   onPress={() => {
-                    const oz = parseInt(customWaterAmount);
+                    const oz = parseInt(customWaterAmount, 10);
                     if (oz > 0) {
                       addCustom(oz);
                       setShowCustomWater(false);
                       setCustomWaterAmount('');
                     }
                   }}
-                  disabled={!customWaterAmount || parseInt(customWaterAmount) <= 0}
+                  disabled={!customWaterAmount || parseInt(customWaterAmount, 10) <= 0}
                 >
                   <Text style={[typography.label, { color: '#FFFFFF' }]}>Add</Text>
                 </TouchableOpacity>

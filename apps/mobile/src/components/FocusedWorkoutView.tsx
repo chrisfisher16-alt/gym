@@ -31,6 +31,7 @@ if (Platform.OS !== 'web') {
 export interface FocusedWorkoutViewProps {
   activeSession: ActiveWorkoutSession;
   logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number, isAutoFilled?: boolean) => void;
+  logTimedSet: (exerciseInstanceId: string, setId: string, durationSeconds: number) => void;
   completeSet: (exerciseInstanceId: string, setId: string) => void;
   startRestTimer: (durationSeconds: number) => void;
   setCurrentExerciseIndex: (index: number) => void;
@@ -70,6 +71,7 @@ function isSupersetRoundComplete(members: ActiveExercise[]): boolean {
 export function FocusedWorkoutView({
   activeSession,
   logSet,
+  logTimedSet,
   completeSet,
   startRestTimer,
   setCurrentExerciseIndex,
@@ -100,6 +102,10 @@ export function FocusedWorkoutView({
   const isMetric = unitPref === 'metric';
   const unit = isMetric ? 'kg' : 'lbs';
 
+  // ── Exercise type detection ───────────────────────────────────────
+  const isTimeBased = exercise.isTimeBased ?? exerciseLib?.isTimeBased ?? false;
+  const isBodyweight = exercise.isBodyweight ?? exerciseLib?.isBodyweight ?? false;
+
   const suggestion = useMemo(
     () => getSuggestedLoad(exercise.exerciseId, exercise.targetReps ?? '8-12', exercise.sets.length, history, isMetric),
     [exercise.exerciseId, exercise.sets.length, history, isMetric],
@@ -119,17 +125,25 @@ export function FocusedWorkoutView({
     logSet(exercise.id, currentSet.id, w, r);
   }, [suggestion, currentSet, exercise.id, logSet]);
 
-  // ── Local weight / reps state (mirrors current set) ────────────────
+  // ── Local weight / reps / duration state (mirrors current set) ─────
   const [localWeight, setLocalWeight] = useState('');
   const [localReps, setLocalReps] = useState('');
+  const [localDuration, setLocalDuration] = useState('');
+
+  const defaultDuration = exercise.defaultDurationSeconds ?? exerciseLib?.defaultDurationSeconds ?? 30;
 
   // Sync local inputs when the current set changes (e.g. after auto-advance)
   useEffect(() => {
     if (currentSet) {
       setLocalWeight(currentSet.weight !== undefined ? currentSet.weight.toString() : '');
       setLocalReps(currentSet.reps !== undefined ? currentSet.reps.toString() : '');
+      setLocalDuration(
+        currentSet.durationSeconds !== undefined
+          ? currentSet.durationSeconds.toString()
+          : defaultDuration.toString(),
+      );
     }
-  }, [currentSet?.id, currentSet?.weight, currentSet?.reps]);
+  }, [currentSet?.id, currentSet?.weight, currentSet?.reps, currentSet?.durationSeconds, defaultDuration]);
 
   // ── Superset info ──────────────────────────────────────────────────
   const supersetGroupId = exercise.supersetGroupId;
@@ -167,6 +181,16 @@ export function FocusedWorkoutView({
     [],
   );
 
+  const incrementDuration = useCallback(
+    (delta: number) => {
+      setLocalDuration((prev) => {
+        const newVal = Math.max(0, (parseInt(prev, 10) || 0) + delta);
+        return newVal.toString();
+      });
+    },
+    [],
+  );
+
   // ── Animations ────────────────────────────────────────────────────
   const logBtnScale = useRef(new Animated.Value(1)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
@@ -178,9 +202,18 @@ export function FocusedWorkoutView({
     isLoggingRef.current = true;
     if (!currentSet) return;
 
-    const w = parseFloat(localWeight);
-    const r = parseInt(localReps, 10);
-    if (isNaN(w) || isNaN(r)) return;
+    // Validate inputs based on exercise type
+    if (isTimeBased) {
+      const dur = parseInt(localDuration, 10);
+      if (isNaN(dur) || dur <= 0) { isLoggingRef.current = false; return; }
+    } else if (isBodyweight) {
+      const r = parseInt(localReps, 10);
+      if (isNaN(r)) { isLoggingRef.current = false; return; }
+    } else {
+      const w = parseFloat(localWeight);
+      const r = parseInt(localReps, 10);
+      if (isNaN(w) || isNaN(r)) { isLoggingRef.current = false; return; }
+    }
 
     // Button scale animation
     Animated.sequence([
@@ -192,17 +225,32 @@ export function FocusedWorkoutView({
     flashAnim.setValue(1);
     Animated.timing(flashAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start();
 
-    // 1. Log weight/reps then complete the set
-    logSet(exercise.id, currentSet.id, w, r);
-    completeSet(exercise.id, currentSet.id);
+    // 1. Log the set based on exercise type
+    if (isTimeBased) {
+      const dur = parseInt(localDuration, 10);
+      logTimedSet(exercise.id, currentSet.id, dur);
+    } else if (isBodyweight) {
+      const r = parseInt(localReps, 10);
+      logSet(exercise.id, currentSet.id, 0, r);
+      completeSet(exercise.id, currentSet.id);
+    } else {
+      const w = parseFloat(localWeight);
+      const r = parseInt(localReps, 10);
+      logSet(exercise.id, currentSet.id, w, r);
+      completeSet(exercise.id, currentSet.id);
+    }
     Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-    // 2. Auto-fill: if the next incomplete set has empty weight/reps, pre-populate it
+    // 2. Auto-fill: if the next incomplete set has empty values, pre-populate it
     const nextIncomplete = exercise.sets.find(
       (s) => !s.isCompleted && s.id !== currentSet.id,
     );
-    if (nextIncomplete && nextIncomplete.weight === undefined && nextIncomplete.reps === undefined) {
-      logSet(exercise.id, nextIncomplete.id, w, r, true);
+    if (nextIncomplete && !isTimeBased) {
+      const w = isBodyweight ? 0 : parseFloat(localWeight);
+      const r = parseInt(localReps, 10);
+      if (nextIncomplete.weight === undefined && nextIncomplete.reps === undefined) {
+        logSet(exercise.id, nextIncomplete.id, w, r, true);
+      }
     }
 
     // 3. Superset flow: cycle to next exercise in the group
@@ -233,8 +281,12 @@ export function FocusedWorkoutView({
     currentSet,
     localWeight,
     localReps,
+    localDuration,
+    isTimeBased,
+    isBodyweight,
     exercise,
     logSet,
+    logTimedSet,
     completeSet,
     startRestTimer,
     storeDefaultRestSeconds,
@@ -418,14 +470,16 @@ export function FocusedWorkoutView({
             ]}
           />
 
-          {/* Suggestion banner */}
-          {suggestion && (
+          {/* Suggestion banner (only for weighted exercises) */}
+          {suggestion && !isTimeBased && (
             <View style={[styles.suggestionCard, { backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md }]}>
               <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
                 Based on your last workout, try:
               </Text>
               <Text style={[typography.h2, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, textAlign: 'center' }]}>
-                {suggestion.suggestedWeight} {unit} × {suggestion.suggestedReps} reps
+                {isBodyweight
+                  ? `${suggestion.suggestedReps} reps`
+                  : `${suggestion.suggestedWeight} ${unit} × ${suggestion.suggestedReps} reps`}
               </Text>
               <TouchableOpacity
                 onPress={handleUseSuggestion}
@@ -438,99 +492,156 @@ export function FocusedWorkoutView({
             </View>
           )}
 
-          {/* Weight - Scoreboard style */}
-          <View style={styles.inputBlock}>
-            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
-              WEIGHT ({unit})
-            </Text>
-            <View style={styles.inputRow}>
-              <TouchableOpacity
-                onPress={() => incrementWeight(-weightStep)}
-                style={[
-                  styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                ]}
-              >
-                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
-              </TouchableOpacity>
-              <TextInput
-                style={[
-                  styles.bigInput,
-                  {
-                    color: colors.text,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.lg,
-                    fontSize: 48,
-                    fontWeight: '700',
-                    letterSpacing: -1,
-                  },
-                ]}
-                value={localWeight}
-                onChangeText={setLocalWeight}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={colors.textTertiary}
-                selectTextOnFocus
-              />
-              <TouchableOpacity
-                onPress={() => incrementWeight(weightStep)}
-                style={[
-                  styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                ]}
-              >
-                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
-              </TouchableOpacity>
+          {isTimeBased ? (
+            /* ── Duration input for timed exercises ──────────────────── */
+            <View style={styles.inputBlock}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+                DURATION (seconds)
+              </Text>
+              <View style={styles.inputRow}>
+                <TouchableOpacity
+                  onPress={() => incrementDuration(-5)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[
+                    styles.bigInput,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      fontSize: 48,
+                      fontWeight: '700',
+                      letterSpacing: -1,
+                    },
+                  ]}
+                  value={localDuration}
+                  onChangeText={setLocalDuration}
+                  keyboardType="number-pad"
+                  placeholder={defaultDuration.toString()}
+                  placeholderTextColor={colors.textTertiary}
+                  selectTextOnFocus
+                />
+                <TouchableOpacity
+                  onPress={() => incrementDuration(5)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[typography.bodySmall, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.sm }]}>
+                {Math.floor((parseInt(localDuration, 10) || 0) / 60)}:{String((parseInt(localDuration, 10) || 0) % 60).padStart(2, '0')}
+              </Text>
             </View>
-          </View>
+          ) : (
+            /* ── Weight + Reps inputs (bodyweight skips weight) ──────── */
+            <>
+              {/* Weight - Scoreboard style (hidden for bodyweight) */}
+              {!isBodyweight && (
+                <View style={styles.inputBlock}>
+                  <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+                    WEIGHT ({unit})
+                  </Text>
+                  <View style={styles.inputRow}>
+                    <TouchableOpacity
+                      onPress={() => incrementWeight(-weightStep)}
+                      style={[
+                        styles.bigIncBtn,
+                        { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[
+                        styles.bigInput,
+                        {
+                          color: colors.text,
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                          borderRadius: radius.lg,
+                          fontSize: 48,
+                          fontWeight: '700',
+                          letterSpacing: -1,
+                        },
+                      ]}
+                      value={localWeight}
+                      onChangeText={setLocalWeight}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor={colors.textTertiary}
+                      selectTextOnFocus
+                    />
+                    <TouchableOpacity
+                      onPress={() => incrementWeight(weightStep)}
+                      style={[
+                        styles.bigIncBtn,
+                        { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
-          {/* Reps - Scoreboard style */}
-          <View style={[styles.inputBlock, { marginTop: spacing.xl }]}>
-            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
-              REPS
-            </Text>
-            <View style={styles.inputRow}>
-              <TouchableOpacity
-                onPress={() => incrementReps(-1)}
-                style={[
-                  styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                ]}
-              >
-                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
-              </TouchableOpacity>
-              <TextInput
-                style={[
-                  styles.bigInput,
-                  {
-                    color: colors.text,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.lg,
-                    fontSize: 48,
-                    fontWeight: '700',
-                    letterSpacing: -1,
-                  },
-                ]}
-                value={localReps}
-                onChangeText={setLocalReps}
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor={colors.textTertiary}
-                selectTextOnFocus
-              />
-              <TouchableOpacity
-                onPress={() => incrementReps(1)}
-                style={[
-                  styles.bigIncBtn,
-                  { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                ]}
-              >
-                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+              {/* Reps - Scoreboard style */}
+              <View style={[styles.inputBlock, { marginTop: isBodyweight ? 0 : spacing.xl }]}>
+                <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+                  REPS
+                </Text>
+                <View style={styles.inputRow}>
+                  <TouchableOpacity
+                    onPress={() => incrementReps(-1)}
+                    style={[
+                      styles.bigIncBtn,
+                      { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[
+                      styles.bigInput,
+                      {
+                        color: colors.text,
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        borderRadius: radius.lg,
+                        fontSize: 48,
+                        fontWeight: '700',
+                        letterSpacing: -1,
+                      },
+                    ]}
+                    value={localReps}
+                    onChangeText={setLocalReps}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor={colors.textTertiary}
+                    selectTextOnFocus
+                  />
+                  <TouchableOpacity
+                    onPress={() => incrementReps(1)}
+                    style={[
+                      styles.bigIncBtn,
+                      { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
 
           {/* Log Set button - MASSIVE */}
           <Animated.View style={{ transform: [{ scale: logBtnScale }], marginTop: spacing['2xl'] }}>
@@ -582,7 +693,11 @@ export function FocusedWorkoutView({
                     ]}
                   >
                     <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
-                      {s.weight ?? 0} × {s.reps ?? 0}
+                      {isTimeBased
+                        ? `${s.durationSeconds ?? 0}s`
+                        : isBodyweight
+                          ? `${s.reps ?? 0} reps`
+                          : `${s.weight ?? 0} × ${s.reps ?? 0}`}
                       {s.isPR ? ' 🏆' : ''}
                     </Text>
                   </View>

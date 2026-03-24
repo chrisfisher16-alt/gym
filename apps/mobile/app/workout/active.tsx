@@ -57,6 +57,7 @@ import {
   getCooldownDescription,
 } from '../../src/lib/warmup-cooldown';
 import { successNotification } from '../../src/lib/haptics';
+import { incrementUsage } from '../../src/lib/usage-limits';
 
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
@@ -299,6 +300,7 @@ export default function ActiveWorkoutScreen() {
     setShowReplay(true);
     const result = await completeWorkout();
     if (result) {
+      incrementUsage('workout_logs');
       successNotification();
       setCompletedSession(result);
     } else {

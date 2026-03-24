@@ -229,7 +229,7 @@ export function WorkoutSummaryModal({
   });
 
   const displayCalories = watchCalories ? watchCalories.calories : calorieResult.estimated;
-  const calorieLabel = watchCalories ? `${watchCalories.source}` : 'Est. Burned';
+  const calorieLabel = watchCalories ? `${watchCalories.source}` : profileWeightKg ? 'Est. Burned' : 'Est. Burned (75kg default)';
 
   const exercisesDone = session.exercises.length;
   const durationDisplay = formatDuration(session.durationSeconds);

@@ -79,10 +79,14 @@ export default function SettingsScreen() {
       ? (profileData.weightKg / (profileData.heightCm / 100) ** 2).toFixed(1)
       : null;
 
-  // BMR (Mifflin-St Jeor approximation — requires gender assumption, use average)
+  // BMR (Mifflin-St Jeor) — use profile age and gender when available
+  const profileAge = profileData.dateOfBirth
+    ? Math.floor((Date.now() - new Date(profileData.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : 30;
+  const genderOffset = profileData.gender === 'female' ? -161 : 5;
   const bmr =
     profileData.heightCm && profileData.weightKg
-      ? Math.round(10 * profileData.weightKg + 6.25 * profileData.heightCm - 5 * 30 + 5) // age assumed ~30
+      ? Math.round(10 * profileData.weightKg + 6.25 * profileData.heightCm - 5 * profileAge + genderOffset)
       : null;
 
   return (

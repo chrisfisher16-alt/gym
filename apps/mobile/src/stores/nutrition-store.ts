@@ -662,10 +662,11 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
     const supplementsTaken = [...log.supplementsTaken, userSupplementId];
 
-    // Update streak
+    // Update streak (relative to the selected date, not today)
     const userSupplements = state.userSupplements.map((s) => {
       if (s.id !== userSupplementId) return s;
-      const wasYesterdayTaken = s.lastTakenDate === getDateString(new Date(Date.now() - 86400000));
+      const dayBefore = new Date(new Date(date).getTime() - 86400000);
+      const wasYesterdayTaken = s.lastTakenDate === getDateString(dayBefore);
       return {
         ...s,
         streak: wasYesterdayTaken ? s.streak + 1 : 1,

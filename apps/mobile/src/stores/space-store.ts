@@ -188,7 +188,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
     const spaces = [...get().spaces, space];
     set({ spaces });
-    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(spaces)).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(spaces)).catch(console.warn);
     return id;
   },
 
@@ -199,7 +199,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       s.id === id ? { ...s, ...updates } : s,
     );
     set({ spaces });
-    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(spaces)).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(spaces)).catch(console.warn);
   },
 
   // ── Delete ──────────────────────────────────────────────────────
@@ -209,9 +209,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const filtered = spaces.filter((s) => s.id !== id);
     const newActiveId = activeSpaceId === id ? null : activeSpaceId;
     set({ spaces: filtered, activeSpaceId: newActiveId });
-    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(filtered)).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(filtered)).catch(console.warn);
     if (newActiveId !== activeSpaceId) {
-      AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SPACE, JSON.stringify(newActiveId)).catch(() => {});
+      AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SPACE, JSON.stringify(newActiveId)).catch(console.warn);
     }
   },
 
@@ -222,7 +222,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     if (!space) return;
 
     set({ activeSpaceId: id });
-    AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SPACE, JSON.stringify(id)).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SPACE, JSON.stringify(id)).catch(console.warn);
 
     // Apply side effects to other stores
     applySpaceSideEffects(space);

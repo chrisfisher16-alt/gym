@@ -16,10 +16,11 @@ import { enqueueWorkoutSession, mergeWorkoutHistory, isMergeInProgress } from '.
 let bridgeInitialized = false;
 
 /**
- * Guard flag to prevent health → measurement → health circular updates.
- * When true, the measurements→health subscription skips firing.
+ * Counter-based guard to prevent health → measurement → health circular updates.
+ * When > 0, the measurements→health subscription skips firing.
+ * A counter (instead of a boolean) is race-safe under React 18 concurrent mode.
  */
-let healthSyncInProgress = false;
+let healthSyncCounter = 0;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -162,19 +163,20 @@ export function initializeStoreBridge(): () => void {
       if (
         currentWeight != null &&
         currentWeight !== lastHealthWeight &&
-        !healthSyncInProgress
+        healthSyncCounter === 0
       ) {
         lastHealthWeight = currentWeight;
-        healthSyncInProgress = true;
+        healthSyncCounter++;
+        const mySync = healthSyncCounter;
         try {
           useMeasurementsStore
             .getState()
             .addWeightFromHealthSync(currentWeight, new Date().toISOString());
         } finally {
-          // Reset after a tick to allow the measurements subscription to skip
+          // Allow the measurements subscription to see this as a health sync
           setTimeout(() => {
-            healthSyncInProgress = false;
-          }, 0);
+            if (healthSyncCounter === mySync) healthSyncCounter = 0;
+          }, 50);
         }
       }
     }),
@@ -187,7 +189,7 @@ export function initializeStoreBridge(): () => void {
   unsubscribers.push(
     useMeasurementsStore.subscribe((state) => {
       // Skip if this change came from a health sync (circular guard)
-      if (healthSyncInProgress) return;
+      if (healthSyncCounter > 0) return;
 
       const currentLength = state.measurements.length;
       if (currentLength <= lastMeasurementsLength) {

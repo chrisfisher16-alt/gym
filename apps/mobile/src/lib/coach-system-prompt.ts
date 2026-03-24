@@ -354,6 +354,15 @@ function getFilteredExerciseLibrarySummary(ctx: UserContext): string {
     ? `\n(${filteredCount} exercises shown matching your equipment. ${totalCount} total in library.)`
     : `\n(${totalCount} exercises in library.)`;
 
+  // Truncate to prevent token overflow on small models
+  const MAX_CHARS = 3000;
+  if (lines.length > MAX_CHARS) {
+    const truncated = lines.substring(0, MAX_CHARS);
+    const lastNewline = truncated.lastIndexOf('\n');
+    const lineCount = truncated.substring(0, lastNewline).split('\n').length;
+    return truncated.substring(0, lastNewline) + `\n  ... (${filteredCount - lineCount} more exercises)` + countNote;
+  }
+
   return lines + countNote;
 }
 

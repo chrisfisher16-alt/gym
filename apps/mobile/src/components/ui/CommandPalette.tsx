@@ -122,7 +122,7 @@ function getTimeSuggestions(): TimeSuggestion[] {
 
 type RowItem =
   | { kind: 'header'; title: string; icon: string }
-  | { kind: 'action'; id: string; label: string; icon: string; onPress: () => void }
+  | { kind: 'action'; id: string; label: string; icon: string; onPress: () => void; disabled?: boolean }
   | { kind: 'result'; result: SearchResult };
 
 // ── Component ──────────────────────────────────────────────────────
@@ -429,7 +429,8 @@ export function CommandPalette({ visible, onClose }: CommandPaletteProps) {
           id: `recent_${ra.timestamp}`,
           label: ra.label,
           icon: ra.icon,
-          onPress: () => {}, // Recent items are display-only for now
+          onPress: () => {}, // Informational — tap the action directly from its section above
+          disabled: true,
         });
       }
     }
@@ -466,12 +467,14 @@ export function CommandPalette({ visible, onClose }: CommandPaletteProps) {
         return (
           <Pressable
             onPress={item.onPress}
+            disabled={item.disabled}
             style={({ pressed }) => [
               styles.row,
               {
                 paddingHorizontal: spacing.lg,
                 paddingVertical: spacing.md,
                 backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
+                opacity: item.disabled ? 0.5 : 1,
               },
             ]}
           >
@@ -489,11 +492,11 @@ export function CommandPalette({ visible, onClose }: CommandPaletteProps) {
               <Ionicons
                 name={item.icon as keyof typeof Ionicons.glyphMap}
                 size={18}
-                color={colors.primary}
+                color={item.disabled ? colors.textTertiary : colors.primary}
               />
             </View>
             <Text
-              style={[typography.label, { color: colors.text, marginLeft: spacing.md }]}
+              style={[typography.label, { color: item.disabled ? colors.textTertiary : colors.text, marginLeft: spacing.md }]}
               numberOfLines={1}
             >
               {item.label}

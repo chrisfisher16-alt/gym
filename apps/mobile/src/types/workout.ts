@@ -198,6 +198,7 @@ export interface CompletedExercise {
   exerciseId: string;
   exerciseName: string;
   sets: CompletedSet[];
+  restSeconds?: number;
 }
 
 export interface CompletedSet {

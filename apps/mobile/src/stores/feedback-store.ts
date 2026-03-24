@@ -241,7 +241,9 @@ async function recordSubmission(
 
 // ── Hydrate persisted state on import ──────────────────────────────────
 
-(async () => {
+export let feedbackStoreHydrated = false;
+
+export const feedbackHydrationPromise = (async () => {
   try {
     const [lastSubmitted, lastCategory, promptCount, lastPromptWorkout] = await Promise.all([
       AsyncStorage.getItem(KEYS.LAST_SUBMITTED),
@@ -258,5 +260,7 @@ async function recordSubmission(
     });
   } catch (error) {
     console.error('Failed to load feedback store state:', error);
+  } finally {
+    feedbackStoreHydrated = true;
   }
 })();

@@ -34,7 +34,14 @@ export function StartWorkoutSheet({
   };
 
   const estimatedMinutes = todayWorkout
-    ? Math.round(todayWorkout.exercises.length * 8)
+    ? Math.round(
+        todayWorkout.exercises.reduce((acc, ex) => {
+          const sets = ex.targetSets ?? 3;
+          const restMin = (ex.restSeconds ?? 90) / 60;
+          const setTime = 1; // ~1 min per set for execution
+          return acc + sets * (setTime + restMin);
+        }, 0)
+      )
     : 0;
 
   return (

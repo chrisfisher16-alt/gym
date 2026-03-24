@@ -93,6 +93,13 @@ export function ExpandableCard({
 
     const willExpand = !expanded;
 
+    if (willExpand && contentHeight === 0) {
+      // Content not measured yet — expand without animation, animation will happen on next toggle
+      if (!hasExpanded) setHasExpanded(true);
+      setExpanded(true);
+      return;
+    }
+
     // Scale pulse on tap
     scale.value = withSequence(
       withTiming(0.98, { duration: 75 }),
@@ -125,6 +132,7 @@ export function ExpandableCard({
   }, [
     disabled,
     expanded,
+    contentHeight,
     hasExpanded,
     hapticFeedback,
     onExpand,
@@ -142,7 +150,7 @@ export function ExpandableCard({
   }));
 
   const expandStyle = useAnimatedStyle(() => ({
-    height: interpolate(heightProgress.value, [0, 1], [0, contentHeight]),
+    height: interpolate(heightProgress.value, [0, 1], [0, contentHeight || 1]),
     opacity: contentOpacity.value,
     overflow: 'hidden' as const,
   }));

@@ -11,8 +11,7 @@ import { useTheme } from '../../theme';
 import { useActiveWorkout } from '../../hooks/useActiveWorkout';
 import { useWorkoutStore } from '../../stores/workout-store';
 import { formatTimerDisplay } from '../../lib/workout-utils';
-import { warningNotification } from '../../lib/haptics';
-import { playTimerComplete } from '../../lib/sounds';
+
 import { REST_TIMER_PRESETS } from '../../types/workout';
 
 /** Height of the collapsed compact bar */
@@ -74,9 +73,7 @@ export function RestTimerBar() {
   // ── Timer completion ──────────────────────────────────────────────
   useEffect(() => {
     if (restSecondsLeft === 0 && prevActive.current && isRestTimerActive) {
-      // Timer just hit zero
-      warningNotification();
-      playTimerComplete();
+      // Timer just hit zero — sound/haptic handled by RestTimerOverlay
       setIsCompleted(true);
 
       // Pulse animation

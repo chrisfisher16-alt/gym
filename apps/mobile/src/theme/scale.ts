@@ -1,7 +1,5 @@
 import { Dimensions, PixelRatio } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 // Design baseline: iPhone 14 (390 logical points)
 const DESIGN_WIDTH = 390;
 
@@ -12,7 +10,8 @@ const DESIGN_WIDTH = 390;
  * On larger phones (428pt Pro Max), returns slightly larger.
  */
 export function scale(size: number): number {
-  const ratio = SCREEN_WIDTH / DESIGN_WIDTH;
+  const { width } = Dimensions.get('window');
+  const ratio = width / DESIGN_WIDTH;
   // Clamp scaling to prevent extreme sizes (0.85x to 1.15x)
   const clampedRatio = Math.min(1.15, Math.max(0.85, ratio));
   return PixelRatio.roundToNearestPixel(size * clampedRatio);
@@ -23,6 +22,7 @@ export function scale(size: number): number {
  * Uses a 0.5 factor so fonts don't get too large on big screens.
  */
 export function moderateScale(size: number, factor: number = 0.5): number {
-  const ratio = SCREEN_WIDTH / DESIGN_WIDTH;
+  const { width } = Dimensions.get('window');
+  const ratio = width / DESIGN_WIDTH;
   return PixelRatio.roundToNearestPixel(size + (size * (ratio - 1) * factor));
 }

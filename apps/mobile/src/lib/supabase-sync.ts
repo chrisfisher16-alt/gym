@@ -71,6 +71,14 @@ export async function enqueue(
   payload: Record<string, unknown>,
 ): Promise<void> {
   const queue = await getQueue();
+
+  // Deduplicate: skip if queue already has a pending item with same type + payload ID
+  const payloadId = payload.id as string | undefined;
+  if (payloadId) {
+    const duplicate = queue.find((q) => q.type === type && (q.payload.id as string) === payloadId);
+    if (duplicate) return; // Already queued
+  }
+
   queue.push({
     id: `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     type,

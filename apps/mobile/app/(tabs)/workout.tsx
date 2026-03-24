@@ -81,7 +81,6 @@ export default function WorkoutTab() {
       checkWorkoutLogLimit().then((usage) => {
         setWorkoutUsage(usage);
         if (usage.allowed) {
-          incrementUsage('workout_logs');
           proceed();
         } else {
           crossPlatformAlert(
@@ -164,7 +163,7 @@ export default function WorkoutTab() {
             exerciseName: e.exerciseName,
             targetSets: e.sets.length,
             targetReps: e.sets[0]?.reps?.toString() ?? '8-12',
-            restSeconds: 90,
+            restSeconds: e.restSeconds ?? 90,
           })),
         });
         mediumImpact();
@@ -278,7 +277,10 @@ export default function WorkoutTab() {
 
   // Simple weekly volume chart bars
   const maxVolume = Math.max(...weeklyVolume.map((d) => d.volume), 1);
-  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const dayLabels = weeklyVolume.map((d) => {
+    const date = new Date(d.date);
+    return ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'][date.getDay()];
+  });
 
   if (!isInitialized) {
     return (
@@ -681,7 +683,7 @@ export default function WorkoutTab() {
                     ]}
                   />
                   <Text style={[typography.caption, { color: colors.textTertiary, marginTop: 4 }]}>
-                    {dayLabels[i % 7]}
+                    {dayLabels[i] ?? ''}
                   </Text>
                 </View>
               );

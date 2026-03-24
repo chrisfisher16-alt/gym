@@ -127,6 +127,11 @@ export default function ProgressTab() {
   const [showCongrats, setShowCongrats] = useState(false);
   const [congratsAchievements, setCongratsAchievements] = useState<string[]>([]);
 
+  const photoCount = useMeasurementsStore((s) => s.photos.length);
+  const totalMealsLogged = useMemo(() => {
+    return Object.values(dailyLogs).reduce((sum, log: any) => sum + (log?.meals?.length ?? 0), 0);
+  }, [dailyLogs]);
+
   const demo = isDemoMode();
   const providerLabel = getHealthProviderName();
   const showHealthData = (isHealthConnected && Platform.OS !== 'web') || demo;
@@ -367,7 +372,10 @@ export default function ProgressTab() {
   // ── Volume chart ───────────────────────────────────────────────
 
   const maxVol = Math.max(...displayVolume.map((d) => d.volume), 1);
-  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const dayLabels = displayVolume.map((d) => {
+    const date = new Date(d.date);
+    return ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'][date.getDay()];
+  });
 
   // ── Exercises with PRs for strength progress ───────────────────
 
@@ -830,10 +838,10 @@ export default function ProgressTab() {
                               totalPRs: displayRecentPRs.length,
                               totalVolumeLbs: displayTotalVolume * KG_TO_LB,
                               currentStreak: displayStreak,
-                              totalMealsLogged: 0,
-                              consecutiveMealDays: 0,
-                              totalPhotos: useMeasurementsStore.getState().photos.length,
-                              completedAllPlannedThisWeek: false,
+                              totalMealsLogged,
+                              consecutiveMealDays: 0, // TODO: compute consecutive days with meals logged
+                              totalPhotos: photoCount,
+                              completedAllPlannedThisWeek: false, // TODO: requires cross-referencing program schedule
                               history: [],
                             })
                           : 'Keep going!'}
@@ -856,10 +864,10 @@ export default function ProgressTab() {
                           totalPRs: displayRecentPRs.length,
                           totalVolumeLbs: displayTotalVolume * KG_TO_LB,
                           currentStreak: displayStreak,
-                          totalMealsLogged: 0,
-                          consecutiveMealDays: 0,
-                          totalPhotos: useMeasurementsStore.getState().photos.length,
-                          completedAllPlannedThisWeek: false,
+                          totalMealsLogged,
+                          consecutiveMealDays: 0, // TODO: compute consecutive days with meals logged
+                          totalPhotos: photoCount,
+                          completedAllPlannedThisWeek: false, // TODO: requires cross-referencing program schedule
                           history: [],
                         })
                       : undefined
@@ -990,7 +998,7 @@ export default function ProgressTab() {
                       ]}
                     />
                     <Text style={[typography.caption, { color: colors.textTertiary, marginTop: 4 }]}>
-                      {dayLabels[i % 7]}
+                      {dayLabels[i] ?? ''}
                     </Text>
                   </View>
                 );

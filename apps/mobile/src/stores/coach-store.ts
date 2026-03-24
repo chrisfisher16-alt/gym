@@ -262,7 +262,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       // Persist
       const updatedState = get();
       await Promise.all([
-        AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(updatedState.messages.slice(-200))),
+        // Keep last 500 messages in storage — older messages are not persisted
+        AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(updatedState.messages.slice(-500))),
         AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(updatedState.conversations)),
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(updatedConversation)),
       ]);
@@ -394,7 +395,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       // Persist
       await AsyncStorage.setItem(
         STORAGE_KEYS.MESSAGES,
-        JSON.stringify(updatedMessages.slice(-200)),
+        JSON.stringify(updatedMessages.slice(-500)),
       );
     } catch (error) {
       const updatedActions = [...message.actions!];
