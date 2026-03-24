@@ -32,6 +32,7 @@ import {
   QuickActionSheet,
   AnimatedNumber,
   SwipeableRow,
+  ProgressRing,
 } from '../../src/components/ui';
 import type { SwipeAction } from '../../src/components/ui';
 import { CoachFAB } from '../../src/components/CoachFAB';
@@ -60,8 +61,7 @@ import { useCoachStore } from '../../src/stores/coach-store';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const RING_SIZE = scale(160);
 const RING_STROKE = scale(12);
-const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -182,9 +182,6 @@ export default function NutritionTab() {
     current.setDate(current.getDate() + direction);
     setSelectedDate(getDateString(current));
   };
-
-  const calorieStroke = Math.min(progress.calories, 1) * RING_CIRCUMFERENCE;
-  const calorieOffset = RING_CIRCUMFERENCE - calorieStroke;
 
   // ── Meal type breakdown for expanded calorie section ──
   const mealTypeBreakdown = useMemo(() => getMealTypeBreakdown(meals), [meals]);
@@ -434,36 +431,13 @@ export default function NutritionTab() {
         {/* Collapsed: Calorie ring + remaining (original layout) */}
         <View style={styles.ringContainer}>
           <View style={[styles.ring, { width: RING_SIZE, height: RING_SIZE }]}>
-            <View
-              style={[
-                styles.ringTrack,
-                {
-                  width: RING_SIZE,
-                  height: RING_SIZE,
-                  borderRadius: RING_SIZE / 2,
-                  borderWidth: RING_STROKE,
-                  borderColor: colors.surfaceSecondary,
-                },
-              ]}
-            />
-            <View
-              style={[
-                styles.ringProgress,
-                {
-                  width: RING_SIZE,
-                  height: RING_SIZE,
-                  borderRadius: RING_SIZE / 2,
-                  borderWidth: RING_STROKE,
-                  borderColor: progress.calories > 1 ? colors.warning : colors.calories,
-                  borderTopColor: progress.calories >= 0.25 ? (progress.calories > 1 ? colors.warning : colors.calories) : 'transparent',
-                  borderRightColor: progress.calories >= 0.5 ? (progress.calories > 1 ? colors.warning : colors.calories) : 'transparent',
-                  borderBottomColor: progress.calories >= 0.75 ? (progress.calories > 1 ? colors.warning : colors.calories) : 'transparent',
-                  borderLeftColor: progress.calories > 0 ? (progress.calories > 1 ? colors.warning : colors.calories) : 'transparent',
-                  transform: [{ rotate: '-90deg' }],
-                },
-              ]}
-            />
-            <View style={styles.ringCenter}>
+            <ProgressRing
+              progress={Math.min(progress.calories, 1)}
+              size={RING_SIZE}
+              strokeWidth={RING_STROKE}
+              color={progress.calories > 1 ? colors.warning : colors.calories}
+              trackColor={colors.surfaceSecondary}
+            >
               <AnimatedNumber
                 value={consumed.calories}
                 style={[typography.displayMedium, { color: colors.text }]}
@@ -472,7 +446,7 @@ export default function NutritionTab() {
               <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
                 / {formatCalories(targets.calories)} cal
               </Text>
-            </View>
+            </ProgressRing>
           </View>
 
           <View style={[styles.remainingContainer, { marginTop: spacing.sm }]}>
@@ -624,46 +598,18 @@ export default function NutritionTab() {
         {/* Water Progress Ring */}
         <View style={styles.waterRingContainer}>
           <View style={[styles.waterRing, { width: scale(100), height: scale(100) }]}>
-            <View
-              style={[
-                styles.waterRingTrack,
-                {
-                  width: scale(100),
-                  height: scale(100),
-                  borderRadius: scale(50),
-                  borderWidth: scale(8),
-                  borderColor: colors.surfaceSecondary,
-                },
-              ]}
-            />
-            {(() => {
-              const waterProgress = waterTarget > 0 ? Math.min(waterIntake / waterTarget, 1) : 0;
-              return (
-                <View
-                  style={[
-                    styles.waterRingProgress,
-                    {
-                      width: scale(100),
-                      height: scale(100),
-                      borderRadius: scale(50),
-                      borderWidth: scale(8),
-                      borderColor: waterProgress >= 1 ? '#22C55E' : '#3B82F6',
-                      borderTopColor: waterProgress >= 0.25 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
-                      borderRightColor: waterProgress >= 0.5 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
-                      borderBottomColor: waterProgress >= 0.75 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
-                      borderLeftColor: waterProgress > 0 ? (waterProgress >= 1 ? '#22C55E' : '#3B82F6') : 'transparent',
-                      transform: [{ rotate: '-90deg' }],
-                    },
-                  ]}
-                />
-              );
-            })()}
-            <View style={styles.waterRingCenter}>
+            <ProgressRing
+              progress={waterTarget > 0 ? Math.min(waterIntake / waterTarget, 1) : 0}
+              size={scale(100)}
+              strokeWidth={scale(8)}
+              color={(waterTarget > 0 && waterIntake >= waterTarget) ? '#22C55E' : '#3B82F6'}
+              trackColor={colors.surfaceSecondary}
+            >
               <Ionicons name="water" size={18} color="#3B82F6" />
               <Text style={[typography.labelSmall, { color: colors.textSecondary, marginTop: 2 }]}>
                 {waterTarget > 0 ? Math.round((waterIntake / waterTarget) * 100) : 0}%
               </Text>
-            </View>
+            </ProgressRing>
           </View>
           <View style={{ marginLeft: spacing.lg, flex: 1 }}>
             <AnimatedNumber
@@ -1142,15 +1088,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringTrack: {
-    position: 'absolute',
-  },
-  ringProgress: {
-    position: 'absolute',
-  },
-  ringCenter: {
-    alignItems: 'center',
-  },
+
   remainingContainer: {
     alignItems: 'center',
   },
@@ -1172,15 +1110,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  waterRingTrack: {
-    position: 'absolute',
-  },
-  waterRingProgress: {
-    position: 'absolute',
-  },
-  waterRingCenter: {
-    alignItems: 'center',
-  },
+
   waterQuickActions: {
     flexDirection: 'row',
     gap: 8,

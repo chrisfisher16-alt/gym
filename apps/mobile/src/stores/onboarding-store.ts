@@ -278,13 +278,7 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       // ── Submission ─────────────────────────────────────────────
       submitOnboarding: async () => {
-        set({ isSubmitting: true });
-        try {
-          // TODO: Replace with real API call
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        } finally {
-          set({ isSubmitting: false });
-        }
+        console.warn('submitOnboarding() is deprecated — use complete.tsx finishOnboarding() instead');
       },
 
       // ── Reset ──────────────────────────────────────────────────

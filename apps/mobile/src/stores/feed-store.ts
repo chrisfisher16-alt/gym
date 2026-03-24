@@ -1,5 +1,8 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+const FEED_CACHE_KEY = '@feed/items';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -28,6 +31,7 @@ interface FeedState {
   hasMore: boolean;
 
   fetchFeed: (reset?: boolean) => Promise<void>;
+  reset: () => void;
   postWorkoutCompletion: (params: {
     title: string;
     body: string;
@@ -49,6 +53,17 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   hasMore: true,
 
   fetchFeed: async (reset = false) => {
+    // Load cache for instant render on fresh load
+    if (reset) {
+      try {
+        const cached = await AsyncStorage.getItem(FEED_CACHE_KEY);
+        if (cached) {
+          const items: FeedItem[] = JSON.parse(cached);
+          set({ items });
+        }
+      } catch {}
+    }
+
     if (!isSupabaseConfigured) return;
 
     const state = get();
@@ -122,6 +137,11 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         items: reset ? mapped : [...existingItems, ...mapped],
         hasMore: mapped.length === PAGE_SIZE,
       });
+
+      // Cache first page for offline
+      if (reset) {
+        AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(mapped)).catch(console.warn);
+      }
     } catch (err) {
       console.error('Feed fetch exception:', err);
     } finally {
@@ -228,5 +248,10 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     } catch (err) {
       console.error('Feed delete error:', err);
     }
+  },
+
+  reset: () => {
+    set({ items: [], isLoading: false, isRefreshing: false, hasMore: true });
+    AsyncStorage.removeItem(FEED_CACHE_KEY).catch(console.warn);
   },
 }));

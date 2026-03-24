@@ -1,5 +1,12 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+const STORAGE_KEYS = {
+  FRIENDS: '@friends/list',
+  INCOMING: '@friends/incoming',
+  OUTGOING: '@friends/outgoing',
+} as const;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -26,6 +33,7 @@ interface FriendsState {
   isInitialized: boolean;
 
   initialize: () => Promise<void>;
+  reset: () => void;
   searchUsers: (query: string) => Promise<FriendProfile[]>;
   sendRequest: (addresseeId: string) => Promise<{ error: string | null }>;
   acceptRequest: (friendshipId: string) => Promise<void>;
@@ -44,7 +52,24 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   isInitialized: false,
 
   initialize: async () => {
-    if (!isSupabaseConfigured) return;
+    // Load from cache first for instant UI
+    try {
+      const [friends, incoming, outgoing] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.FRIENDS),
+        AsyncStorage.getItem(STORAGE_KEYS.INCOMING),
+        AsyncStorage.getItem(STORAGE_KEYS.OUTGOING),
+      ]);
+      if (friends || incoming || outgoing) {
+        set({
+          friends: friends ? JSON.parse(friends) : [],
+          incomingRequests: incoming ? JSON.parse(incoming) : [],
+          outgoingRequests: outgoing ? JSON.parse(outgoing) : [],
+          isInitialized: true,
+        });
+      }
+    } catch {}
+
+    if (!isSupabaseConfigured) { set({ isInitialized: true }); return; }
     await get().refresh();
     set({ isInitialized: true });
   },
@@ -103,6 +128,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       }
 
       set({ friends, incomingRequests, outgoingRequests, isLoading: false });
+
+      // Cache for offline use
+      AsyncStorage.setItem(STORAGE_KEYS.FRIENDS, JSON.stringify(friends)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.INCOMING, JSON.stringify(incomingRequests)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.OUTGOING, JSON.stringify(outgoingRequests)).catch(console.warn);
     } catch (error) {
       console.error('Failed to refresh friends list:', error);
       set({ isLoading: false });
@@ -208,5 +238,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       .delete()
       .eq('id', friendshipId);
     await get().refresh();
+  },
+
+  reset: () => {
+    set({ friends: [], incomingRequests: [], outgoingRequests: [], isInitialized: false });
+    AsyncStorage.removeItem(STORAGE_KEYS.FRIENDS).catch(console.warn);
+    AsyncStorage.removeItem(STORAGE_KEYS.INCOMING).catch(console.warn);
+    AsyncStorage.removeItem(STORAGE_KEYS.OUTGOING).catch(console.warn);
   },
 }));

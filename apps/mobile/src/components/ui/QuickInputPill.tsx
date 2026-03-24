@@ -341,11 +341,11 @@ export function QuickInputPill() {
   }));
 
   // ── Colors ────────────────────────────────────────────────
-  const pillBg = dark ? 'rgba(196, 162, 101, 0.95)' : 'rgba(184, 148, 79, 0.95)';
-  const pillTextColor = '#1A1A1A';
+  const pillBg = colors.primary;
+  const pillTextColor = dark ? colors.textInverse : colors.text;
   const expandedBg = colors.surface;
-  const expandedBorder = dark ? 'rgba(196, 162, 101, 0.3)' : 'rgba(184, 148, 79, 0.2)';
-  const backdropColor = 'rgba(0, 0, 0, 0.3)';
+  const expandedBorder = colors.primaryDim;
+  const backdropColor = colors.overlay;
 
   // ── Don't render if keyboard visible ──────────────────────
   if (keyboardVisible) return null;
@@ -416,7 +416,7 @@ export function QuickInputPill() {
                   {
                     backgroundColor: expandedBg,
                     borderColor: expandedBorder,
-                    shadowColor: dark ? '#000' : '#333',
+                    shadowColor: colors.shadow,
                   },
                 ]}
               >
@@ -446,9 +446,7 @@ export function QuickInputPill() {
                           paddingHorizontal: spacing.md,
                           paddingVertical: spacing.sm + 2,
                           backgroundColor: pressed
-                            ? dark
-                              ? 'rgba(255,255,255,0.06)'
-                              : 'rgba(0,0,0,0.04)'
+                            ? colors.surfaceSecondary
                             : 'transparent',
                         },
                       ]}
@@ -457,7 +455,7 @@ export function QuickInputPill() {
                       <Ionicons
                         name={action.icon}
                         size={20}
-                        color={dark ? 'rgba(196, 162, 101, 1)' : 'rgba(184, 148, 79, 1)'}
+                        color={colors.primary}
                       />
                       <Text
                         style={[

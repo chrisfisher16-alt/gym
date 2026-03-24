@@ -146,7 +146,7 @@ export function CommandPalette({ visible, onClose }: CommandPaletteProps) {
   const animateOpen = useCallback(() => {
     translateY.value = -SCREEN_HEIGHT;
     translateY.value = withSpring(0, SPRING_CONFIG);
-    backdropOpacity.value = withTiming(0.5, { duration: 200 });
+    backdropOpacity.value = withTiming(1, { duration: 200 });
   }, [translateY, backdropOpacity]);
 
   const animateClose = useCallback(() => {
@@ -595,7 +595,7 @@ export function CommandPalette({ visible, onClose }: CommandPaletteProps) {
         {/* Backdrop */}
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
           <Animated.View
-            style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, backdropStyle]}
+            style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]}
           />
         </Pressable>
 
