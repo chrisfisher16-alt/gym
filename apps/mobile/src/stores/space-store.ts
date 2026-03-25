@@ -15,6 +15,17 @@ export interface SpaceNutritionTargets {
   fatGrams?: number;
 }
 
+export interface SpaceSavedState {
+  nutritionTargets?: {
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  };
+  activeProgramId?: string | null;
+  coachTone?: CoachTone | null;
+}
+
 export interface TrainingSpace {
   id: string;
   name: string;
@@ -26,6 +37,7 @@ export interface TrainingSpace {
   description?: string;
   createdAt: string;
   isDefault?: boolean;
+  savedState?: SpaceSavedState;
 }
 
 // ── Default Templates ────────────────────────────────────────────────
@@ -103,51 +115,102 @@ interface SpaceState {
   reset: () => Promise<void>;
 }
 
+// ── Snapshot ─────────────────────────────────────────────────────────
+// Capture current store values so they can be restored when switching back.
+
+function snapshotCurrentState(): SpaceSavedState {
+  const snapshot: SpaceSavedState = {};
+
+  try {
+    const { useNutritionStore } = require('./nutrition-store');
+    const t = useNutritionStore.getState().targets;
+    snapshot.nutritionTargets = {
+      calories: t.calories,
+      protein_g: t.protein_g,
+      carbs_g: t.carbs_g,
+      fat_g: t.fat_g,
+    };
+  } catch {
+    // nutrition-store not available
+  }
+
+  try {
+    const { useWorkoutStore } = require('./workout-store');
+    const programs = useWorkoutStore.getState().programs;
+    const active = programs.find((p: { isActive?: boolean }) => p.isActive);
+    snapshot.activeProgramId = active?.id ?? null;
+  } catch {
+    // workout-store not available
+  }
+
+  try {
+    const { useAuthStore } = require('./auth-store');
+    const prefs = useAuthStore.getState().coachPreferences;
+    snapshot.coachTone = prefs?.tone ?? prefs?.coach_tone ?? null;
+  } catch {
+    // auth-store not available
+  }
+
+  return snapshot;
+}
+
 // ── Side Effects ────────────────────────────────────────────────────
 // Apply space overrides to other stores when switching.
+// If the space has a savedState snapshot, restore from that first,
+// then overlay any explicit space overrides on top.
 
 function applySpaceSideEffects(space: TrainingSpace): void {
-  // 1. Nutrition targets
-  if (space.nutritionTargets) {
-    try {
-      const { useNutritionStore } = require('./nutrition-store');
-      const currentTargets = useNutritionStore.getState().targets;
+  const saved = space.savedState;
+
+  // 1. Nutrition targets — restore saved snapshot then overlay space overrides
+  try {
+    const { useNutritionStore } = require('./nutrition-store');
+    const currentTargets = useNutritionStore.getState().targets;
+    const base = saved?.nutritionTargets
+      ? { ...currentTargets, ...saved.nutritionTargets }
+      : currentTargets;
+    if (space.nutritionTargets) {
       const merged = {
-        ...currentTargets,
+        ...base,
         ...(space.nutritionTargets.calories != null && { calories: space.nutritionTargets.calories }),
         ...(space.nutritionTargets.proteinGrams != null && { protein_g: space.nutritionTargets.proteinGrams }),
         ...(space.nutritionTargets.carbGrams != null && { carbs_g: space.nutritionTargets.carbGrams }),
         ...(space.nutritionTargets.fatGrams != null && { fat_g: space.nutritionTargets.fatGrams }),
       };
       useNutritionStore.getState().setDailyTargets(merged);
-    } catch {
-      // nutrition-store not available
+    } else if (saved?.nutritionTargets) {
+      useNutritionStore.getState().setDailyTargets(base);
     }
+  } catch {
+    // nutrition-store not available
   }
 
-  // 2. Active program
-  if (space.activeProgram) {
-    try {
-      const { useWorkoutStore } = require('./workout-store');
+  // 2. Active program — restore saved or apply space override
+  try {
+    const { useWorkoutStore } = require('./workout-store');
+    if (space.activeProgram) {
       useWorkoutStore.getState().setActiveProgram(space.activeProgram);
-    } catch {
-      // workout-store not available
+    } else if (saved?.activeProgramId) {
+      useWorkoutStore.getState().setActiveProgram(saved.activeProgramId);
     }
+  } catch {
+    // workout-store not available
   }
 
-  // 3. Coach tone
-  if (space.coachTone) {
-    try {
-      const { useAuthStore } = require('./auth-store');
+  // 3. Coach tone — restore saved or apply space override
+  try {
+    const { useAuthStore } = require('./auth-store');
+    const tone = space.coachTone ?? saved?.coachTone;
+    if (tone) {
       const currentPrefs = useAuthStore.getState().coachPreferences;
       useAuthStore.getState().setCoachPreferences({
         ...currentPrefs,
-        tone: space.coachTone,
-        coach_tone: space.coachTone,
+        tone,
+        coach_tone: tone,
       });
-    } catch {
-      // auth-store not available
     }
+  } catch {
+    // auth-store not available
   }
 }
 
@@ -219,13 +282,21 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   // ── Switch ──────────────────────────────────────────────────────
 
   switchSpace: (id) => {
-    const space = get().spaces.find((s) => s.id === id);
+    const { spaces, activeSpaceId } = get();
+    const space = spaces.find((s) => s.id === id);
     if (!space) return;
 
-    set({ activeSpaceId: id });
+    // Snapshot current state onto the outgoing space before switching
+    const currentSnapshot = snapshotCurrentState();
+    const updatedSpaces = spaces.map((s) =>
+      s.id === activeSpaceId ? { ...s, savedState: currentSnapshot } : s,
+    );
+
+    set({ spaces: updatedSpaces, activeSpaceId: id });
+    AsyncStorage.setItem(STORAGE_KEYS.SPACES, JSON.stringify(updatedSpaces)).catch(console.warn);
     AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SPACE, JSON.stringify(id)).catch(console.warn);
 
-    // Apply side effects to other stores
+    // Apply side effects to other stores (restores savedState + overrides)
     applySpaceSideEffects(space);
   },
 

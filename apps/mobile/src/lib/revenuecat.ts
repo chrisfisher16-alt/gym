@@ -35,9 +35,6 @@ export async function initRevenueCat(): Promise<boolean> {
   const apiKey = Platform.OS === 'ios' ? API_KEY_IOS : API_KEY_ANDROID;
 
   if (!apiKey) {
-    if (__DEV__) {
-      console.log('[RevenueCat] No API key configured — running in development mode');
-    }
     return false;
   }
 
@@ -48,11 +45,6 @@ export async function initRevenueCat(): Promise<boolean> {
 
     Purchases.configure({ apiKey });
     isConfigured = true;
-
-    if (__DEV__) {
-      console.log('[RevenueCat] Initialized successfully');
-    }
-
     return true;
   } catch (error) {
     console.warn('[RevenueCat] Failed to initialize:', error);

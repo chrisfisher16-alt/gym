@@ -749,7 +749,7 @@ export default function NutritionTab() {
                   }}
                   disabled={!customWaterAmount || parseInt(customWaterAmount, 10) <= 0}
                 >
-                  <Text style={[typography.label, { color: '#FFFFFF' }]}>Add</Text>
+                  <Text style={[typography.label, { color: colors.textOnPrimary }]}>Add</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -789,7 +789,7 @@ export default function NutritionTab() {
               const relogAction: SwipeAction = {
                 label: 'Re-log',
                 icon: 'repeat',
-                color: '#C9A84C',
+                color: colors.primary,
                 onTrigger: () => handleRelogMeal(meal),
               };
               const deleteAction: SwipeAction = {

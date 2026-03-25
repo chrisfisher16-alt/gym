@@ -157,14 +157,8 @@ export async function sendAIMessage(
     const userLayer = buildUserLayer(ctx);
     const dynamicLayer = buildDynamicLayer(ctx, intent);
 
-    // Verify cache eligibility (diagnostic only)
-    const cacheCheck = verifyCacheEligibility(staticLayer, userLayer);
-    if (cacheCheck.staticLayerChanged) {
-      console.warn('[AI Cache] Static layer changed — cache will miss');
-    }
-    if (cacheCheck.userLayerChanged) {
-      console.debug('[AI Cache] User layer changed — partial cache miss');
-    }
+    // Update cache eligibility tracking (side-effectful)
+    verifyCacheEligibility(staticLayer, userLayer);
 
     cacheableSystem = [
       { text: staticLayer, cacheControl: true },
