@@ -331,7 +331,10 @@ export async function callOpenAICompatible(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+      }
+      if (response.status === 529 || response.status === 503) {
+        throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
       }
       throw new Error(`AI provider error (${response.status}): ${errorText.slice(0, 200)}`);
     }
@@ -435,7 +438,10 @@ export async function callClaudeAPI(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+      }
+      if (response.status === 529 || response.status === 503) {
+        throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
       }
       throw new Error(`AI provider error (${response.status}): ${errorText.slice(0, 200)}`);
     }
@@ -549,7 +555,10 @@ async function callClaudeAPIStreaming(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+      }
+      if (response.status === 529 || response.status === 503) {
+        throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
       }
       throw new Error(`AI provider error (${response.status}): ${errorText.slice(0, 200)}`);
     }
@@ -700,7 +709,10 @@ async function callOpenAICompatibleStreaming(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+      }
+      if (response.status === 529 || response.status === 503) {
+        throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
       }
       throw new Error(`AI provider error (${response.status}): ${errorText.slice(0, 200)}`);
     }
@@ -774,8 +786,9 @@ async function callWithRetry(
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      // Only retry on rate limit errors
-      if (!lastError.message.includes('Rate limit') || attempt === MAX_RETRIES) {
+      // Retry on rate limit and overload errors
+      const isRetryable = lastError.message.includes('Rate limit') || lastError.message.includes('temporarily overloaded');
+      if (!isRetryable || attempt === MAX_RETRIES) {
         throw lastError;
       }
       // Exponential backoff: 1.5s, 3s
