@@ -95,11 +95,10 @@ function useTodayContext(displayName?: string) {
 
     // Morning with pending workout
     if (timeOfDay === 'morning' && todayWorkout) {
-      const name = displayName ? `Good morning, ${displayName}` : 'Good morning';
       const muscleLabel = todayWorkout.focusArea?.replace('_', ' ') ?? '';
       const dayLabel = todayWorkout.name;
       return {
-        text: `${name} — ${dayLabel}${muscleLabel ? ` · ${muscleLabel}` : ''} today`,
+        text: `${dayLabel}${muscleLabel ? ` · ${muscleLabel}` : ''} today`,
         type: 'pending' as const,
       };
     }

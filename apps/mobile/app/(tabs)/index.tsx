@@ -135,7 +135,11 @@ export default function TodayTab() {
   const timeOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
   const greeting = timeOfDay === 'morning' ? 'Good morning' : timeOfDay === 'afternoon' ? 'Good afternoon' : 'Good evening';
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const displayName = profile?.display_name?.split(' ')[0] || profileStore?.displayName?.split(' ')[0] || 'there';
+  const email = useAuthStore((s) => s.session?.user?.email);
+  const displayName = profile?.display_name?.split(' ')[0]
+    || profileStore?.displayName?.split(' ')[0]
+    || (email ? email.split('@')[0] : null)
+    || 'there';
 
   // ── Nutrition ─────────────────────────────────────────────────────
   const dC = demo && demoNutrition ? demoNutrition.consumed : consumed;
@@ -449,12 +453,12 @@ export default function TodayTab() {
         {showWorkout && (
           <TouchableOpacity
             style={S.quickBtn}
-            onPress={activeSession ? () => router.push('/workout/active') : handleEmptyStart}
+            onPress={activeSession ? () => router.push('/workout/active') : () => router.push('/workout/ai-generate')}
             activeOpacity={0.7}
           >
-            <Ionicons name="barbell-outline" size={24} color={colors.primary} />
+            <Ionicons name={activeSession ? 'barbell-outline' : 'sparkles-outline'} size={24} color={colors.primary} />
             <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
-              {activeSession ? 'Resume' : 'Workout'}
+              {activeSession ? 'Resume' : 'AI Workout'}
             </Text>
           </TouchableOpacity>
         )}
@@ -838,6 +842,15 @@ export default function TodayTab() {
       return (
         <ExpandableCard
           style={{ marginTop: spacing.base }}
+          onLongPress={() => showQuickActions({
+            title: todayWorkout.name,
+            subtitle: `${todayWorkout.exercises.length} exercises · ${activeProgram?.name ?? ''}`,
+            actions: [
+              { id: 'start', label: 'Start Workout', icon: 'play-circle-outline', onPress: handleStartToday },
+              { id: 'view-program', label: 'View Program', icon: 'list-outline', onPress: () => router.push('/(tabs)/workout') },
+              { id: 'ask-coach', label: 'Ask Coach', icon: 'chatbubble-outline', onPress: () => router.push('/(tabs)/coach'), badge: 'AI' },
+            ],
+          })}
           expandedContent={
             <View>
               {/* Exercise list */}
@@ -874,18 +887,6 @@ export default function TodayTab() {
           }
         >
           {/* Collapsed: workout header */}
-          <TouchableOpacity
-            activeOpacity={1}
-            onLongPress={() => showQuickActions({
-              title: todayWorkout.name,
-              subtitle: `${todayWorkout.exercises.length} exercises · ${activeProgram?.name ?? ''}`,
-              actions: [
-                { id: 'start', label: 'Start Workout', icon: 'play-circle-outline', onPress: handleStartToday },
-                { id: 'view-program', label: 'View Program', icon: 'list-outline', onPress: () => router.push('/(tabs)/workout') },
-                { id: 'ask-coach', label: 'Ask Coach', icon: 'chatbubble-outline', onPress: () => router.push('/(tabs)/coach'), badge: 'AI' },
-              ],
-            })}
-          >
             <View style={S.actHead}>
               <View style={[S.actCircle, { backgroundColor: colors.primaryMuted }]}><Ionicons name="barbell" size={24} color={colors.primary} /></View>
               <View style={{ flex: 1, marginLeft: spacing.md }}>
@@ -893,8 +894,8 @@ export default function TodayTab() {
                 <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayWorkout.name}</Text>
                 <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{todayWorkout.exercises.length} exercises{activeProgram ? ` · ${activeProgram.name}` : ''}</Text>
               </View>
+              <Ionicons name="chevron-down" size={20} color={colors.textTertiary} />
             </View>
-          </TouchableOpacity>
         </ExpandableCard>
       );
     }

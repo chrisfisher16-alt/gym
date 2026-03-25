@@ -31,6 +31,8 @@ interface ExpandableCardProps {
   onExpand?: () => void;
   /** Callback fired when the card collapses */
   onCollapse?: () => void;
+  /** Callback fired on long press of the header */
+  onLongPress?: () => void;
   /** Expand direction – inline or bottom-sheet style (future) */
   expandDirection?: 'down' | 'modal';
   /** Trigger haptic feedback on expand/collapse (default true) */
@@ -62,6 +64,7 @@ export function ExpandableCard({
   hapticFeedback = true,
   disabled = false,
   initiallyExpanded = false,
+  onLongPress,
   style,
 }: ExpandableCardProps) {
   const { colors, spacing, radius, dark } = useTheme();
@@ -192,6 +195,7 @@ export function ExpandableCard({
       {/* Tappable header area */}
       <Pressable
         onPress={toggle}
+        onLongPress={onLongPress}
         disabled={disabled}
         accessibilityRole="button"
         accessibilityState={{ expanded }}

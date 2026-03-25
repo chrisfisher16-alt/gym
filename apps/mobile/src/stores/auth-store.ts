@@ -118,6 +118,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               .select('*')
               .eq('user_id', userId)
               .single();
+            // If profile has no display_name, try to extract from user metadata (Google sign-in)
+            if (!profile?.display_name && session?.user?.user_metadata) {
+              const meta = session.user.user_metadata;
+              const fullName = meta?.full_name || meta?.name || meta?.given_name || '';
+              if (fullName) {
+                try {
+                  const { useProfileStore } = require('./profile-store');
+                  useProfileStore.getState().updateProfile({ displayName: fullName });
+                } catch {}
+                supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(() => {});
+                if (profile) {
+                  profile.display_name = fullName;
+                }
+              }
+            }
+
             set({
               profile: profile ?? null,
               coachPreferences: coachPrefs ?? null,
@@ -303,11 +319,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const refresh_token = params.get('refresh_token');
 
         if (access_token && refresh_token) {
-          const { error: sessionError } = await supabase.auth.setSession({
+          const { error: sessionError, data: sessionData } = await supabase.auth.setSession({
             access_token,
             refresh_token,
           });
           if (sessionError) return { error: sessionError };
+
+          // Extract Google display name from user metadata and persist
+          const meta = sessionData?.session?.user?.user_metadata;
+          const fullName = meta?.full_name || meta?.name || meta?.given_name || '';
+          if (fullName && sessionData?.session?.user?.id) {
+            const userId = sessionData.session.user.id;
+            try {
+              const { useProfileStore } = require('./profile-store');
+              useProfileStore.getState().updateProfile({ displayName: fullName });
+            } catch {}
+            supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(() => {});
+          }
+
           // Await initialize so profile/onboarding state is loaded before returning
           await get().initialize();
         } else {
