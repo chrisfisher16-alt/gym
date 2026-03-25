@@ -11,6 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { clearConfigCache } from '../../src/lib/ai-provider';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -35,6 +36,8 @@ export default function CoachTab() {
   const flatListRef = useRef<FlatList>(null);
   const pendingContextRef = useRef<CoachContext | null>(null);
 
+  const isSending = useRef(false);
+
   const {
     messages,
     activeConversation,
@@ -47,11 +50,18 @@ export default function CoachTab() {
     isStreaming,
     initialize,
     sendMessage,
+    abortCurrentRequest,
     startConversation,
     clearError,
+    clearDemoWarning,
     clearPrefilledContext,
     executeAction,
+    lastMessageWasDemo,
   } = useCoachStore();
+
+  useEffect(() => {
+    clearConfigCache();
+  }, []);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -96,18 +106,21 @@ export default function CoachTab() {
     }
   }, []);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
+    if (isSending.current) return;
     const text = inputText.trim();
     if ((!text && !attachedImage) || isLoading) return;
 
-    // Use the ref-captured context (survives store clear) then reset it.
-    const contextToSend = pendingContextRef.current ?? prefilledContext ?? undefined;
-    pendingContextRef.current = null;
-    const imageToSend = attachedImage;
+    isSending.current = true;
+    try {
+      // Use the ref-captured context (survives store clear) then reset it.
+      const contextToSend = pendingContextRef.current ?? prefilledContext ?? undefined;
+      pendingContextRef.current = null;
+      const imageToSend = attachedImage;
 
-    // Check AI message limit for free users
-    if (!canAccess('unlimited_ai') && tier === 'free') {
-      checkAIMessageLimit().then((usage) => {
+      // Check AI message limit for free users
+      if (!canAccess('unlimited_ai') && tier === 'free') {
+        const usage = await checkAIMessageLimit();
         setAIUsage(usage);
         if (usage.allowed) {
           incrementUsage('ai_messages');
@@ -124,22 +137,45 @@ export default function CoachTab() {
             ],
           );
         }
-      });
-      return;
-    }
+        return;
+      }
 
-    setInputText('');
-    setAttachedImage(null);
-    sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+      setInputText('');
+      setAttachedImage(null);
+      sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+    } finally {
+      isSending.current = false;
+    }
   }, [inputText, attachedImage, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
 
   const handlePromptSelect = useCallback(
     (prompt: string) => {
       if (isLoading) return;
-      if (tier === 'free' && aiUsage && !aiUsage.allowed) return;
+
+      // Check AI message limit for free users
+      if (!canAccess('unlimited_ai') && tier === 'free') {
+        checkAIMessageLimit().then((usage) => {
+          setAIUsage(usage);
+          if (usage.allowed) {
+            incrementUsage('ai_messages');
+            sendMessage(prompt);
+          } else {
+            crossPlatformAlert(
+              'Daily Message Limit Reached',
+              'You\'ve used all 5 free AI messages today. Upgrade for unlimited coaching.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_ai', source: 'coach_tab' }) },
+              ],
+            );
+          }
+        });
+        return;
+      }
+
       sendMessage(prompt);
     },
-    [isLoading, sendMessage, tier, aiUsage],
+    [isLoading, sendMessage, tier, canAccess, showPaywall],
   );
 
   const handleNewConversation = useCallback(() => {
@@ -303,6 +339,24 @@ export default function CoachTab() {
         </View>
       )}
 
+      {/* Demo fallback warning */}
+      {lastMessageWasDemo && !error && (
+        <View
+          style={[styles.errorBanner, { backgroundColor: colors.warningLight, padding: spacing.sm }]}
+        >
+          <Ionicons name="warning-outline" size={16} color={colors.warning} />
+          <Text style={[typography.bodySmall, { color: colors.warning, marginLeft: spacing.xs, flex: 1 }]} numberOfLines={2}>
+            AI provider unavailable — showing demo response
+          </Text>
+          <TouchableOpacity
+            onPress={clearDemoWarning}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close" size={16} color={colors.warning} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Suggested prompts inline (when there are messages but user might want suggestions) */}
       {currentMessages.length > 0 && currentMessages.length < 4 && !isLoading && (
         <SuggestedPrompts onSelect={handlePromptSelect} />
@@ -409,26 +463,44 @@ export default function CoachTab() {
           }}
           editable={!isLoading}
         />
-        <TouchableOpacity
-          onPress={handleSend}
-          disabled={(!inputText.trim() && !attachedImage) || isLoading}
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor: (inputText.trim() || attachedImage) && !isLoading ? colors.primary : colors.surfaceSecondary,
-              borderRadius: radius.full,
-              width: 40,
-              height: 40,
-              marginLeft: spacing.sm,
-            },
-          ]}
-        >
-          <Ionicons
-            name="send"
-            size={18}
-            color={(inputText.trim() || attachedImage) && !isLoading ? colors.textInverse : colors.textTertiary}
-          />
-        </TouchableOpacity>
+        {isLoading ? (
+          <TouchableOpacity
+            onPress={abortCurrentRequest}
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: colors.error,
+                borderRadius: radius.full,
+                width: 40,
+                height: 40,
+                marginLeft: spacing.sm,
+              },
+            ]}
+          >
+            <Ionicons name="stop" size={18} color={colors.textInverse} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={handleSend}
+            disabled={!inputText.trim() && !attachedImage}
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: (inputText.trim() || attachedImage) ? colors.primary : colors.surfaceSecondary,
+                borderRadius: radius.full,
+                width: 40,
+                height: 40,
+                marginLeft: spacing.sm,
+              },
+            ]}
+          >
+            <Ionicons
+              name="send"
+              size={18}
+              color={(inputText.trim() || attachedImage) ? colors.textInverse : colors.textTertiary}
+            />
+          </TouchableOpacity>
+        )}
       </View>
     </KeyboardAvoidingView>
   );

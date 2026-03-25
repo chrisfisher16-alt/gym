@@ -60,7 +60,7 @@ const PROVIDERS = [
 
 export default function AISettingsScreen() {
   const { colors, spacing, radius, typography } = useTheme();
-  const [config, setConfig] = useState<AIConfig>({ provider: 'demo' });
+  const [config, setConfig] = useState<AIConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -79,11 +79,14 @@ export default function AISettingsScreen() {
       setConfig(c);
       setIsLoading(false);
     });
+    return () => {
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    };
   }, []);
 
   // Fetch models when provider or API key changes
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !config) return;
     if (config.provider === 'demo') {
       setAvailableModels([]);
       return;
@@ -107,10 +110,10 @@ export default function AISettingsScreen() {
     return () => {
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
     };
-  }, [config.provider, config.apiKey, config.baseUrl, isLoading]);
+  }, [config?.provider, config?.apiKey, config?.baseUrl, isLoading]);
 
   const updateConfig = useCallback((updates: Partial<AIConfig>) => {
-    setConfig((prev) => ({ ...prev, ...updates }));
+    setConfig((prev) => prev ? { ...prev, ...updates } : { provider: 'demo', ...updates } as AIConfig);
     setHasChanges(true);
   }, []);
 
@@ -118,8 +121,8 @@ export default function AISettingsScreen() {
     (provider: AIConfig['provider']) => {
       const defaults = getProviderDefaults(provider);
       // Save current API key for the current provider before switching
-      const updatedKeys = { ...config.providerKeys };
-      if (config.apiKey && config.provider !== 'demo' && config.provider !== 'ollama') {
+      const updatedKeys = { ...config?.providerKeys };
+      if (config?.apiKey && config?.provider !== 'demo' && config?.provider !== 'ollama') {
         updatedKeys[config.provider] = config.apiKey;
       }
       // Load the saved API key for the new provider
@@ -133,18 +136,19 @@ export default function AISettingsScreen() {
       });
       setModelDropdownOpen(false);
     },
-    [config.apiKey, config.provider, config.providerKeys, updateConfig],
+    [config?.apiKey, config?.provider, config?.providerKeys, updateConfig],
   );
 
   const handleSave = useCallback(async () => {
+    if (!config) return;
     setIsSaving(true);
     try {
-      // Sync current apiKey into providerKeys before saving
-      const configToSave = { ...config };
-      if (config.apiKey && config.provider !== 'demo' && config.provider !== 'ollama') {
+      // Trim API key on save
+      const configToSave = { ...config, apiKey: config.apiKey?.trim() };
+      if (configToSave.apiKey && configToSave.provider !== 'demo' && configToSave.provider !== 'ollama') {
         configToSave.providerKeys = {
-          ...config.providerKeys,
-          [config.provider]: config.apiKey,
+          ...configToSave.providerKeys,
+          [configToSave.provider]: configToSave.apiKey,
         };
       }
       await setAIConfig(configToSave);
@@ -160,6 +164,7 @@ export default function AISettingsScreen() {
 
   const handleTest = useCallback(async () => {
     setIsTesting(true);
+    if (!config) return;
     const result = await testAIConnection(config);
     setIsTesting(false);
     if (result.success) {
@@ -175,7 +180,7 @@ export default function AISettingsScreen() {
     setModelDropdownOpen(false);
   }, [updateConfig]);
 
-  if (isLoading) {
+  if (isLoading || !config) {
     return (
       <ScreenContainer edges={[]}>
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
@@ -290,7 +295,7 @@ export default function AISettingsScreen() {
                   },
                 ]}
                 value={config.apiKey ?? ''}
-                onChangeText={(text) => updateConfig({ apiKey: text.trim() })}
+                onChangeText={(text) => updateConfig({ apiKey: text })}
                 placeholder="Leave blank to use built-in key"
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry

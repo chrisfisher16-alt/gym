@@ -18,6 +18,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = JSON.stringify(req.body);
+    const isStreaming = req.body && req.body.stream === true;
 
     const headers = {
       'content-type': 'application/json',
@@ -31,33 +32,59 @@ module.exports = async function handler(req, res) {
       headers['anthropic-beta'] = req.headers['anthropic-beta'];
     }
 
-    const data = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.anthropic.com',
-        port: 443,
-        path: '/v1/messages',
-        method: 'POST',
-        headers,
-      };
+    const options = {
+      hostname: 'api.anthropic.com',
+      port: 443,
+      path: '/v1/messages',
+      method: 'POST',
+      headers,
+    };
 
-      const request = https.request(options, (response) => {
-        let chunks = '';
-        response.on('data', (chunk) => { chunks += chunk; });
-        response.on('end', () => {
-          try {
-            resolve({ status: response.statusCode, body: JSON.parse(chunks) });
-          } catch {
-            resolve({ status: response.statusCode, body: { error: chunks } });
-          }
+    if (isStreaming) {
+      // Stream SSE events directly through to the client
+      const proxyReq = https.request(options, (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
         });
+        proxyRes.pipe(res);
       });
 
-      request.on('error', reject);
-      request.write(body);
-      request.end();
-    });
+      proxyReq.on('error', (err) => {
+        console.error('Proxy streaming error:', err.message);
+        if (!res.headersSent) {
+          res.status(500).json({ error: err.message });
+        } else {
+          res.end();
+        }
+      });
 
-    res.status(data.status).json(data.body);
+      proxyReq.write(body);
+      proxyReq.end();
+    } else {
+      // Non-streaming: buffer and forward as JSON
+      const data = await new Promise((resolve, reject) => {
+        const request = https.request(options, (response) => {
+          let chunks = '';
+          response.on('data', (chunk) => { chunks += chunk; });
+          response.on('end', () => {
+            try {
+              resolve({ status: response.statusCode, body: JSON.parse(chunks) });
+            } catch {
+              resolve({ status: response.statusCode, body: { error: chunks } });
+            }
+          });
+        });
+
+        request.on('error', reject);
+        request.write(body);
+        request.end();
+      });
+
+      res.status(data.status).json(data.body);
+    }
   } catch (err) {
     console.error('Proxy error:', err.message);
     res.status(500).json({ error: err.message });

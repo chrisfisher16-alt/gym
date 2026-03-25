@@ -58,6 +58,7 @@ interface MeasurementsState {
   deleteMeasurement: (id: string) => Promise<void>;
   addPhoto: (photo: Omit<ProgressPhoto, 'id'>) => Promise<void>;
   deletePhoto: (id: string) => Promise<void>;
+  reset: () => Promise<void>;
 }
 
 // ── Store ──────────────────────────────────────────────────────────
@@ -97,11 +98,22 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
   },
 
   addMeasurement: async (measurement) => {
-    const newMeasurement: BodyMeasurement = {
-      ...measurement,
-      id: generateId(),
-    };
-    const measurements = [...get().measurements, newMeasurement].sort(
+    const existingIndex = get().measurements.findIndex(
+      (m) => m.date.split('T')[0] === measurement.date.split('T')[0],
+    );
+    let measurements: BodyMeasurement[];
+    if (existingIndex >= 0) {
+      // Update existing entry for the same date
+      measurements = [...get().measurements];
+      measurements[existingIndex] = { ...measurements[existingIndex], ...measurement };
+    } else {
+      const newMeasurement: BodyMeasurement = {
+        ...measurement,
+        id: generateId(),
+      };
+      measurements = [...get().measurements, newMeasurement];
+    }
+    measurements.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
     set({ measurements });
@@ -154,5 +166,12 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     const photos = get().photos.filter((p) => p.id !== id);
     set({ photos });
     await AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
+  },
+
+  reset: async () => {
+    set({ measurements: [], photos: [], isInitialized: false });
+    await Promise.all(
+      Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
+    ).catch(() => {});
   },
 }));

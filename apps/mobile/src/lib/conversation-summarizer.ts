@@ -41,21 +41,36 @@ export function maybeSummarizeConversation(
 
   // Fire and forget — no awaiting, no blocking
   void (async () => {
-    try {
+    const summarize = async () => {
       const config = await getAIConfig();
-      if (config.provider === 'demo') return;
+      if (config.provider === 'demo') return null;
 
-      const messages: AIMessage[] = [
+      const msgs: AIMessage[] = [
         { role: 'system', content: SUMMARY_PROMPT },
         { role: 'user', content: formatConversationForSummary(olderMessages) },
       ];
 
-      const response = await callAI(messages, config);
-      if (response.content) {
-        onSummaryGenerated(response.content.trim());
+      const response = await callAI(msgs, config);
+      return response.content?.trim() || null;
+    };
+
+    try {
+      const result = await summarize();
+      if (result) {
+        onSummaryGenerated(result);
+        return;
       }
-    } catch {
-      // Silently ignore summarization failures — never disrupt chat
+    } catch (firstError) {
+      // First attempt failed — retry once
+      try {
+        const result = await summarize();
+        if (result) {
+          onSummaryGenerated(result);
+          return;
+        }
+      } catch (retryError) {
+        console.error('Summarization failed after retry:', retryError);
+      }
     }
   })();
 }

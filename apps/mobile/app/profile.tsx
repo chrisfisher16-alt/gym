@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
@@ -13,6 +13,8 @@ import {
   type DietaryPreference,
   type Weekday,
 } from '../src/stores/profile-store';
+import { useAuthStore } from '../src/stores/auth-store';
+import type { Profile } from '@health-coach/shared';
 import { useToast } from '../src/components/Toast';
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -199,7 +201,25 @@ export default function ProfileScreen() {
   }, []);
 
   // ── Save ──────────────────────────────────────────────────────────
+  const [dobError, setDobError] = useState('');
+
   const handleSave = () => {
+    // Validate date of birth if provided
+    if (dateOfBirth) {
+      const parsed = new Date(dateOfBirth + 'T00:00:00');
+      if (isNaN(parsed.getTime())) {
+        setDobError('Invalid date format. Use YYYY-MM-DD.');
+        Alert.alert('Invalid Date', 'Please enter a valid date of birth in YYYY-MM-DD format.');
+        return;
+      }
+      const age = Math.floor((Date.now() - parsed.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (age < 13 || age > 120) {
+        setDobError('Age must be between 13 and 120.');
+        Alert.alert('Invalid Age', 'Age must be between 13 and 120 years old.');
+        return;
+      }
+      setDobError('');
+    }
     let heightCm: number | undefined;
     if (unitPreference === 'imperial') {
       const ft = parseFloat(heightFeet) || 0;
@@ -222,24 +242,38 @@ export default function ProfileScreen() {
       targetWeightKg = unitPreference === 'imperial' ? lbsToKg(targetVal) : targetVal;
     }
 
+    // Sync mappable fields to Supabase via Auth Store (snake_case)
+    useAuthStore.getState().updateProfile({
+      display_name: displayName,
+      date_of_birth: dateOfBirth || undefined,
+      gender: (gender || undefined) as Profile['gender'],
+      height_cm: heightCm,
+      weight_kg: weightKg,
+      unit_preference: unitPreference,
+      training_days_per_week: parseInt(trainingDaysPerWeek) || undefined,
+      specific_training_days: preferredWorkoutDays,
+    });
+
+    // Save all fields to profile-store (shared + local-only)
     updateProfile({
+      // Shared fields (also synced to Supabase above)
       displayName,
-      dateOfBirth: dateOfBirth || undefined,
-      gender: gender || undefined,
       heightCm,
       weightKg,
       unitPreference,
-      targetWeightKg,
-      activityLevel: activityLevel > 0 ? activityLevel : undefined,
-      trainingExperience: experience as UserProfile['trainingExperience'] || undefined,
-      injuriesOrLimitations: injuries || undefined,
-      fitnessEquipment,
-      preferredTrainingTime: preferredTime || undefined,
-      preferredWorkoutDays,
+      dateOfBirth: dateOfBirth || undefined,
+      gender: (gender || undefined) as UserProfile['gender'],
+      // Local-only fields
       healthGoals,
       primaryGoal: primaryGoal.trim() || undefined,
       healthGoalDescription: healthGoalDescription || undefined,
-      trainingDaysPerWeek: parseInt(trainingDaysPerWeek) || undefined,
+      fitnessEquipment,
+      trainingExperience: experience as UserProfile['trainingExperience'] || undefined,
+      injuriesOrLimitations: injuries || undefined,
+      preferredTrainingTime: preferredTime || undefined,
+      preferredWorkoutDays,
+      targetWeightKg,
+      activityLevel: activityLevel > 0 ? activityLevel : undefined,
       allergies,
       dietaryPreferences,
       cookingSkillLevel: cookingSkill as CookingSkillLevel || undefined,
@@ -396,8 +430,9 @@ export default function ProfileScreen() {
             label="Date of Birth"
             placeholder="YYYY-MM-DD"
             value={dateOfBirth}
-            onChangeText={setDateOfBirth}
+            onChangeText={(text) => { setDateOfBirth(text); setDobError(''); }}
             leftIcon="calendar-outline"
+            error={dobError || undefined}
           />
           <View>
             <Text style={[typography.label, { color: colors.text, marginBottom: spacing.xs }]}>
@@ -981,6 +1016,14 @@ export default function ProfileScreen() {
 
       {/* ── Save Button ──────────────────────────────────────── */}
       <View style={{ marginTop: spacing.xl, marginBottom: spacing['3xl'] }}>
+        {(unitPreference !== storedProfile.unitPreference ||
+          displayName !== storedProfile.displayName ||
+          gender !== (storedProfile.gender ?? '') ||
+          dateOfBirth !== (storedProfile.dateOfBirth ?? '')) && (
+          <Text style={[typography.caption, { color: colors.warning, textAlign: 'center', marginBottom: spacing.sm }]}>
+            Unsaved changes
+          </Text>
+        )}
         <Button title="Save Profile" onPress={handleSave} />
       </View>
     </ScreenContainer>

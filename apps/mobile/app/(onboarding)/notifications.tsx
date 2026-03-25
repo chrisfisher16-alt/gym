@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Platform, View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { OnboardingScreen } from '../../src/components/onboarding/OnboardingScreen';
 import { useOnboardingStore } from '../../src/stores/onboarding-store';
-import { useTheme, typography } from '../../src/theme';
+import { useTheme, typography as typographyStatic } from '../../src/theme';
 import { selectionFeedback } from '../../src/lib/haptics';
+
+// Lazily load expo-notifications to avoid crashes when the native module is unavailable
+let Notifications: typeof import('expo-notifications') | null = null;
+if (Platform.OS !== 'web') {
+  try { Notifications = require('expo-notifications'); } catch {}
+}
 
 // ── Time Presets ────────────────────────────────────────────────────
 
@@ -39,15 +45,32 @@ export default function NotificationsScreen() {
     setNotificationTime(value);
   };
 
-  const handleEnable = () => {
-    setNotificationsEnabled(true);
-    setNotificationTime(selectedTime);
+  const isNavigating = useRef(false);
+
+  const handleEnable = async () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    try {
+      if (Notifications) {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status === 'granted') {
+          setNotificationsEnabled(true);
+          setNotificationTime(selectedTime);
+        }
+      }
+    } catch {
+      // Permission request failed — continue anyway
+    }
     router.push('/(onboarding)/attribution');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   const handleNotNow = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     setNotificationsEnabled(false);
     router.push('/(onboarding)/attribution');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   return (
@@ -211,7 +234,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   appIconText: {
-    ...typography.bodySmall,
+    ...typographyStatic.bodySmall,
     fontWeight: '700',
   },
   timeRow: {

@@ -110,9 +110,21 @@ export default function CompleteScreen() {
         weightKg: onboarding.weightKg || undefined,
         unitPreference: onboarding.unitPreference,
         healthGoals: onboarding.selectedGoals as HealthGoal[],
+        primaryGoal: onboarding.selectedGoals[0] || undefined,
+        fitnessGoal: onboarding.fitnessGoal || undefined,
         trainingDaysPerWeek: onboarding.trainingDaysPerWeek ?? undefined,
         preferredWorkoutDays: effectiveTrainingDays,
         fitnessEquipment: onboarding.selectedEquipment,
+        consistencyLevel: onboarding.consistencyLevel || undefined,
+        sessionDuration: onboarding.sessionDuration || undefined,
+        gymType: onboarding.gymType || undefined,
+        trainingExperience: onboarding.experienceLevel
+          ? (['beginner'].includes(onboarding.experienceLevel) ? 'beginner'
+             : ['less_than_1_year', '1_to_2_years'].includes(onboarding.experienceLevel) ? 'intermediate'
+             : 'advanced')
+          : (onboarding.consistencyLevel === 'never_consistent' ? 'beginner'
+             : onboarding.consistencyLevel === 'very_consistent' ? 'advanced'
+             : 'intermediate'),
       });
 
       setIsOnboarded(true);

@@ -28,7 +28,10 @@ import {
   GYM_TYPE_OPTIONS,
   SESSION_DURATION_OPTIONS,
   ONBOARDING_DEFAULTS,
+  EQUIPMENT_CATALOG,
 } from '../../src/types/onboarding';
+import { supabase } from '../../src/lib/supabase';
+import { useProfileStore } from '../../src/stores/profile-store';
 
 // ── Loading Lines ───────────────────────────────────────────────────
 
@@ -61,8 +64,7 @@ export default function GeneratingScreen() {
   const sessionDuration = useOnboardingStore((s) => s.sessionDuration);
   const selectedEquipment = useOnboardingStore((s) => s.selectedEquipment);
   const getEffectiveTrainingDays = useOnboardingStore((s) => s.getEffectiveTrainingDays);
-  const isSubmitting = useOnboardingStore((s) => s.isSubmitting);
-  const submitOnboarding = useOnboardingStore((s) => s.submitOnboarding);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Derived values
   const effectiveDays = getEffectiveTrainingDays();
@@ -146,11 +148,82 @@ export default function GeneratingScreen() {
     }
   }, [phase]);
 
+  // ── Save onboarding data ───────────────────────────────────────
+
+  const saveOnboardingData = useCallback(async () => {
+    const user = useAuthStore.getState().user;
+    const onboarding = useOnboardingStore.getState();
+    const effectiveTrainingDays = onboarding.getEffectiveTrainingDays();
+
+    if (user) {
+      const userEquipment = onboarding.selectedEquipment.map((eqId) => {
+        const catalogItem = EQUIPMENT_CATALOG.find((c) => c.id === eqId);
+        return {
+          id: eqId,
+          name: catalogItem?.name ?? eqId,
+          category: catalogItem?.category ?? 'other',
+          available: true,
+          weights: onboarding.equipmentWeights[eqId] ?? [],
+        };
+      });
+
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        display_name: onboarding.displayName || null,
+        date_of_birth: onboarding.dateOfBirth || null,
+        gender: onboarding.gender,
+        height_cm: onboarding.heightCm,
+        weight_kg: onboarding.weightKg,
+        unit_preference: onboarding.unitPreference,
+        onboarding_completed: true,
+        onboarding_version: 2,
+        fitness_goal: onboarding.fitnessGoal,
+        experience_level: onboarding.experienceLevel,
+        consistency_level: onboarding.consistencyLevel,
+        gym_type: onboarding.gymType,
+        gym_name: onboarding.gymName || null,
+        training_days_per_week: onboarding.trainingDaysPerWeek,
+        specific_training_days: effectiveTrainingDays,
+        session_duration_pref: onboarding.sessionDuration,
+        user_equipment: userEquipment,
+        attribution_source: onboarding.attributionSource,
+      }).eq('id', user.id);
+      if (profileError) {
+        console.warn('Failed to save onboarding to Supabase:', profileError.message);
+      }
+    }
+
+    useProfileStore.getState().updateProfile({
+      displayName: onboarding.displayName,
+      dateOfBirth: onboarding.dateOfBirth || undefined,
+      gender: onboarding.gender || undefined,
+      heightCm: onboarding.heightCm || undefined,
+      weightKg: onboarding.weightKg || undefined,
+      unitPreference: onboarding.unitPreference,
+      healthGoals: onboarding.selectedGoals as import('../../src/stores/profile-store').HealthGoal[],
+      primaryGoal: onboarding.selectedGoals[0] || undefined,
+      fitnessGoal: onboarding.fitnessGoal || undefined,
+      trainingDaysPerWeek: onboarding.trainingDaysPerWeek ?? undefined,
+      preferredWorkoutDays: effectiveTrainingDays,
+      fitnessEquipment: onboarding.selectedEquipment,
+      consistencyLevel: onboarding.consistencyLevel || undefined,
+      sessionDuration: onboarding.sessionDuration || undefined,
+      gymType: onboarding.gymType || undefined,
+      trainingExperience: onboarding.experienceLevel
+        ? (['beginner'].includes(onboarding.experienceLevel) ? 'beginner'
+           : ['less_than_1_year', '1_to_2_years'].includes(onboarding.experienceLevel) ? 'intermediate'
+           : 'advanced')
+        : (onboarding.consistencyLevel === 'never_consistent' ? 'beginner'
+           : onboarding.consistencyLevel === 'very_consistent' ? 'advanced'
+           : 'intermediate'),
+    });
+  }, []);
+
   // ── Actions ─────────────────────────────────────────────────────
 
   const handleStartTraining = useCallback(async () => {
+    setIsSaving(true);
     try {
-      await submitOnboarding();
+      await saveOnboardingData();
 
       // Ensure workout store is initialized (loads seed programs from AsyncStorage)
       const store = useWorkoutStore.getState();
@@ -240,18 +313,23 @@ export default function GeneratingScreen() {
       router.replace('/(tabs)');
     } catch (err: any) {
       crossPlatformAlert('Something went wrong', err?.message || 'Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-  }, [submitOnboarding, recommendation, gymType, selectedEquipment, experience]);
+  }, [saveOnboardingData, recommendation, gymType, selectedEquipment, experience]);
 
   const handleBrowsePrograms = useCallback(async () => {
+    setIsSaving(true);
     try {
-      await submitOnboarding();
+      await saveOnboardingData();
       useAuthStore.getState().setIsOnboarded(true);
       router.replace('/(tabs)');
     } catch (err: any) {
       crossPlatformAlert('Something went wrong', err?.message || 'Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-  }, [submitOnboarding]);
+  }, [saveOnboardingData]);
 
   const handleBack = useCallback(() => {
     lightImpact();
@@ -339,7 +417,7 @@ export default function GeneratingScreen() {
         ]}
       >
         {/* Back button */}
-        <View style={[styles.backHeader, { paddingTop: insets.top + 6 }]}>
+        <View style={[styles.backHeader, { paddingTop: 6 }]}>
           <Pressable onPress={handleBack} style={styles.backButton} hitSlop={12}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
@@ -471,8 +549,8 @@ export default function GeneratingScreen() {
           <Button
             title="Start Training"
             onPress={handleStartTraining}
-            loading={isSubmitting}
-            disabled={isSubmitting}
+            loading={isSaving}
+            disabled={isSaving}
             size="lg"
           />
           <View style={{ height: spacing.sm }} />
@@ -481,8 +559,8 @@ export default function GeneratingScreen() {
             onPress={handleBrowsePrograms}
             variant="ghost"
             size="lg"
-            loading={isSubmitting}
-            disabled={isSubmitting}
+            loading={isSaving}
+            disabled={isSaving}
           />
         </View>
       </Animated.View>

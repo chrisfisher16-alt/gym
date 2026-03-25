@@ -10,6 +10,7 @@ import { useWorkoutPrograms } from '../../hooks/useWorkoutPrograms';
 import { useWorkoutHistory } from '../../hooks/useWorkoutHistory';
 import { checkAIMessageLimit, type UsageCheck } from '../../lib/usage-limits';
 import { useEntitlement } from '../../hooks/useEntitlement';
+import { getDateString } from '../../lib/nutrition-utils';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -77,9 +78,9 @@ function useTodayContext(displayName?: string) {
 
     // Post-workout same day
     if (status === 'completed') {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getDateString();
       const todayDone = history.find(
-        (w) => new Date(w.completedAt).toISOString().split('T')[0] === todayStr,
+        (w) => getDateString(new Date(w.completedAt)) === todayStr,
       );
       if (todayDone?.totalVolume) {
         return {
@@ -156,9 +157,9 @@ function useWorkoutContext() {
     }
 
     // Post-workout cooldown (within 1 hour)
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getDateString();
     const todayDone = history.find(
-      (w) => new Date(w.completedAt).toISOString().split('T')[0] === todayStr,
+      (w) => getDateString(new Date(w.completedAt)) === todayStr,
     );
     if (todayDone) {
       const msSince = Date.now() - new Date(todayDone.completedAt).getTime();

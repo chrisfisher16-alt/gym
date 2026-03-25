@@ -197,6 +197,10 @@ export const useNotificationStore = create<NotificationState>()(
 
       syncReminders: async () => {
         const { preferences } = get();
+        if (preferences.permissionStatus !== 'granted') {
+          console.warn('Notification permission not granted, skipping schedule');
+          return;
+        }
         await syncRemindersFromPreferences(preferences);
       },
 

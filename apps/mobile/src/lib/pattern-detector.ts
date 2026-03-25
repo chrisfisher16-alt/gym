@@ -32,7 +32,10 @@ function safeParse(iso: string): Date | null {
 
 /** Get a YYYY-MM-DD string for a Date. */
 function toDateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Create a Date for a specific hour/minute on a given day. */

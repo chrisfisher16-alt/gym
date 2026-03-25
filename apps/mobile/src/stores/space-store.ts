@@ -100,6 +100,7 @@ interface SpaceState {
   deleteSpace: (id: string) => void;
   switchSpace: (id: string) => void;
   getActiveSpace: () => TrainingSpace | null;
+  reset: () => Promise<void>;
 }
 
 // ── Side Effects ────────────────────────────────────────────────────
@@ -234,5 +235,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const { spaces, activeSpaceId } = get();
     if (!activeSpaceId) return null;
     return spaces.find((s) => s.id === activeSpaceId) ?? null;
+  },
+
+  // ── Reset ──────────────────────────────────────────────────────
+
+  reset: async () => {
+    set({ spaces: [], activeSpaceId: null, isInitialized: false });
+    await Promise.all(
+      Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
+    ).catch(() => {});
   },
 }));

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Linking, Platform, TouchableOpacity } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,9 +10,12 @@ import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { isSupabaseConfigured } from '../../src/lib/supabase';
 
-function friendlyAuthError(msg: string): string {
-  if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
-  if (msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
+function friendlyAuthError(error: { code?: string; message?: string } | string): string {
+  const code = typeof error === 'string' ? undefined : error.code;
+  const msg = typeof error === 'string' ? error : error.message ?? '';
+  if (code === 'invalid_credentials' || msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
+  if (code === 'email_not_confirmed' || msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
+  if (code === 'user_not_found' || msg.includes('User not found')) return 'No account found with this email.';
   if (msg.includes('User already registered')) return 'An account with this email already exists.';
   if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.';
   return 'Something went wrong. Please try again.';
@@ -49,7 +52,9 @@ export default function SignUpScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        setFormError(friendlyAuthError(error.message || ''));
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
       }
     } finally {
       setGoogleLoading(false);
@@ -74,7 +79,7 @@ export default function SignUpScreen() {
     setFormError('');
     const { error } = await signUp(data.email, data.password);
     if (error) {
-      setFormError(friendlyAuthError(error.message || ''));
+      setFormError(friendlyAuthError(error));
     } else {
       router.replace('/');
     }
@@ -195,39 +200,44 @@ export default function SignUpScreen() {
               control={control}
               name="acceptTerms"
               render={({ field: { onChange, value } }) => (
-                <TouchableOpacity
-                  onPress={() => onChange(!value)}
-                  activeOpacity={0.7}
-                  style={styles.termsRow}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        borderColor: errors.acceptTerms ? colors.error : colors.border,
-                        backgroundColor: value ? colors.primary : 'transparent',
-                      },
-                    ]}
+                <View style={styles.termsRow}>
+                  <TouchableOpacity
+                    onPress={() => onChange(!value)}
+                    activeOpacity={0.7}
+                    style={styles.checkboxHitArea}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    {value && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
-                  </View>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          borderColor: errors.acceptTerms ? colors.error : colors.border,
+                          backgroundColor: value ? colors.primary : 'transparent',
+                        },
+                      ]}
+                    >
+                      {value && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
+                    </View>
+                  </TouchableOpacity>
                   <Text style={[typography.bodySmall, { color: colors.textSecondary, flex: 1 }]}>
                     I agree to the{' '}
                     <Text
                       style={{ color: colors.primary, textDecorationLine: 'underline' }}
-                      onPress={() => router.push('/terms')}
+                      onPress={() => Linking.openURL('https://formiq.app/terms')}
+                      suppressHighlighting
                     >
                       Terms of Service
                     </Text>
                     {' '}and{' '}
                     <Text
                       style={{ color: colors.primary, textDecorationLine: 'underline' }}
-                      onPress={() => router.push('/privacy')}
+                      onPress={() => Linking.openURL('https://formiq.app/privacy')}
+                      suppressHighlighting
                     >
                       Privacy Policy
                     </Text>
                   </Text>
-                </TouchableOpacity>
+                </View>
               )}
             />
             {errors.acceptTerms && (
@@ -284,6 +294,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     minHeight: 48,
+  },
+  checkboxHitArea: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   checkbox: {
     width: 22,

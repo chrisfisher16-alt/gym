@@ -6,6 +6,7 @@ import type {
   PersonalRecord,
   DayVolume,
 } from '../types/workout';
+import { getDateString } from './nutrition-utils';
 
 // ── ID Generation ───────────────────────────────────────────────────
 
@@ -208,12 +209,12 @@ export function getWeeklyVolume(history: CompletedSession[], weeksBack: number =
 
   // Initialize all days in range
   for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getDateString(d);
     dayMap.set(dateStr, { date: dateStr, volume: 0, sets: 0 });
   }
 
   for (const session of history) {
-    const dateStr = new Date(session.completedAt).toISOString().split('T')[0];
+    const dateStr = getDateString(new Date(session.completedAt));
     const existing = dayMap.get(dateStr);
     if (existing) {
       existing.volume += session.totalVolume;

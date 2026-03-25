@@ -42,6 +42,15 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    // Hide the floating dev menu button in development
+    if (__DEV__) {
+      try {
+        const { requireOptionalNativeModule } = require('expo-modules-core');
+        const devMenuPrefs = requireOptionalNativeModule('DevMenuPreferences');
+        devMenuPrefs?.setPreferencesAsync?.({ showFloatingActionButton: false });
+      } catch {}
+    }
+
     // Migrate AI config on all platforms (clears stale cached API key)
     migrateAIConfig().catch(() => {});
 

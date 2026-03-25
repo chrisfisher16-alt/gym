@@ -10,9 +10,12 @@ import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { isSupabaseConfigured } from '../../src/lib/supabase';
 
-function friendlyAuthError(msg: string): string {
-  if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
-  if (msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
+function friendlyAuthError(error: { code?: string; message?: string } | string): string {
+  const code = typeof error === 'string' ? undefined : error.code;
+  const msg = typeof error === 'string' ? error : error.message ?? '';
+  if (code === 'invalid_credentials' || msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
+  if (code === 'email_not_confirmed' || msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
+  if (code === 'user_not_found' || msg.includes('User not found')) return 'No account found with this email.';
   if (msg.includes('User already registered')) return 'An account with this email already exists.';
   if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.';
   return 'Something went wrong. Please try again.';
@@ -38,7 +41,7 @@ export default function SignInScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        setFormError(friendlyAuthError(error.message || ''));
+        setFormError(friendlyAuthError(error));
       } else {
         router.replace('/');
       }
@@ -58,11 +61,15 @@ export default function SignInScreen() {
 
   const onSubmit = async (data: SignInForm) => {
     setFormError('');
-    const { error } = await signIn(data.email, data.password);
-    if (error) {
-      setFormError(friendlyAuthError(error.message || ''));
-    } else {
-      router.replace('/');
+    try {
+      const { error } = await signIn(data.email, data.password);
+      if (error) {
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
+      }
+    } catch (e: any) {
+      setFormError(friendlyAuthError(e?.message || 'Something went wrong. Please try again.'));
     }
   };
 

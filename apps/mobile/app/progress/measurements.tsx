@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -106,8 +106,11 @@ export default function MeasurementsScreen() {
   }, [isInitialized, initialize]);
 
   // Pre-fill form from last measurement when switching to log tab
+  const hasPrefilledRef = useRef(false);
   useEffect(() => {
     if (activeTab !== 'log' || measurements.length === 0) return;
+    if (hasPrefilledRef.current) return;
+    hasPrefilledRef.current = true;
     const last = measurements[0]; // sorted by date desc
     if (last.weightKg != null) setWeight(displayWeight(last.weightKg, imperial));
     if (last.heightCm != null) {
@@ -136,7 +139,7 @@ export default function MeasurementsScreen() {
     }
     setFormFields(fields);
     if (last.notes) setNotes(last.notes);
-  }, [activeTab, measurements.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, measurements.length, imperial, measurements, profileHeightCm]);
 
   // ── Weight Chart Data ────────────────────────────────────────────
 
@@ -145,8 +148,9 @@ export default function MeasurementsScreen() {
     .slice(0, 12)
     .reverse();
 
-  const maxWeight = Math.max(...weightHistory.map((m) => m.weightKg!), 1);
-  const minWeight = Math.min(...weightHistory.map((m) => m.weightKg!), 0);
+  const weightValues = weightHistory.map((m) => m.weightKg!);
+  const maxWeight = weightValues.length > 0 ? Math.max(...weightValues) : 100;
+  const minWeight = weightValues.length > 0 ? Math.min(...weightValues) : 0;
   const weightRange = maxWeight - minWeight || 1;
 
   // ── Form Submit ──────────────────────────────────────────────────

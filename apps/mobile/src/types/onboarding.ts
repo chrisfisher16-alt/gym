@@ -135,11 +135,11 @@ export const FITNESS_GOAL_OPTIONS: {
   description: string;
   icon: string;
 }[] = [
-  { value: 'build_muscle', label: 'Build Muscle', description: 'Gain size and definition', icon: 'barbell-outline' },
-  { value: 'lose_fat', label: 'Lose Fat', description: 'Burn fat, keep muscle', icon: 'flame-outline' },
-  { value: 'get_stronger', label: 'Get Stronger', description: 'Increase your max lifts', icon: 'trending-up-outline' },
-  { value: 'stay_active', label: 'Stay Active', description: 'General fitness and health', icon: 'heart-outline' },
-  { value: 'athletic_performance', label: 'Athletic Performance', description: 'Sport-specific training', icon: 'flash-outline' },
+  { value: 'build_muscle', label: 'Build Muscle', description: 'Build size and strength through hypertrophy training', icon: 'barbell-outline' },
+  { value: 'lose_fat', label: 'Lose Fat', description: 'Burn fat while preserving muscle mass', icon: 'flame-outline' },
+  { value: 'get_stronger', label: 'Get Stronger', description: 'Focus on increasing strength and power', icon: 'fitness-outline' },
+  { value: 'stay_active', label: 'Stay Active', description: 'Maintain fitness and overall health', icon: 'heart-outline' },
+  { value: 'athletic_performance', label: 'Athletic Performance', description: 'Train for speed, agility, and sport performance', icon: 'trophy-outline' },
 ];
 
 export const EXPERIENCE_LEVEL_OPTIONS: {

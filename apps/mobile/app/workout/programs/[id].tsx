@@ -8,6 +8,9 @@ import { useTheme } from '../../../src/theme';
 import { useWorkoutPrograms } from '../../../src/hooks/useWorkoutPrograms';
 import { useActiveWorkout } from '../../../src/hooks/useActiveWorkout';
 import { Card, Badge, Button } from '../../../src/components/ui';
+import { useEntitlement } from '../../../src/hooks/useEntitlement';
+import { usePaywall } from '../../../src/hooks/usePaywall';
+import { checkWorkoutLogLimit } from '../../../src/lib/usage-limits';
 import {
   DayType,
   DAY_TYPE_LABELS,
@@ -24,6 +27,8 @@ export default function ProgramDetailScreen() {
   const { colors, spacing, radius, typography } = useTheme();
   const { programs, setActiveProgram, deleteProgram } = useWorkoutPrograms();
   const { startWorkout, isActive } = useActiveWorkout();
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const program = programs.find((p) => p.id === id);
 
@@ -44,24 +49,47 @@ export default function ProgramDetailScreen() {
 
   const launchDay = (dayIndex: number) => {
     const day = program.days[dayIndex];
-    // Always set this program as active when starting one of its workouts
-    if (!program.isActive) {
-      setActiveProgram(program.id);
+
+    const doStart = () => {
+      // Always set this program as active when starting one of its workouts
+      if (!program.isActive) {
+        setActiveProgram(program.id);
+      }
+      startWorkout({
+        name: `${program.name} — ${day.name}`,
+        programId: program.id,
+        dayId: day.id,
+        exercises: day.exercises.map((e) => ({
+          exerciseId: e.exerciseId,
+          exerciseName: e.exerciseName,
+          targetSets: e.targetSets,
+          targetReps: e.targetReps,
+          restSeconds: e.restSeconds,
+          supersetGroupId: e.supersetGroupId,
+        })),
+      });
+      router.push('/workout/active');
+    };
+
+    if (canAccess('unlimited_workouts')) {
+      doStart();
+      return;
     }
-    startWorkout({
-      name: `${program.name} — ${day.name}`,
-      programId: program.id,
-      dayId: day.id,
-      exercises: day.exercises.map((e) => ({
-        exerciseId: e.exerciseId,
-        exerciseName: e.exerciseName,
-        targetSets: e.targetSets,
-        targetReps: e.targetReps,
-        restSeconds: e.restSeconds,
-        supersetGroupId: e.supersetGroupId,
-      })),
+    // Free tier — check usage
+    checkWorkoutLogLimit().then((usage) => {
+      if (usage.allowed) {
+        doStart();
+      } else {
+        crossPlatformAlert(
+          'Workout Limit Reached',
+          `You've used all ${usage.limit} free workouts this month. Upgrade to Workout Coach for unlimited workouts.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_workouts', source: 'program_detail' }) },
+          ],
+        );
+      }
     });
-    router.push('/workout/active');
   };
 
   const handleStartDay = (dayIndex: number) => {

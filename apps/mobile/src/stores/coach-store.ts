@@ -69,13 +69,18 @@ interface CoachState {
   streamingContent: string;
   isStreaming: boolean;
 
+  // Demo fallback tracking
+  lastMessageWasDemo: boolean;
+
   // Actions
   initialize: () => Promise<void>;
   sendMessage: (text: string, context?: CoachContext, imageUri?: string) => Promise<void>;
+  abortCurrentRequest: () => void;
   startConversation: (context?: CoachContext) => Promise<void>;
   loadConversation: (conversationId: string) => Promise<void>;
   loadHistory: () => Promise<void>;
   clearError: () => void;
+  clearDemoWarning: () => void;
   setPrefilledContext: (context: CoachContext, message?: string) => void;
   prefilledContext: CoachContext | null;
   prefilledMessage: string | null;
@@ -97,11 +102,68 @@ function generateId(prefix: string): string {
 function toAIHistory(messages: CoachMessage[]): AIMessage[] {
   return messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
+    .map((m) => {
+      // If the message had an image, try to preserve image content blocks
+      if (m.imageUri) {
+        // We don't re-encode the image for history — just include text.
+        // The original image was already processed on the initial send.
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        };
+      }
+      return {
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      };
+    });
 }
+
+// ── Old cache cleanup ───────────────────────────────────────────────
+
+const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/**
+ * Remove stale briefing and summary cache entries older than 30 days.
+ * Called on store initialization — fire-and-forget.
+ */
+async function cleanupOldCaches(): Promise<void> {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const cacheKeys = allKeys.filter(
+      (k) => k.startsWith('@briefing/') || k.startsWith('@coach/summaries/') || k.startsWith('@weekly-summary/'),
+    );
+    if (cacheKeys.length === 0) return;
+
+    const now = Date.now();
+    const keysToDelete: string[] = [];
+
+    for (const key of cacheKeys) {
+      // Try to extract a date from the key (e.g. @briefing/2025-01-15)
+      const datePart = key.split('/').pop();
+      if (!datePart) continue;
+
+      // Check if the suffix looks like a date (YYYY-MM-DD)
+      const dateMatch = datePart.match(/^(\d{4}-\d{2}-\d{2})/); 
+      if (dateMatch) {
+        const entryDate = new Date(dateMatch[1]).getTime();
+        if (!isNaN(entryDate) && now - entryDate > CACHE_MAX_AGE_MS) {
+          keysToDelete.push(key);
+        }
+      }
+    }
+
+    if (keysToDelete.length > 0) {
+      await Promise.all(keysToDelete.map((k) => AsyncStorage.removeItem(k)));
+    }
+  } catch {
+    // Never disrupt app startup
+  }
+}
+
+// ── Concurrency guard ───────────────────────────────────────────────
+
+let _currentAbortController: AbortController | null = null;
 
 // ── Store ───────────────────────────────────────────────────────────
 
@@ -116,6 +178,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
   isStreaming: false,
   prefilledContext: null,
   prefilledMessage: null,
+  lastMessageWasDemo: false,
 
   initialize: async () => {
     try {
@@ -136,12 +199,37 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         : null;
 
       set({ conversations, messages, activeConversation, isInitialized: true });
+
+      // Fire-and-forget: clean up stale cache entries
+      void cleanupOldCaches();
     } catch {
       set({ isInitialized: true });
     }
   },
 
+  abortCurrentRequest: () => {
+    if (_currentAbortController) {
+      _currentAbortController.abort();
+      _currentAbortController = null;
+    }
+    set({ isLoading: false, isStreaming: false, streamingContent: '' });
+  },
+
   sendMessage: async (text: string, context?: CoachContext, imageUri?: string) => {
+    // Abort any in-flight request
+    if (_currentAbortController) {
+      _currentAbortController.abort();
+      _currentAbortController = null;
+    }
+
+    // Guard against concurrent sends
+    if (get().isLoading) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    _currentAbortController = abortController;
+
     const state = get();
     let conversation = state.activeConversation;
 
@@ -181,13 +269,34 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     if (imageUri) {
       try {
         const FileSystem = await import('expo-file-system');
+
+        // Validate image size before encoding (max 4MB)
+        const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
+        const fileInfo = await FileSystem.getInfoAsync(imageUri);
+        if (fileInfo.exists && 'size' in fileInfo && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
+          throw new Error('Image too large. Please select a smaller image (under 4MB).');
+        }
+
         const base64data = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' as any });
+
+        // Detect mime type from file extension
+        const ext = imageUri.split('.').pop()?.toLowerCase();
+        let mediaType: string;
+        switch (ext) {
+          case 'png':  mediaType = 'image/png';  break;
+          case 'webp': mediaType = 'image/webp'; break;
+          case 'gif':  mediaType = 'image/gif';  break;
+          case 'jpg':
+          case 'jpeg':
+          default:     mediaType = 'image/jpeg'; break;
+        }
+
         const blocks: AIContentBlock[] = [
           {
             type: 'image',
             source: {
               type: 'base64',
-              media_type: 'image/jpeg',
+              media_type: mediaType as any,
               data: base64data,
             },
           },
@@ -198,7 +307,12 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         messageContent = blocks;
       } catch (err) {
         console.warn('Failed to read image for AI:', err);
-        // Fall back to text-only
+        // Re-throw user-facing size errors so the UI can display them
+        if (err instanceof Error && err.message.includes('too large')) {
+          set({ isLoading: false, error: err.message });
+          return;
+        }
+        // Fall back to text-only for other errors
       }
     }
 
@@ -223,6 +337,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
             isStreaming: true,
           }));
         },
+        abortController.signal,
       );
 
       // Parse actions from AI response
@@ -257,6 +372,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         isLoading: false,
         isStreaming: false,
         streamingContent: '',
+        lastMessageWasDemo: response.isDemo,
       }));
 
       // Persist
@@ -267,7 +383,21 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(updatedState.conversations)),
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(updatedConversation)),
       ]);
+
+      if (_currentAbortController === abortController) {
+        _currentAbortController = null;
+      }
     } catch (error) {
+      if (_currentAbortController === abortController) {
+        _currentAbortController = null;
+      }
+
+      // Aborted requests are expected — silently return
+      if (error instanceof Error && error.name === 'AbortError') {
+        set({ isLoading: false, isStreaming: false, streamingContent: '' });
+        return;
+      }
+
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -356,6 +486,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+  clearDemoWarning: () => set({ lastMessageWasDemo: false }),
 
   setPrefilledContext: (context: CoachContext, message?: string) => {
     set({ prefilledContext: context, prefilledMessage: message ?? null });

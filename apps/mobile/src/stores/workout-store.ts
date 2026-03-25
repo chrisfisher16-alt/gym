@@ -18,6 +18,15 @@ import {
   activeToCompleted,
 } from '../lib/workout-utils';
 import { preloadExerciseImages } from '../lib/exercise-image-preloader';
+import { getDateString } from '../lib/nutrition-utils';
+
+// ── Validation Constants ────────────────────────────────────────────
+
+const MAX_WEIGHT = 2000; // lbs (~907 kg)
+const MAX_REPS = 999;
+
+const clampWeight = (v: number) => Math.min(Math.max(0, v), MAX_WEIGHT);
+const clampReps = (v: number) => Math.min(Math.max(0, v), MAX_REPS);
 
 // ── Storage Keys ────────────────────────────────────────────────────
 
@@ -116,7 +125,7 @@ interface WorkoutState {
   autoRestTimer: boolean;
   setAutoRestTimer: (enabled: boolean) => void;
   restTimerDuration: number;
-  startRestTimer: (durationSeconds: number) => void;
+  startRestTimer: (durationSeconds: number, exerciseId?: string) => void;
   clearRestTimer: () => void;
   extendRestTimer: (additionalSeconds: number) => void;
   setDefaultRestSeconds: (seconds: number) => void;
@@ -232,9 +241,22 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ? JSON.parse(storedRecords)
         : {};
 
-      const activeSession: ActiveWorkoutSession | null = storedSession
+      let activeSession: ActiveWorkoutSession | null = storedSession
         ? JSON.parse(storedSession)
         : null;
+
+      // Clear stale rest timer after app kill + restore
+      if (activeSession?.restTimerEndAt) {
+        const remaining = new Date(activeSession.restTimerEndAt).getTime() - Date.now();
+        if (remaining <= 0) {
+          // Timer has already expired — clear it
+          activeSession = {
+            ...activeSession,
+            restTimerEndAt: undefined,
+            restTimerDuration: undefined,
+          };
+        }
+      }
 
       const defaultRestSeconds = storedDefaultRest
         ? parseInt(storedDefaultRest, 10)
@@ -298,7 +320,10 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   deleteProgram: (programId) => {
     const program = get().programs.find((p) => p.id === programId);
-    if (program && !program.customized) return; // Don't delete seed programs
+    if (program && !program.customized) {
+      console.warn(`Cannot delete seed program "${program.name}" (id: ${programId}). Only user-created or customized programs can be deleted.`);
+      return 'Cannot delete built-in programs. Duplicate or customize it first.';
+    }
     set((state) => {
       const programs = state.programs.filter((p) => p.id !== programId);
       AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
@@ -385,6 +410,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   // ── Set Management ──────────────────────────────────────────────
 
   logSet: (exerciseInstanceId, setId, weight, reps, isAutoFilled) => {
+    const clampedWeight = clampWeight(weight);
+    const clampedReps = clampReps(reps);
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -394,7 +421,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           ...exercise,
           sets: exercise.sets.map((s) => {
             if (s.id !== setId) return s;
-            return { ...s, weight, reps, ...(isAutoFilled !== undefined ? { isAutoFilled } : {}) };
+            return { ...s, weight: clampedWeight, reps: clampedReps, ...(isAutoFilled !== undefined ? { isAutoFilled } : {}) };
           }),
         };
       });
@@ -407,6 +434,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   },
 
   cascadeWeight: (exerciseInstanceId, fromSetIndex, weight, reps) => {
+    const clampedWeight = clampWeight(weight);
+    const clampedReps = clampReps(reps);
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -423,7 +452,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
             if (s.isAutoFilled === false) return s;
             // Apply cascade to empty or previously auto-filled sets
             if (s.weight === undefined || s.isAutoFilled === true || s.isAutoFilled === undefined) {
-              return { ...s, weight, reps, isAutoFilled: true };
+              return { ...s, weight: clampedWeight, reps: clampedReps, isAutoFilled: true };
             }
             return s;
           }),
@@ -453,22 +482,39 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
             if (s.isCompleted) return s;
 
             let isPR = false;
-            if (s.weight && s.reps && s.setType !== 'warmup') {
-              const prResult = checkForPR(
-                exercise.exerciseId,
-                s.weight,
-                s.reps,
-                updatedRecords,
-              );
-              isPR = prResult.isPR;
-              if (isPR) {
-                updatedRecords[exercise.exerciseId] = updatePersonalRecord(
+            if (s.reps && s.setType !== 'warmup') {
+              const isBodyweight = exercise.isBodyweight || (!s.weight || s.weight === 0);
+              if (isBodyweight) {
+                // Bodyweight PR: compare by max reps
+                const currentRecord = updatedRecords[exercise.exerciseId];
+                const prevMaxReps = currentRecord?.mostReps?.reps ?? 0;
+                if (s.reps > prevMaxReps) {
+                  isPR = true;
+                  updatedRecords[exercise.exerciseId] = updatePersonalRecord(
+                    exercise.exerciseId,
+                    s.weight ?? 0,
+                    s.reps,
+                    now,
+                    updatedRecords,
+                  );
+                }
+              } else if (s.weight) {
+                const prResult = checkForPR(
                   exercise.exerciseId,
                   s.weight,
                   s.reps,
-                  now,
                   updatedRecords,
                 );
+                isPR = prResult.isPR;
+                if (isPR) {
+                  updatedRecords[exercise.exerciseId] = updatePersonalRecord(
+                    exercise.exerciseId,
+                    s.weight,
+                    s.reps,
+                    now,
+                    updatedRecords,
+                  );
+                }
               }
             }
 
@@ -757,26 +803,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         e.exerciseId === target.exerciseId ? { ...e, restSeconds: clamped } : e,
       );
 
-      // Live-update running timer if it belongs to this exercise
-      const isTimerForThisExercise =
-        state.activeSession.restTimerEndAt &&
-        state.activeSession.restTimerExerciseId === target.exerciseId;
-
-      const timerUpdate = isTimerForThisExercise
-        ? {
-            restTimerDuration: clamped,
-            activeSession: {
-              ...state.activeSession,
-              exercises,
-              restTimerDuration: clamped,
-              restTimerEndAt: new Date(Date.now() + clamped * 1000).toISOString(),
-            },
-          }
-        : {
-            activeSession: { ...state.activeSession, exercises },
-          };
-
-      return timerUpdate;
+      // Update the rest setting without restarting a running timer.
+      // If a timer is running for this exercise, keep its current end time
+      // and just update the stored duration setting for future timers.
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
     });
     get().persistActiveSession();
   },
@@ -944,7 +976,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     AsyncStorage.setItem(STORAGE_KEYS.AUTO_REST_TIMER, JSON.stringify(enabled)).catch(console.warn);
   },
 
-  startRestTimer: (durationSeconds) => {
+  startRestTimer: (durationSeconds, exerciseId) => {
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -955,6 +987,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           ...state.activeSession,
           restTimerEndAt: endAt,
           restTimerDuration: durationSeconds,
+          restTimerExerciseId: exerciseId,
         },
       };
     });
@@ -1004,9 +1037,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   todayWorkoutStatus: () => {
     const { activeSession, history } = get();
     if (activeSession) return 'active';
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getDateString();
     const completedToday = history.some(
-      (s) => new Date(s.completedAt).toISOString().split('T')[0] === todayStr,
+      (s) => getDateString(new Date(s.completedAt)) === todayStr,
     );
     return completedToday ? 'completed' : 'pending';
   },
@@ -1017,6 +1050,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     const state = get();
     if (!state.activeSession) return null;
 
+    // #34: Guard against empty workouts — require at least 1 completed set
+    const hasCompletedSet = state.activeSession.exercises.some((exercise) =>
+      exercise.sets.some(
+        (s) => s.isCompleted && ((s.weight != null && s.weight > 0) || (s.reps != null && s.reps > 0)),
+      ),
+    );
+    if (!hasCompletedSet) {
+      console.warn('completeWorkout: no completed sets with data, skipping');
+      return null;
+    }
+
     const completed = activeToCompleted(
       state.activeSession,
       'local_user',
@@ -1025,25 +1069,91 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     const history = [completed, ...state.history];
 
-    set({ activeSession: null, history });
+    // #30: Save previous state for rollback on persist failure
+    const prevHistory = state.history;
+    const prevActiveSession = state.activeSession;
 
-    await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
-    await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    set({ activeSession: null, history, restTimerDuration: 0 });
+
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+      await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    } catch (e) {
+      // Revert state on persistence failure
+      set({ activeSession: prevActiveSession, history: prevHistory });
+      console.error('Failed to persist workout completion:', e);
+      return null;
+    }
 
     return completed;
   },
 
   cancelWorkout: () => {
-    set({ activeSession: null });
+    // #48: Clear rest timer state along with the active session
+    set({ activeSession: null, restTimerDuration: 0 });
     AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
   },
 
   // ── Delete Session from History ────────────────────────────────
 
   deleteSession: (sessionId) => {
-    const history = get().history.filter((s) => s.id !== sessionId);
-    set({ history });
-    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history)).catch(console.warn);
+    const state = get();
+    const session = state.history.find((s) => s.id === sessionId);
+    if (!session) return;
+
+    const newHistory = state.history.filter((s) => s.id !== sessionId);
+
+    // Recalculate PRs for exercises that appeared in the deleted session
+    const affectedExerciseIds = new Set(
+      session.exercises.map((e) => e.exerciseId),
+    );
+
+    const newRecords = { ...state.personalRecords };
+    for (const exerciseId of affectedExerciseIds) {
+      let heaviestWeight: PersonalRecord['heaviestWeight'] = null;
+      let mostReps: PersonalRecord['mostReps'] = null;
+      let highestVolume: PersonalRecord['highestVolume'] = null;
+
+      for (const s of newHistory) {
+        for (const ex of s.exercises) {
+          if (ex.exerciseId !== exerciseId) continue;
+          for (const set of ex.sets) {
+            if (set.setType === 'warmup') continue;
+            const w = set.weight ?? 0;
+            const r = set.reps ?? 0;
+            if (w <= 0 || r <= 0) continue;
+            const vol = w * r;
+
+            if (!heaviestWeight || w > heaviestWeight.weight) {
+              heaviestWeight = { weight: w, reps: r, date: s.completedAt };
+            }
+
+            if (!mostReps || (w >= (mostReps.weight ?? 0) && r > mostReps.reps)) {
+              mostReps = { weight: w, reps: r, date: s.completedAt };
+            }
+
+            if (!highestVolume || vol > highestVolume.volume) {
+              highestVolume = { weight: w, reps: r, volume: vol, date: s.completedAt };
+            }
+          }
+        }
+      }
+
+      if (heaviestWeight || mostReps || highestVolume) {
+        newRecords[exerciseId] = {
+          exerciseId,
+          heaviestWeight,
+          mostReps,
+          highestVolume,
+        };
+      } else {
+        delete newRecords[exerciseId];
+      }
+    }
+
+    set({ history: newHistory, personalRecords: newRecords });
+    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(newHistory)).catch(console.warn);
+    AsyncStorage.setItem(STORAGE_KEYS.PERSONAL_RECORDS, JSON.stringify(newRecords)).catch(console.warn);
   },
 
   // ── Session Metadata ────────────────────────────────────────────

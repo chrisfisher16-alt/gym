@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ACHIEVEMENTS, calculateStreak, type AchievementData } from '../lib/achievements';
 import { useWorkoutStore } from './workout-store';
 import { useNutritionStore } from './nutrition-store';
+import { getDateString } from '../lib/nutrition-utils';
 import { useMeasurementsStore } from './measurements-store';
 
 // ── Storage Keys ───────────────────────────────────────────────────
@@ -47,6 +48,7 @@ interface AchievementsState {
   // XP actions
   awardXP: (amount: number, source: string) => void;
   getXPToNextLevel: () => number;
+  reset: () => Promise<void>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -82,17 +84,18 @@ function gatherAchievementData(): AchievementData {
   const sortedMealDates = mealDates.sort().reverse();
   let consecutiveMealDays = 0;
   if (sortedMealDates.length > 0) {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const today = getDateString();
+    const yd = new Date(Date.now() - 86400000);
+    const yesterday = getDateString(yd);
     if (sortedMealDates[0] === today || sortedMealDates[0] === yesterday) {
       consecutiveMealDays = 1;
-      let current = new Date(sortedMealDates[0]);
       for (let i = 1; i < sortedMealDates.length; i++) {
-        const prev = new Date(sortedMealDates[i]);
-        const diff = (current.getTime() - prev.getTime()) / 86400000;
-        if (diff === 1) {
+        const currentDate = new Date(sortedMealDates[i - 1] + 'T12:00:00');
+        const prevDate = new Date(sortedMealDates[i] + 'T12:00:00');
+        const expectedPrev = new Date(currentDate);
+        expectedPrev.setDate(expectedPrev.getDate() - 1);
+        if (getDateString(prevDate) === getDateString(expectedPrev)) {
           consecutiveMealDays++;
-          current = prev;
         } else {
           break;
         }
@@ -138,7 +141,7 @@ function gatherAchievementData(): AchievementData {
 // ── XP Persistence Helpers ────────────────────────────────────────
 
 function persistXP(state: XPState): void {
-  AsyncStorage.setItem(XP_STORAGE_KEY, JSON.stringify(state));
+  AsyncStorage.setItem(XP_STORAGE_KEY, JSON.stringify(state)).catch((e) => console.error('XP persist failed:', e));
 }
 
 async function loadXP(): Promise<XPState> {
@@ -253,5 +256,13 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
     const { xp } = get();
     const xpInCurrentLevel = xp % 1000;
     return 1000 - xpInCurrentLevel;
+  },
+
+  reset: async () => {
+    set({ earned: [], newlyEarned: [], isInitialized: false, xp: 0, level: 1, xpHistory: [] });
+    await Promise.all([
+      AsyncStorage.removeItem(STORAGE_KEY),
+      AsyncStorage.removeItem(XP_STORAGE_KEY),
+    ]).catch(() => {});
   },
 }));

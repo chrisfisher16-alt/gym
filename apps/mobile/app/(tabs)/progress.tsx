@@ -132,6 +132,31 @@ export default function ProgressTab() {
     return Object.values(dailyLogs).reduce((sum, log: any) => sum + (log?.meals?.length ?? 0), 0);
   }, [dailyLogs]);
 
+  // Compute consecutive days with at least one meal logged (for achievement hints)
+  const consecutiveMealDays = useMemo(() => {
+    const daysWithMeals = new Set<string>();
+    for (const [dateKey, log] of Object.entries(dailyLogs)) {
+      if ((log as any)?.meals?.length > 0) daysWithMeals.add(dateKey);
+    }
+    if (daysWithMeals.size === 0) return 0;
+    let streak = 0;
+    const d = new Date();
+    // Check today and walk backwards
+    for (let i = 0; i < 365; i++) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (daysWithMeals.has(key)) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+      } else if (i === 0) {
+        // Today might not have meals yet — skip and check from yesterday
+        d.setDate(d.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }, [dailyLogs]);
+
   const demo = isDemoMode();
   const providerLabel = getHealthProviderName();
   const showHealthData = (isHealthConnected && Platform.OS !== 'web') || demo;
@@ -185,7 +210,12 @@ export default function ProgressTab() {
       }))
     : recentPRs.map((pr) => ({ ...pr, reps: 0 }));
   const displayVolume = demo ? demoVolume : weeklyVolume;
-  const displayWeight = demo ? DEMO_HEALTH_DATA.recentWeight : recentWeight;
+  const latestMeasurementWeight = measurements.length > 0
+    ? measurements[measurements.length - 1].weightKg
+    : null;
+  const displayWeight = demo
+    ? DEMO_HEALTH_DATA.recentWeight
+    : (recentWeight ?? latestMeasurementWeight);
   const displayHistory: CompletedSession[] = demo ? demoHistory : history;
 
   // Initialize sub-stores
@@ -195,15 +225,18 @@ export default function ProgressTab() {
     if (!healthInitialized) initHealth();
   }, [measurementsInitialized, achievementsInitialized, healthInitialized, initMeasurements, initAchievements, initHealth]);
 
-  // Check achievements when data changes
+  // Check achievements when data changes (debounced to avoid recalc on every render)
   useEffect(() => {
     if (!isInitialized && !demo) return;
     if (!achievementsInitialized) return;
-    const newly = checkAchievements();
-    if (newly.length > 0) {
-      setCongratsAchievements(newly);
-      setShowCongrats(true);
-    }
+    const timer = setTimeout(() => {
+      const newly = checkAchievements();
+      if (newly.length > 0) {
+        setCongratsAchievements(newly);
+        setShowCongrats(true);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [isInitialized, achievementsInitialized, totalWorkouts, totalPRs, measurements.length]);
 
   const handleDismissCongrats = useCallback(() => {
@@ -839,10 +872,10 @@ export default function ProgressTab() {
                               totalVolumeLbs: displayTotalVolume * KG_TO_LB,
                               currentStreak: displayStreak,
                               totalMealsLogged,
-                              consecutiveMealDays: 0, // TODO: compute consecutive days with meals logged
+                              consecutiveMealDays,
                               totalPhotos: photoCount,
-                              completedAllPlannedThisWeek: false, // TODO: requires cross-referencing program schedule
-                              history: [],
+                              completedAllPlannedThisWeek: false,
+                              history: displayHistory,
                             })
                           : 'Keep going!'}
                       </Text>
@@ -865,10 +898,10 @@ export default function ProgressTab() {
                           totalVolumeLbs: displayTotalVolume * KG_TO_LB,
                           currentStreak: displayStreak,
                           totalMealsLogged,
-                          consecutiveMealDays: 0, // TODO: compute consecutive days with meals logged
+                          consecutiveMealDays,
                           totalPhotos: photoCount,
-                          completedAllPlannedThisWeek: false, // TODO: requires cross-referencing program schedule
-                          history: [],
+                          completedAllPlannedThisWeek: false,
+                          history: displayHistory,
                         })
                       : undefined
                   }
@@ -893,7 +926,7 @@ export default function ProgressTab() {
                 value={Math.round(monthlyComparison.current)}
                 animateOnMount
                 style={[typography.h2, { color: colors.text }]}
-                formatter={(n) => `${Math.round(n).toLocaleString()} kg`}
+                formatter={(n) => `${Math.round(imperial ? n * KG_TO_LB : n).toLocaleString()} ${imperial ? 'lbs' : 'kg'}`}
               />
               <View style={[styles.volBar, { marginTop: spacing.sm }]}>
                 <View
@@ -915,7 +948,7 @@ export default function ProgressTab() {
                 value={Math.round(monthlyComparison.previous)}
                 animateOnMount
                 style={[typography.h2, { color: colors.textSecondary }]}
-                formatter={(n) => `${Math.round(n).toLocaleString()} kg`}
+                formatter={(n) => `${Math.round(imperial ? n * KG_TO_LB : n).toLocaleString()} ${imperial ? 'lbs' : 'kg'}`}
               />
               <View style={[styles.volBar, { marginTop: spacing.sm }]}>
                 <View
@@ -1010,7 +1043,7 @@ export default function ProgressTab() {
                 value={Math.round(displayVolume.reduce((s, d) => s + d.volume, 0))}
                 animateOnMount
                 style={[typography.bodySmall, { color: colors.textSecondary }]}
-                formatter={(n) => `${Math.round(n).toLocaleString()} kg`}
+                formatter={(n) => `${Math.round(imperial ? n * KG_TO_LB : n).toLocaleString()} ${imperial ? 'lbs' : 'kg'}`}
               />
             </View>
           </Card>
@@ -1188,10 +1221,16 @@ export default function ProgressTab() {
               <View style={styles.weightRow}>
                 <View>
                   <Text style={[typography.displayMedium, { color: colors.text }]}>
-                    {displayWeight} kg
+                    {imperial
+                      ? `${(displayWeight * KG_TO_LB).toFixed(1)} lbs`
+                      : `${displayWeight} kg`}
                   </Text>
                   <Text style={[typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-                    {demo ? 'Latest' : `via ${providerLabel}`}
+                    {demo
+                      ? 'Latest'
+                      : recentWeight
+                        ? `via ${providerLabel}`
+                        : 'Manual entry'}
                   </Text>
                 </View>
               </View>
@@ -1225,7 +1264,7 @@ export default function ProgressTab() {
             >
               <Ionicons name="analytics-outline" size={32} color={colors.textTertiary} />
               <Text style={[typography.body, { color: colors.textTertiary, marginTop: spacing.sm }]}>
-                Connect Health to track weight
+                Log weight to start tracking
               </Text>
             </View>
           )}
@@ -1286,7 +1325,7 @@ export default function ProgressTab() {
                       ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                       : point.date}
                   </Text>
-                  <Text style={[typography.label, { color: colors.text }]}>{point.maxWeight} kg</Text>
+                  <Text style={[typography.label, { color: colors.text }]}>{imperial ? Math.round(point.maxWeight * KG_TO_LB) : point.maxWeight} {imperial ? 'lbs' : 'kg'}</Text>
                 </View>
               ))}
             </Card>
@@ -1418,7 +1457,7 @@ export default function ProgressTab() {
                                     : point.date}
                                 </Text>
                                 <Text style={[typography.label, { color: colors.text }]}>
-                                  {point.maxWeight} kg
+                                  {imperial ? Math.round(point.maxWeight * KG_TO_LB) : point.maxWeight} {imperial ? 'lbs' : 'kg'}
                                 </Text>
                               </View>
                             ))}
@@ -1459,7 +1498,7 @@ export default function ProgressTab() {
                           {pr.exerciseName}
                         </Text>
                         <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                          {pr.weight} kg x {pr.reps} reps
+                          {imperial ? Math.round(pr.weight * KG_TO_LB) : pr.weight} {imperial ? 'lbs' : 'kg'} x {pr.reps} reps
                         </Text>
                       </View>
                       <Text style={[typography.caption, { color: colors.textTertiary }]}>

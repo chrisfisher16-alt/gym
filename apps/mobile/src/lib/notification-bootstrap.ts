@@ -13,11 +13,22 @@ import type { NotificationData } from '../types/notifications';
 
 let bootstrapped = false;
 
-let Notifications: typeof import('expo-notifications') | null = null;
-if (Platform.OS !== 'web') {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {}
+// Lazily load expo-notifications — deferred to first use so a missing
+// native module (e.g. PushNotificationIOS) doesn't crash the app on startup.
+let _Notifications: typeof import('expo-notifications') | null = null;
+let _notificationsLoaded = false;
+
+function getNotifications() {
+  if (!_notificationsLoaded && Platform.OS !== 'web') {
+    _notificationsLoaded = true;
+    try {
+      _Notifications = require('expo-notifications');
+    } catch (e) {
+      console.warn('expo-notifications not available:', e);
+      _Notifications = null;
+    }
+  }
+  return _Notifications;
 }
 
 /**
@@ -27,6 +38,7 @@ if (Platform.OS !== 'web') {
 function handleNotificationResponse(
   response: import('expo-notifications').NotificationResponse,
 ): void {
+  const Notifications = getNotifications();
   if (!Notifications) return;
   const data = response.notification.request.content.data as NotificationData | undefined;
   if (!data?.type) return;
@@ -81,6 +93,7 @@ function handleNotificationResponse(
  * Idempotent — repeated calls are no-ops.
  */
 export async function bootstrapNotifications(): Promise<void> {
+  const Notifications = getNotifications();
   if (bootstrapped || Platform.OS === 'web' || !Notifications) return;
 
   // 1. Register action-button categories (meal_reminder, workout_reminder, etc.)

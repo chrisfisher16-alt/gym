@@ -9,6 +9,7 @@ import {
   type TimelineEntry,
   type TimelineEntryType,
 } from '../../lib/timeline-aggregator';
+import { getDateString } from '../../lib/nutrition-utils';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ function formatDateHeader(dateStr: string): string {
 function shiftDate(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00');
   d.setDate(d.getDate() + delta);
-  return d.toISOString().split('T')[0];
+  return getDateString(d);
 }
 
 function formatDuration(seconds: number): string {
@@ -290,7 +291,7 @@ export function TimelineView({ date, onDateChange }: TimelineViewProps) {
   const { colors, typography: typ, spacing, radius } = useTheme();
 
   const entries = useMemo(() => aggregateTimeline(date), [date]);
-  const isToday = date === new Date().toISOString().split('T')[0];
+  const isToday = date === getDateString();
 
   const goBack = useCallback(() => onDateChange(shiftDate(date, -1)), [date, onDateChange]);
   const goForward = useCallback(() => {

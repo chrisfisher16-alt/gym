@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +31,14 @@ const TONE_OPTIONS: { value: CoachTone; label: string; description: string; icon
 export default function CoachToneScreen() {
   const { colors, spacing, typography, radius } = useTheme();
   const store = useOnboardingStore();
+  const isNavigating = useRef(false);
+
+  const handleContinue = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    router.push('/(onboarding)/complete');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
+  };
 
   return (
     <ScreenContainer>
@@ -101,7 +110,7 @@ export default function CoachToneScreen() {
         <View style={[styles.buttons, { marginTop: spacing['2xl'], gap: spacing.md }]}>
           <Button
             title="Continue"
-            onPress={() => router.push('/(onboarding)/complete')}
+            onPress={handleContinue}
           />
           <Button title="Back" variant="ghost" onPress={() => router.back()} />
         </View>

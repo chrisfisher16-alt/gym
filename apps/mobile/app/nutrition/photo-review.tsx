@@ -88,7 +88,7 @@ export default function PhotoReviewScreen() {
     });
 
     // Navigate back to the nutrition tab
-    router.dismiss(2);
+    router.replace('/(tabs)/nutrition');
   };
 
   const totals = calculateMealTotals(items);

@@ -17,8 +17,24 @@ const MAX_HISTORY_TOKENS = 4000;
 const MIN_MESSAGES = 4;
 
 function estimateTokens(content: string | unknown): number {
-  const text = typeof content === 'string' ? content : '';
-  return Math.ceil(text.length / 4);
+  if (typeof content === 'string') {
+    return Math.ceil(content.length / 4);
+  }
+  // Handle array of content blocks (multipart messages with images)
+  if (Array.isArray(content)) {
+    let tokens = 0;
+    for (const block of content) {
+      if (block && typeof block === 'object' && 'type' in block) {
+        if (block.type === 'image') {
+          tokens += 1000; // Approximate token cost for an image block
+        } else if (block.type === 'text' && 'text' in block) {
+          tokens += Math.ceil((block.text as string).length / 4);
+        }
+      }
+    }
+    return tokens;
+  }
+  return 0;
 }
 
 /**
@@ -76,6 +92,8 @@ export interface AIClientResponse {
   content: string;
   model: string;
   isDemo: boolean;
+  /** True when the response was generated due to an error/fallback */
+  isError?: boolean;
 }
 
 /**
@@ -233,9 +251,14 @@ export async function sendAIMessage(
       content: `*${friendlyError}*\n\n---\n\n${demoResponse}`,
       model: 'Demo Mode (fallback)',
       isDemo: true,
+      isError: true,
     };
   }
 }
+
+// Note: isError flag is set in the main catch block above.
+// The sendWorkoutCoachMessage and sendNutritionCoachMessage functions
+// delegate to sendAIMessage which already handles error fallbacks.
 
 /**
  * Quick contextual message for in-workout coach.

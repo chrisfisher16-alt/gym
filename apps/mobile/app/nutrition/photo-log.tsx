@@ -12,7 +12,6 @@ export default function PhotoLogScreen() {
   const { mealType = 'lunch' } = useLocalSearchParams<{ mealType: string }>();
   const { colors, spacing, radius, typography } = useTheme();
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const handlePickImage = async () => {
     try {
@@ -139,7 +138,6 @@ export default function PhotoLogScreen() {
         <Button
           title="Analyze Photo"
           onPress={handleAnalyze}
-          loading={loading}
           icon={<Ionicons name="sparkles-outline" size={20} color={colors.textInverse} />}
         />
       )}

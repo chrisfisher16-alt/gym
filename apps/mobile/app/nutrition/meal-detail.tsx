@@ -24,10 +24,17 @@ export default function MealDetailScreen() {
   const router = useRouter();
   const { mealId } = useLocalSearchParams<{ mealId: string }>();
   const { colors, spacing, radius, typography } = useTheme();
-  const { getMealById, deleteMeal, addMealItem, editMealItem, removeMealItem } = useMealLog();
+  const { deleteMeal, addMealItem, editMealItem, removeMealItem } = useMealLog();
   const saveMealAsTemplate = useNutritionStore((s) => s.saveMealAsTemplate);
 
-  const meal = getMealById(mealId ?? '');
+  // Derive meal reactively from the store to avoid stale data (#58)
+  const meal = useNutritionStore((state) => {
+    for (const log of Object.values(state.dailyLogs)) {
+      const found = log.meals.find((m) => m.id === mealId);
+      if (found) return found;
+    }
+    return undefined;
+  });
   const [editing, setEditing] = useState(false);
 
   if (!meal) {

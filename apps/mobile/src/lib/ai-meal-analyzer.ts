@@ -1,6 +1,5 @@
 import { readAsStringAsync } from 'expo-file-system/legacy';
-import { Platform } from 'react-native';
-import { getAIConfig, getProviderDefaults } from './ai-provider';
+import { getAIConfig, callAI, type AIMessage, type AIContentBlock } from './ai-provider';
 import { parseMealText } from './meal-parser';
 import { generateNutritionId } from './nutrition-utils';
 import type { MealItemEntry } from '../types/nutrition';
@@ -24,15 +23,6 @@ interface RawAIItem {
   fiber_g?: number;
   quantity?: number;
   unit?: string;
-}
-
-const CLAUDE_WEB_PROXY_URL = 'http://localhost:3001/api/anthropic';
-
-function getClaudeUrl(configBaseUrl: string, defaultBaseUrl: string): string {
-  if (Platform.OS === 'web') {
-    return CLAUDE_WEB_PROXY_URL;
-  }
-  return configBaseUrl || defaultBaseUrl;
 }
 
 function parseAIResponse(text: string): MealItemEntry[] {
@@ -77,39 +67,19 @@ function generateMockPhotoItems(): MealItemEntry[] {
 export async function analyzeMealText(description: string): Promise<MealItemEntry[]> {
   try {
     const config = await getAIConfig();
-    const defaults = getProviderDefaults('claude');
-    const baseUrl = getClaudeUrl(config.baseUrl || '', defaults.baseUrl);
-    const model = config.model || defaults.model;
 
-    const response = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': config.apiKey ?? '',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        system: TEXT_ANALYSIS_PROMPT,
-        messages: [
-          { role: 'user', content: description },
-        ],
-        max_tokens: 2048,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+    if (config.provider === 'demo') {
+      const result = parseMealText(description);
+      return result.items;
     }
 
-    const data = await response.json();
-    const textBlock = data.content?.find((b: { type: string }) => b.type === 'text');
+    const messages: AIMessage[] = [
+      { role: 'system', content: TEXT_ANALYSIS_PROMPT },
+      { role: 'user', content: description },
+    ];
 
-    if (!textBlock?.text) {
-      throw new Error('No text in AI response');
-    }
-
-    return parseAIResponse(textBlock.text);
+    const response = await callAI(messages, config);
+    return parseAIResponse(response.content);
   } catch (error) {
     console.warn('AI meal text analysis failed, falling back to parser:', error);
     const result = parseMealText(description);
@@ -126,55 +96,33 @@ export async function analyzePhotoMeal(imageUri: string): Promise<MealItemEntry[
     });
 
     const config = await getAIConfig();
-    const defaults = getProviderDefaults('claude');
-    const baseUrl = getClaudeUrl(config.baseUrl || '', defaults.baseUrl);
-    const model = config.model || defaults.model;
 
-    const response = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': config.apiKey ?? '',
-        'anthropic-version': '2023-06-01',
+    if (config.provider === 'demo') {
+      return generateMockPhotoItems();
+    }
+
+    const imageContent: AIContentBlock[] = [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/jpeg',
+          data: base64data,
+        },
       },
-      body: JSON.stringify({
-        model,
-        system: PHOTO_ANALYSIS_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: 'image/jpeg',
-                  data: base64data,
-                },
-              },
-              {
-                type: 'text',
-                text: 'Analyze this meal photo and identify all food items with their nutritional estimates.',
-              },
-            ],
-          },
-        ],
-        max_tokens: 2048,
-      }),
-    });
+      {
+        type: 'text',
+        text: 'Analyze this meal photo and identify all food items with their nutritional estimates.',
+      },
+    ];
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
+    const messages: AIMessage[] = [
+      { role: 'system', content: PHOTO_ANALYSIS_PROMPT },
+      { role: 'user', content: imageContent },
+    ];
 
-    const data = await response.json();
-    const textBlock = data.content?.find((b: { type: string }) => b.type === 'text');
-
-    if (!textBlock?.text) {
-      throw new Error('No text in AI response');
-    }
-
-    return parseAIResponse(textBlock.text);
+    const response = await callAI(messages, config);
+    return parseAIResponse(response.content);
   } catch (error) {
     console.warn('AI photo analysis failed, falling back to mock data:', error);
     return generateMockPhotoItems();

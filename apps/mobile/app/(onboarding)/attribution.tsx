@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { OnboardingScreen } from '../../src/components/onboarding/OnboardingScreen';
@@ -17,8 +17,12 @@ export default function AttributionScreen() {
     setAttributionSource(source);
   };
 
+  const isNavigating = useRef(false);
   const handleNext = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     router.push('/(onboarding)/generating');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   return (

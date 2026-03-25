@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useWorkoutStore } from '../stores/workout-store';
 import { ExpandableCard, ProgressBar, AnimatedNumber } from './ui';
+import { getDateString } from '../lib/nutrition-utils';
 
 const WORKOUT_MILESTONES = [10, 25, 50, 100, 250] as const;
 
@@ -13,14 +14,14 @@ function getStreak(history: Array<{ completedAt: string }>): number {
 
   const dates = Array.from(
     new Set(
-      history.map((s) => new Date(s.completedAt).toISOString().split('T')[0]),
+      history.map((s) => getDateString(new Date(s.completedAt))),
     ),
   ).sort((a, b) => b.localeCompare(a));
 
   if (dates.length === 0) return 0;
 
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const today = getDateString();
+  const yesterday = getDateString(new Date(Date.now() - 86400000));
 
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
 

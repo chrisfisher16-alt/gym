@@ -15,6 +15,19 @@ import type {
 } from '../types/nutrition';
 import { calculateDailyTotals, generateNutritionId, getDateString } from '../lib/nutrition-utils';
 import { getSeedRecipes, getSeedRecipeIds } from '../lib/seed-recipes';
+import { incrementUsage } from '../lib/usage-limits';
+import { useSubscriptionStore } from './subscription-store';
+
+// ── Debounced Persistence ─────────────────────────────────────────
+
+let _persistTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function debouncedPersistAll(store: () => NutritionState) {
+  if (_persistTimeout) clearTimeout(_persistTimeout);
+  _persistTimeout = setTimeout(() => {
+    store().persistAll().catch(console.warn);
+  }, 500);
+}
 
 // ── Storage Keys ──────────────────────────────────────────────────
 
@@ -196,7 +209,7 @@ interface NutritionState {
   setSelectedDate: (date: string) => void;
 
   // Actions - Meals
-  logMeal: (meal: Omit<MealEntry, 'id' | 'userId' | 'date'>) => void;
+  logMeal: (meal: Omit<MealEntry, 'id' | 'userId' | 'date'>, targetDate?: string) => void;
   addMealItem: (mealId: string, item: MealItemEntry) => void;
   editMealItem: (mealId: string, itemId: string, updates: Partial<MealItemEntry>) => void;
   removeMealItem: (mealId: string, itemId: string) => void;
@@ -417,11 +430,19 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
   // ── Meals ───────────────────────────────────────────────────────
 
-  logMeal: (mealData) => {
+  logMeal: (mealData, targetDate) => {
     const state = get();
-    const date = state.selectedDate;
+    const date = targetDate ?? state.selectedDate;
+
+    // When an explicit targetDate is provided, align the timestamp to noon
+    // of that date to avoid timezone-induced date-key mismatches (#57)
+    const timestamp = targetDate
+      ? new Date(targetDate + 'T12:00:00').toISOString()
+      : (mealData.timestamp || new Date().toISOString());
+
     const meal: MealEntry = {
       ...mealData,
+      timestamp,
       id: generateNutritionId('meal'),
       userId: 'local_user',
       date,
@@ -447,6 +468,12 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
     set({ dailyLogs });
     get().persistAll().catch(console.warn);
+
+    // Increment usage counter for free tier (after successful save)
+    const tier = useSubscriptionStore.getState().tier;
+    if (tier === 'free') {
+      incrementUsage('meal_logs').catch(console.warn);
+    }
   },
 
   addMealItem: (mealId, item) => {
@@ -665,8 +692,9 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     // Update streak (relative to the selected date, not today)
     const userSupplements = state.userSupplements.map((s) => {
       if (s.id !== userSupplementId) return s;
-      const dayBefore = new Date(new Date(date).getTime() - 86400000);
-      const wasYesterdayTaken = s.lastTakenDate === getDateString(dayBefore);
+      const yesterday = new Date(date);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const wasYesterdayTaken = s.lastTakenDate === getDateString(yesterday);
       return {
         ...s,
         streak: wasYesterdayTaken ? s.streak + 1 : 1,
@@ -681,7 +709,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       },
       userSupplements,
     });
-    get().persistAll().catch(console.warn);
+    debouncedPersistAll(get);
   },
 
   unlogSupplement: (userSupplementId) => {
@@ -699,7 +727,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         },
       },
     });
-    get().persistAll().catch(console.warn);
+    debouncedPersistAll(get);
   },
 
   // ── Water ───────────────────────────────────────────────────────
@@ -723,7 +751,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, waterIntake_oz: log.waterIntake_oz + amount_oz },
       },
     });
-    get().persistAll().catch(console.warn);
+    debouncedPersistAll(get);
   },
 
   setWater: (amount_oz) => {
@@ -745,7 +773,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, waterIntake_oz: Math.max(0, amount_oz) },
       },
     });
-    get().persistAll().catch(console.warn);
+    debouncedPersistAll(get);
   },
 
   // ── Targets ─────────────────────────────────────────────────────
@@ -804,7 +832,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     get().logMeal({
       mealType,
       name: recipe.name,
-      source: 'manual',
+      source: 'recipe',
       timestamp: new Date().toISOString(),
       items: recipe.items.map((item) => ({
         ...item,

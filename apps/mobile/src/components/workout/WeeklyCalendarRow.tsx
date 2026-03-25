@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { useWorkoutStore } from '../../stores/workout-store';
 import type { WorkoutProgramLocal } from '../../types/workout';
+import { getDateString } from '../../lib/nutrition-utils';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ function getMonday(date: Date): Date {
 }
 
 function toDateKey(d: Date): string {
-  return d.toISOString().split('T')[0];
+  return getDateString(d);
 }
 
 // ── Component ──────────────────────────────────────────────────────

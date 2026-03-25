@@ -719,7 +719,9 @@ export function getActionDescription(action: CoachAction): string {
       const exerciseCount = action.exercises?.length ?? 0;
       return `Start workout: ${action.name} (${exerciseCount} exercises)`;
     }
-    default:
-      return 'Apply change';
+    default: {
+      const _exhaustive: never = action;
+      return `Unknown action`;
+    }
   }
 }

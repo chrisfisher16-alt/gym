@@ -43,6 +43,11 @@ export interface UserContext {
   dietaryPreferences?: string[];
   cookingSkillLevel?: string;
   cookingEquipment?: string[];
+  // Gym & session preferences
+  gymType?: string;
+  sessionDuration?: string;
+  consistencyLevel?: string;
+  fitnessGoal?: string;
   // Workout scheduling
   preferredWorkoutDays?: string[];
   fitnessEquipment?: string[];
@@ -423,6 +428,10 @@ export function gatherUserContext(intent?: UserIntent): UserContext {
     dietaryPreferences: userProfile.dietaryPreferences,
     cookingSkillLevel: userProfile.cookingSkillLevel,
     cookingEquipment: userProfile.cookingEquipment,
+    gymType: userProfile.gymType,
+    sessionDuration: userProfile.sessionDuration,
+    consistencyLevel: userProfile.consistencyLevel,
+    fitnessGoal: userProfile.fitnessGoal,
     preferredWorkoutDays: userProfile.preferredWorkoutDays,
     fitnessEquipment: userProfile.fitnessEquipment,
     healthGoals: userProfile.healthGoals,
@@ -602,6 +611,28 @@ function buildProfileSection(ctx: UserContext): string {
   if (ctx.activityLevel) lines.push(`Activity Level: ${ctx.activityLevel}/5`);
   if (ctx.preferredTrainingTime) lines.push(`Preferred Training Time: ${ctx.preferredTrainingTime}`);
   if (ctx.preferredWorkoutDays?.length) lines.push(`Preferred Workout Days: ${ctx.preferredWorkoutDays.join(', ')}`);
+  if (ctx.gymType) {
+    const gymLabel = ctx.gymType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    lines.push(`Gym Environment: ${gymLabel}`);
+  }
+  if (ctx.sessionDuration) {
+    const durationLabel = ctx.sessionDuration.replace(/_/g, ' ').replace('min', ' minutes').replace('plus', '+');
+    lines.push(`Preferred Session Length: ${durationLabel}`);
+  }
+  if (ctx.consistencyLevel) {
+    const consistencyMap: Record<string, string> = {
+      very_consistent: 'Very consistent',
+      mostly_consistent: 'Mostly consistent',
+      somewhat_consistent: 'Somewhat consistent',
+      struggle_with_it: 'Struggles with consistency',
+      just_starting: 'Just starting out',
+    };
+    lines.push(`Consistency: ${consistencyMap[ctx.consistencyLevel] ?? ctx.consistencyLevel.replace(/_/g, ' ')}`);
+  }
+  if (ctx.fitnessGoal) {
+    const goalLabel = ctx.fitnessGoal.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    lines.push(`Fitness Goal: ${goalLabel}`);
+  }
 
   lines.push(`Units: ${ctx.unitPreference}`);
 

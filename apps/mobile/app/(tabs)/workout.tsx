@@ -53,7 +53,8 @@ export default function WorkoutTab() {
   const { showPaywall } = usePaywall();
   const [workoutUsage, setWorkoutUsage] = useState<UsageCheck | null>(null);
   const [showStartSheet, setShowStartSheet] = useState(false);
-  const [exercisesExpanded, setExercisesExpanded] = useState(false);
+  const [activeExercisesExpanded, setActiveExercisesExpanded] = useState(false);
+  const [plannedExercisesExpanded, setPlannedExercisesExpanded] = useState(false);
 
   // Quick actions
   const { show: showQuickActions, sheetProps } = useQuickActions();
@@ -278,8 +279,8 @@ export default function WorkoutTab() {
   // Simple weekly volume chart bars
   const maxVolume = Math.max(...weeklyVolume.map((d) => d.volume), 1);
   const dayLabels = weeklyVolume.map((d) => {
-    const date = new Date(d.date);
-    return ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'][date.getDay()];
+    const date = new Date(d.date + 'T12:00:00');
+    return ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][date.getDay()];
   });
 
   if (!isInitialized) {
@@ -348,7 +349,7 @@ export default function WorkoutTab() {
           </View>
           {/* Exercise list preview */}
           <View style={[styles.exercisePreview, { marginTop: spacing.sm }]}>
-            {(exercisesExpanded ? activeSession.exercises : activeSession.exercises.slice(0, 3)).map((e) => {
+            {(activeExercisesExpanded ? activeSession.exercises : activeSession.exercises.slice(0, 3)).map((e) => {
               const completedSets = e.sets.filter(s => s.isCompleted).length;
               const totalSets = e.sets.length;
               return (
@@ -369,12 +370,12 @@ export default function WorkoutTab() {
               <TouchableOpacity
                 onPress={() => {
                   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setExercisesExpanded(!exercisesExpanded);
+                  setActiveExercisesExpanded(!activeExercisesExpanded);
                 }}
                 activeOpacity={0.7}
               >
                 <Text style={[typography.bodySmall, { color: colors.primary, marginTop: 2 }]}>
-                  {exercisesExpanded ? 'Show less' : `+ ${activeSession.exercises.length - 3} more`}
+                  {activeExercisesExpanded ? 'Show less' : `+ ${activeSession.exercises.length - 3} more`}
                 </Text>
               </TouchableOpacity>
             )}
@@ -421,7 +422,7 @@ export default function WorkoutTab() {
                 {todayWorkout.name} — {todayWorkout.exercises.length} exercises
               </Text>
               <View style={[styles.exercisePreview, { marginTop: spacing.sm }]}>
-                {(exercisesExpanded ? todayWorkout.exercises : todayWorkout.exercises.slice(0, 3)).map((e) => (
+                {(plannedExercisesExpanded ? todayWorkout.exercises : todayWorkout.exercises.slice(0, 3)).map((e) => (
                   <Text key={e.id} style={[typography.bodySmall, { color: colors.textTertiary }]}>
                     • {e.exerciseName} ({e.targetSets}×{e.targetReps})
                   </Text>
@@ -430,12 +431,12 @@ export default function WorkoutTab() {
                   <TouchableOpacity
                     onPress={() => {
                       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      setExercisesExpanded(!exercisesExpanded);
+                      setPlannedExercisesExpanded(!plannedExercisesExpanded);
                     }}
                     activeOpacity={0.7}
                   >
                     <Text style={[typography.bodySmall, { color: colors.primary, marginTop: 2 }]}>
-                      {exercisesExpanded ? 'Show less' : `+ ${todayWorkout.exercises.length - 3} more`}
+                      {plannedExercisesExpanded ? 'Show less' : `+ ${todayWorkout.exercises.length - 3} more`}
                     </Text>
                   </TouchableOpacity>
                 )}

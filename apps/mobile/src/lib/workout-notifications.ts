@@ -1,11 +1,20 @@
 import { Platform } from 'react-native';
 import type { ActiveWorkoutSession } from '../types/workout';
 
-let Notifications: typeof import('expo-notifications') | null = null;
-if (Platform.OS !== 'web') {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {}
+let _Notifications: typeof import('expo-notifications') | null = null;
+let _notificationsLoaded = false;
+
+function getNotifications() {
+  if (!_notificationsLoaded && Platform.OS !== 'web') {
+    _notificationsLoaded = true;
+    try {
+      _Notifications = require('expo-notifications');
+    } catch (e) {
+      console.warn('expo-notifications not available:', e);
+      _Notifications = null;
+    }
+  }
+  return _Notifications;
 }
 
 let activeNotificationId: string | null = null;
@@ -39,6 +48,7 @@ function getWorkoutNotificationContent(session: ActiveWorkoutSession) {
 export async function showWorkoutNotification(
   session: ActiveWorkoutSession,
 ): Promise<void> {
+  const Notifications = getNotifications();
   if (!Notifications || Platform.OS === 'web') return;
 
   const content = getWorkoutNotificationContent(session);
@@ -69,6 +79,7 @@ export async function showRestTimerNotification(
   session: ActiveWorkoutSession,
   secondsRemaining: number,
 ): Promise<void> {
+  const Notifications = getNotifications();
   if (!Notifications || Platform.OS === 'web') return;
 
   const currentExercise = session.exercises[session.currentExerciseIndex];
@@ -99,6 +110,7 @@ export async function showRestTimerNotification(
 
 /** Clear the workout notification */
 export async function clearWorkoutNotification(): Promise<void> {
+  const Notifications = getNotifications();
   if (!Notifications) return;
 
   if (activeNotificationId) {

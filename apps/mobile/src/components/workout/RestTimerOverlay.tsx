@@ -161,7 +161,7 @@ export function RestTimerOverlay() {
               color={colors.primary}
               gradientColors={[colors.primary, colors.primaryLight]}
             >
-              <Text style={[typography.displayFocus, { color: colors.text }]}>
+              <Text style={[typography.displayFocus, { color: '#FFFFFF' }]}>
                 {formatTimerDisplay(restSecondsLeft)}
               </Text>
             </ProgressRing>
@@ -243,7 +243,7 @@ export function RestTimerOverlay() {
             borderColor: colors.textSecondary,
           }}
         >
-          <Text style={[typography.label, { color: colors.text, textAlign: 'center' }]}>Skip Rest</Text>
+          <Text style={[typography.label, { color: '#FFFFFF', textAlign: 'center' }]}>Skip Rest</Text>
         </TouchableOpacity>
 
         {/* Don't show for this exercise */}

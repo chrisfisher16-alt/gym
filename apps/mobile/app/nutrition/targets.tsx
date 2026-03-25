@@ -8,6 +8,7 @@ import { useProfileStore } from '../../src/stores/profile-store';
 import { useOnboardingStore } from '../../src/stores/onboarding-store';
 import { calculateNutritionTargets } from '../../src/lib/nutrition-calculator';
 import { Card, Button, ScreenContainer, BottomSheet } from '../../src/components/ui';
+import { useToast } from '../../src/components/Toast';
 import { generateDefaultTargets } from '../../src/lib/nutrition-utils';
 import {
   MACRO_SPLIT_PRESETS,
@@ -155,17 +156,31 @@ export default function TargetsScreen() {
     setShowCalcSheet(false);
   };
 
+  const { showToast } = useToast();
+
   const handleSave = () => {
+    const parsedCalories = Math.max(0, parseInt(calories) || 0);
+    const parsedProtein = Math.max(0, parseInt(protein) || 0);
+    const parsedCarbs = Math.max(0, parseInt(carbs) || 0);
+    const parsedFat = Math.max(0, parseInt(fat) || 0);
+    const parsedFiber = Math.max(0, parseInt(fiber) || 0);
+    const parsedWater = Math.max(0, parseInt(water) || 0);
+
+    const usedDefaults = !parsedCalories || !parsedProtein || !parsedCarbs || !parsedFat || !parsedFiber || !parsedWater;
+
     const newTargets: NutritionTargets = {
-      calories: parseInt(calories) || 2200,
-      protein_g: parseInt(protein) || 150,
-      carbs_g: parseInt(carbs) || 250,
-      fat_g: parseInt(fat) || 70,
-      fiber_g: parseInt(fiber) || 30,
-      water_oz: parseInt(water) || 85,
+      calories: parsedCalories || 2200,
+      protein_g: parsedProtein || 150,
+      carbs_g: parsedCarbs || 250,
+      fat_g: parsedFat || 70,
+      fiber_g: parsedFiber || 30,
+      water_oz: parsedWater || 85,
     };
 
     setDailyTargets(newTargets);
+    if (usedDefaults) {
+      showToast('Default targets applied', 'info', 2000);
+    }
     router.back();
   };
 
@@ -204,12 +219,14 @@ export default function TargetsScreen() {
           style={[styles.calorieInput, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.displayMedium }]}
           value={calories}
           onChangeText={(v) => {
-            setCalories(v);
+            const n = parseInt(v);
+            const safe = v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n));
+            setCalories(safe);
             // Recalculate macros if preset selected
             if (selectedPreset !== 'custom') {
               const split = MACRO_SPLIT_PRESETS[selectedPreset as Exclude<MacroSplitPreset, 'custom'>];
               if (split) {
-                const cal = parseInt(v) || 0;
+                const cal = Math.max(0, parseInt(safe) || 0);
                 setProtein(String(Math.round((cal * split.protein_pct) / 100 / 4)));
                 setCarbs(String(Math.round((cal * split.carbs_pct) / 100 / 4)));
                 setFat(String(Math.round((cal * split.fat_pct) / 100 / 9)));
@@ -269,7 +286,7 @@ export default function TargetsScreen() {
             <TextInput
               style={[styles.macroField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.label }]}
               value={protein}
-              onChangeText={(v) => { setProtein(v); setSelectedPreset('custom'); }}
+              onChangeText={(v) => { const n = parseInt(v); setProtein(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); setSelectedPreset('custom'); }}
               keyboardType="numeric"
             />
           </View>
@@ -280,7 +297,7 @@ export default function TargetsScreen() {
             <TextInput
               style={[styles.macroField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.label }]}
               value={carbs}
-              onChangeText={(v) => { setCarbs(v); setSelectedPreset('custom'); }}
+              onChangeText={(v) => { const n = parseInt(v); setCarbs(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); setSelectedPreset('custom'); }}
               keyboardType="numeric"
             />
           </View>
@@ -291,7 +308,7 @@ export default function TargetsScreen() {
             <TextInput
               style={[styles.macroField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.label }]}
               value={fat}
-              onChangeText={(v) => { setFat(v); setSelectedPreset('custom'); }}
+              onChangeText={(v) => { const n = parseInt(v); setFat(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); setSelectedPreset('custom'); }}
               keyboardType="numeric"
             />
           </View>
@@ -311,7 +328,7 @@ export default function TargetsScreen() {
           <TextInput
             style={[styles.smallField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.label }]}
             value={fiber}
-            onChangeText={setFiber}
+            onChangeText={(v) => { const n = parseInt(v); setFiber(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
             keyboardType="numeric"
           />
         </View>
@@ -323,7 +340,7 @@ export default function TargetsScreen() {
           <TextInput
             style={[styles.smallField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, color: colors.text, ...typography.label }]}
             value={water}
-            onChangeText={setWater}
+            onChangeText={(v) => { const n = parseInt(v); setWater(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
             keyboardType="numeric"
           />
         </View>

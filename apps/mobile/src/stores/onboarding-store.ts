@@ -14,9 +14,6 @@ import type {
 } from '../types/onboarding';
 import { ONBOARDING_STEPS } from '../types/onboarding';
 
-// ── Total steps for progress calculation ────────────────────────────
-const TOTAL_STEPS = ONBOARDING_STEPS.length; // 9
-
 // ── Default weekdays for "days_per_week" mode ───────────────────────
 const DEFAULT_WEEKDAY_SPREAD: Record<number, Weekday[]> = {
   1: ['monday'],
@@ -67,9 +64,6 @@ interface OnboardingState {
 
   // Attribution (attribution.tsx)
   attributionSource: AttributionSource | null;
-
-  // Submission state
-  isSubmitting: boolean;
 
   // Legacy V1 fields (kept for compatibility)
   displayName: string;
@@ -174,9 +168,6 @@ const initialState = {
   // Attribution
   attributionSource: null as AttributionSource | null,
 
-  // Submission
-  isSubmitting: false,
-
   // Legacy V1
   displayName: '',
   selectedGoals: [] as string[],
@@ -260,10 +251,14 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       // ── Computed ───────────────────────────────────────────────
       getProgress: () => {
-        const { currentStep } = get();
+        const { currentStep, gymType } = get();
         if (!currentStep) return 0;
-        const idx = ONBOARDING_STEPS.indexOf(currentStep);
-        return idx < 0 ? 0 : idx / TOTAL_STEPS;
+        const effectiveSteps = ONBOARDING_STEPS.filter(
+          (s) => s !== 'gym-search' || gymType === 'large_gym',
+        );
+        const idx = effectiveSteps.indexOf(currentStep);
+        if (idx < 0) return 0;
+        return (idx + 1) / effectiveSteps.length;
       },
 
       getEffectiveTrainingDays: () => {

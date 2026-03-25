@@ -23,7 +23,8 @@
       "bundleIdentifier": "app.healthcoach.mobile",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Health Coach uses your health data to provide personalized fitness and nutrition recommendations.",
-        "NSHealthUpdateUsageDescription": "Health Coach can save your workouts to Apple Health."
+        "NSHealthUpdateUsageDescription": "Health Coach can save your workouts to Apple Health.",
+        "NSLocationWhenInUseUsageDescription": "Health Coach uses your location to find nearby gyms."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -57,7 +58,15 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      "expo-audio"
+      "expo-audio",
+      "expo-location",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#C4A265"
+        }
+      ]
     ]
   }
 }

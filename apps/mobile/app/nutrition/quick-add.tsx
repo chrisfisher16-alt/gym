@@ -11,7 +11,9 @@ import type { MealType } from '../../src/types/nutrition';
 
 export default function QuickAddScreen() {
   const router = useRouter();
-  const { mealType = 'snack' } = useLocalSearchParams<{ mealType: string }>();
+  const { mealType: rawMealType = 'snack' } = useLocalSearchParams<{ mealType: string }>();
+  const validMealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+  const mealType = validMealTypes.includes(rawMealType as typeof validMealTypes[number]) ? rawMealType : 'snack';
   const { colors, spacing, radius, typography } = useTheme();
   const { quickAddCalories } = useMealLog();
 
@@ -21,16 +23,19 @@ export default function QuickAddScreen() {
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
 
+  const parseSafe = (v: string) => Math.max(0, parseFloat(v) || 0);
+  const parseSafeInt = (v: string) => Math.max(0, parseInt(v) || 0);
+
   const handleSave = () => {
-    const cal = parseInt(calories) || 0;
-    if (cal === 0 && !name) return;
+    const cal = parseSafeInt(calories);
+    if (cal <= 0) return; // #62: require calories > 0
 
     quickAddCalories(
       name || 'Quick Add',
       cal,
-      parseFloat(protein) || 0,
-      parseFloat(carbs) || 0,
-      parseFloat(fat) || 0,
+      parseSafe(protein),
+      parseSafe(carbs),
+      parseSafe(fat),
       mealType as MealType,
     );
 
@@ -106,7 +111,7 @@ export default function QuickAddScreen() {
               placeholder="0"
               placeholderTextColor={colors.textTertiary}
               value={calories}
-              onChangeText={setCalories}
+              onChangeText={(v) => { const n = parseInt(v); setCalories(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
               keyboardType="numeric"
               autoFocus
             />
@@ -177,7 +182,7 @@ export default function QuickAddScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 value={protein}
-                onChangeText={setProtein}
+                onChangeText={(v) => { const n = parseFloat(v); setProtein(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
                 keyboardType="numeric"
               />
             </View>
@@ -201,7 +206,7 @@ export default function QuickAddScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 value={carbs}
-                onChangeText={setCarbs}
+                onChangeText={(v) => { const n = parseFloat(v); setCarbs(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
                 keyboardType="numeric"
               />
             </View>
@@ -225,7 +230,7 @@ export default function QuickAddScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 value={fat}
-                onChangeText={setFat}
+                onChangeText={(v) => { const n = parseFloat(v); setFat(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
                 keyboardType="numeric"
               />
             </View>
@@ -234,7 +239,7 @@ export default function QuickAddScreen() {
           <Button
             title="Add"
             onPress={handleSave}
-            disabled={!(parseInt(calories) > 0 || name.trim().length > 0)}
+            disabled={!(parseInt(calories) > 0)}
             icon={<Ionicons name="flash" size={20} color={colors.textInverse} />}
           />
         </ScrollView>

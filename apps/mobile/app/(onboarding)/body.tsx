@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -36,7 +37,10 @@ export default function BodyScreen() {
 
   const unitPref = watch('unitPreference');
 
+  const isNavigating = useRef(false);
   const onSubmit = (data: BodyForm) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     const heightNum = parseFloat(data.height);
     const weightNum = parseFloat(data.weight);
     // Convert imperial to metric for storage
@@ -49,6 +53,7 @@ export default function BodyScreen() {
     }
     store.setUnitPreference(data.unitPreference);
     router.push('/(onboarding)/goals');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   return (

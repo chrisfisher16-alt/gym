@@ -40,7 +40,7 @@ import { InNutritionCoach } from '../../src/components/InNutritionCoach';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
 import { UpgradeBanner } from '../../src/components/UpgradeBanner';
-import { checkMealLogLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
+import { checkMealLogLimit, type UsageCheck } from '../../src/lib/usage-limits';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SmartHeader } from '../../src/components/ui';
 import { NutritionTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
@@ -162,7 +162,6 @@ export default function NutritionTab() {
     checkMealLogLimit().then((usage) => {
       setMealUsage(usage);
       if (usage.allowed) {
-        incrementUsage('meal_logs');
         router.push('/nutrition/log-meal');
       } else {
         crossPlatformAlert(
@@ -177,9 +176,13 @@ export default function NutritionTab() {
     });
   }, [canAccess, showPaywall, router]);
 
+  const isToday = selectedDate === getDateString(new Date());
+
   const navigateDate = (direction: -1 | 1) => {
     const current = new Date(selectedDate + 'T12:00:00');
     current.setDate(current.getDate() + direction);
+    // Don't allow future dates
+    if (direction > 0 && getDateString(current) > getDateString(new Date())) return;
     setSelectedDate(getDateString(current));
   };
 
@@ -198,22 +201,28 @@ export default function NutritionTab() {
   const waterStreak = useMemo(() => {
     let streak = 0;
     const today = new Date();
-    for (let i = 0; i < 30; i++) {
+    const todayStr = getDateString(today);
+    const todayLog = dailyLogs[todayStr];
+    const hasTodayWater = todayLog && todayLog.waterIntake_oz > 0;
+    // If today has no water logged yet, start counting from yesterday
+    const startOffset = hasTodayWater ? 0 : 1;
+    for (let i = startOffset; i < 30; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const dateStr = getDateString(d);
       const log = dailyLogs[dateStr];
       if (log && log.waterIntake_oz > 0) {
         streak++;
-      } else if (i > 0) {
+      } else {
         break;
       }
     }
     return streak;
   }, [dailyLogs]);
 
-  // ── Swipe: Re-log a meal ──
+  // ── Swipe: Re-log a meal (always logs to today) ──
   const handleRelogMeal = useCallback((meal: MealEntry) => {
+    const today = getDateString(new Date());
     logMeal({
       mealType: meal.mealType,
       name: meal.name,
@@ -223,7 +232,7 @@ export default function NutritionTab() {
         ...item,
         id: `${item.id}_dup_${Date.now()}`,
       })),
-    });
+    }, today);
     showToast('Meal re-logged for today', 'success', 1500);
   }, [logMeal, showToast]);
 
@@ -368,7 +377,12 @@ export default function NutritionTab() {
             {formatDateDisplay(selectedDate)}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigateDate(1)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity
+          onPress={() => navigateDate(1)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          disabled={isToday}
+          style={{ opacity: isToday ? 0.3 : 1 }}
+        >
           <Ionicons name="chevron-forward" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -557,7 +571,7 @@ export default function NutritionTab() {
                   height={40}
                   showFill
                   showDots
-                  color="#3B82F6"
+                  color={colors.info}
                 />
               </View>
             )}
@@ -565,7 +579,7 @@ export default function NutritionTab() {
             {/* Streak */}
             {waterStreak > 1 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <Ionicons name="flame" size={18} color="#F59E0B" />
+                <Ionicons name="flame" size={18} color={colors.warning} />
                 <Text style={[typography.body, { color: colors.text }]}>
                   {waterStreak} day hydration streak!
                 </Text>
@@ -585,7 +599,7 @@ export default function NutritionTab() {
         {/* Collapsed: Water display with add buttons */}
         <View style={styles.waterHeader}>
           <View style={styles.waterLeft}>
-            <Ionicons name="water" size={20} color="#3B82F6" />
+            <Ionicons name="water" size={20} color={colors.info} />
             <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm }]}>
               Hydration
             </Text>
@@ -602,10 +616,10 @@ export default function NutritionTab() {
               progress={waterTarget > 0 ? Math.min(waterIntake / waterTarget, 1) : 0}
               size={scale(100)}
               strokeWidth={scale(8)}
-              color={(waterTarget > 0 && waterIntake >= waterTarget) ? '#22C55E' : '#3B82F6'}
+              color={(waterTarget > 0 && waterIntake >= waterTarget) ? colors.successVibrant : colors.info}
               trackColor={colors.surfaceSecondary}
             >
-              <Ionicons name="water" size={18} color="#3B82F6" />
+              <Ionicons name="water" size={18} color={colors.info} />
               <Text style={[typography.labelSmall, { color: colors.textSecondary, marginTop: 2 }]}>
                 {waterTarget > 0 ? Math.round((waterIntake / waterTarget) * 100) : 0}%
               </Text>
@@ -630,7 +644,7 @@ export default function NutritionTab() {
           style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: '#3B82F6',
+            backgroundColor: colors.info,
             borderRadius: radius.lg,
             opacity: waterRipple.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.15, 0.08, 0] }),
             transform: [{ scale: waterRipple.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.02] }) }],
@@ -639,28 +653,28 @@ export default function NutritionTab() {
 
         <View style={[styles.waterQuickActions, { marginTop: spacing.md }]}>
           <TouchableOpacity
-            style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
+            style={[styles.waterQuickButton, { backgroundColor: colors.infoLight, borderRadius: radius.md }]}
             onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add8oz(); playWaterRipple(); showToast('+8oz water logged', 'info', 1500); }}
             activeOpacity={0.7}
           >
-            <Ionicons name="water-outline" size={18} color="#3B82F6" />
-            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 6 }]}>8oz</Text>
+            <Ionicons name="water-outline" size={18} color={colors.info} />
+            <Text style={[typography.label, { color: colors.info, marginLeft: 6 }]}>8oz</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
+            style={[styles.waterQuickButton, { backgroundColor: colors.infoLight, borderRadius: radius.md }]}
             onPress={() => { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); add16oz(); playWaterRipple(); showToast('+16oz water logged', 'info', 1500); }}
             activeOpacity={0.7}
           >
-            <Ionicons name="water" size={18} color="#3B82F6" />
-            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 6 }]}>16oz</Text>
+            <Ionicons name="water" size={18} color={colors.info} />
+            <Text style={[typography.label, { color: colors.info, marginLeft: 6 }]}>16oz</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.waterQuickButton, { backgroundColor: '#EFF6FF', borderRadius: radius.md }]}
+            style={[styles.waterQuickButton, { backgroundColor: colors.infoLight, borderRadius: radius.md }]}
             onPress={() => setShowCustomWater(true)}
             activeOpacity={0.7}
           >
-            <Ionicons name="pencil-outline" size={18} color="#3B82F6" />
-            <Text style={[typography.label, { color: '#3B82F6', marginLeft: 6 }]}>Custom</Text>
+            <Ionicons name="pencil-outline" size={18} color={colors.info} />
+            <Text style={[typography.label, { color: colors.info, marginLeft: 6 }]}>Custom</Text>
           </TouchableOpacity>
         </View>
       </ExpandableCard>
@@ -716,14 +730,18 @@ export default function NutritionTab() {
                   style={[
                     styles.customWaterConfirm,
                     {
-                      backgroundColor: '#3B82F6',
+                      backgroundColor: colors.info,
                       borderRadius: radius.md,
                       opacity: customWaterAmount && parseInt(customWaterAmount, 10) > 0 ? 1 : 0.5,
                     },
                   ]}
                   onPress={() => {
-                    const oz = parseInt(customWaterAmount, 10);
+                    let oz = parseInt(customWaterAmount, 10);
                     if (oz > 0) {
+                      if (oz > 5000) {
+                        showToast('Maximum 5000ml', 'warning', 1500);
+                        oz = 5000;
+                      }
                       addCustom(oz);
                       setShowCustomWater(false);
                       setCustomWaterAmount('');
@@ -955,7 +973,7 @@ export default function NutritionTab() {
                       </Text>
                       <Text style={[typography.caption, { color: colors.textTertiary }]}>
                         {supp.dose} {supp.unit}
-                        {supp.streak > 0 ? ` · ${supp.streak} day streak` : ''}
+                        {supp.streak > 0 ? ` · ${supp.streak} day${supp.streak !== 1 ? 's' : ''} streak` : ''}
                       </Text>
                     </View>
                   </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -114,8 +114,23 @@ export default function TodayTab() {
     return { calories, protein, water };
   }, [dailyLogs]);
 
-  // ── Date & Greeting ───────────────────────────────────────────────
-  const now = new Date();
+  // ── Date & Greeting (reactive to focus / time changes) ────────────
+  const [now, setNow] = useState(() => new Date());
+  // Re-evaluate time when screen gains focus or every 60s
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  // Also refresh on navigation focus via a visibility-based approach
+  const lastFocusRef = useRef(Date.now());
+  useEffect(() => {
+    // AppState-based focus: when component mounts or deps change, refresh
+    const elapsed = Date.now() - lastFocusRef.current;
+    if (elapsed > 60_000) {
+      setNow(new Date());
+    }
+    lastFocusRef.current = Date.now();
+  });
   const hour = now.getHours();
   const timeOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
   const greeting = timeOfDay === 'morning' ? 'Good morning' : timeOfDay === 'afternoon' ? 'Good afternoon' : 'Good evening';
@@ -145,13 +160,13 @@ export default function TodayTab() {
   // ── Daily Briefing ────────────────────────────────────────────────
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingExpanded, setBriefingExpanded] = useState(false);
 
   const loadBriefing = useCallback(async (force = false) => {
     setBriefingLoading(true);
     try {
       if (force) {
         const today = new Date().toISOString().split('T')[0];
-        await cacheBriefing(today, '');
         await AsyncStorage.removeItem(`@briefing/${today}`);
       }
       setBriefing(await generateDailyBriefing());
@@ -175,13 +190,34 @@ export default function TodayTab() {
     return history.find((w) => new Date(w.completedAt).toISOString().split('T')[0] === ts) ?? null;
   }, [demo, history]);
 
-  // ── Persistent Dismissed Insights ─────────────────────────────────
+  // ── Persistent Dismissed Insights (date-keyed, resets daily) ───────
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   useEffect(() => {
-    AsyncStorage.getItem(DISMISSED_KEY).then((v) => { if (v) setDismissed(new Set(JSON.parse(v))); }).catch(() => {});
+    const todayStr = new Date().toISOString().split('T')[0];
+    AsyncStorage.getItem(DISMISSED_KEY).then((v) => {
+      if (v) {
+        try {
+          const stored = JSON.parse(v);
+          if (stored && stored.date === todayStr && Array.isArray(stored.dismissed)) {
+            setDismissed(new Set(stored.dismissed));
+          } else {
+            // New day — reset
+            setDismissed(new Set());
+            AsyncStorage.removeItem(DISMISSED_KEY).catch(() => {});
+          }
+        } catch {
+          setDismissed(new Set());
+        }
+      }
+    }).catch(() => {});
   }, []);
   const dismiss = useCallback((id: string) => {
-    setDismissed((p) => { const n = new Set(p).add(id); AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify(Array.from(n))).catch(() => {}); return n; });
+    setDismissed((p) => {
+      const n = new Set(p).add(id);
+      const todayStr = new Date().toISOString().split('T')[0];
+      AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify({ date: todayStr, dismissed: Array.from(n) })).catch(() => {});
+      return n;
+    });
   }, []);
 
   // ── AI Insights ───────────────────────────────────────────────────
@@ -362,10 +398,17 @@ export default function TodayTab() {
           {/* ── 2. DAILY COACHING ─────────────────────────────────────── */}
           <ExpandableCard
             style={{ marginTop: spacing.lg }}
+            onExpand={() => setBriefingExpanded(true)}
+            onCollapse={() => setBriefingExpanded(false)}
             expandedContent={
               <View>
-                {!briefingLoading && (
-                  <Text style={[typography.bodyLarge, { color: colors.text, lineHeight: 24 }]}>{briefing ?? fallback}</Text>
+                {briefingLoading ? (
+                  <View style={[S.row, { marginTop: spacing.md }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>Preparing your briefing...</Text>
+                  </View>
+                ) : (
+                  <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]}>{briefing ?? fallback}</Text>
                 )}
                 <TouchableOpacity
                   style={[S.row, { marginTop: spacing.md, alignSelf: 'flex-start' }]}
@@ -387,13 +430,15 @@ export default function TodayTab() {
                 <Ionicons name="refresh" size={16} color={briefingLoading ? colors.textTertiary : colors.primary} />
               </TouchableOpacity>
             </View>
-            {briefingLoading ? (
-              <View style={[S.row, { marginTop: spacing.md }]}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>Preparing your briefing...</Text>
-              </View>
-            ) : (
-              <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]} numberOfLines={2}>{briefing ?? fallback}</Text>
+            {!briefingExpanded && (
+              briefingLoading ? (
+                <View style={[S.row, { marginTop: spacing.md }]}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>Preparing your briefing...</Text>
+                </View>
+              ) : (
+                <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]} numberOfLines={2}>{briefing ?? fallback}</Text>
+              )
             )}
           </ExpandableCard>
         </View>
@@ -571,9 +616,9 @@ export default function TodayTab() {
         )}
 
         {/* ── 4b. INLINE INSIGHTS ──────────────────────────────────── */}
-        {smartInsights.length > 0 && (
+        {smartInsights.filter((si) => !dismissed.has(si.id)).length > 0 && (
           <View style={{ marginTop: spacing.sm, gap: spacing.xs }}>
-            {smartInsights.map((si) => (
+            {smartInsights.filter((si) => !dismissed.has(si.id)).map((si) => (
               <InsightBadge
                 key={si.id}
                 insight={si}
@@ -616,7 +661,7 @@ export default function TodayTab() {
         {insights.length > 0 && (
           <View style={{ marginTop: spacing.base }}>
             <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>Insights</Text>
-            {insights.map((i) => (
+            {insights.filter((i) => !dismissed.has(i.id)).map((i) => (
               <View key={i.id} style={[S.insight, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, borderColor: colors.borderLight, shadowColor: colors.shadow }]}>
                 <View style={[S.insightIco, { backgroundColor: `${i.iconColor}15`, borderRadius: radius.md }]}>
                   <Ionicons name={i.icon} size={18} color={i.iconColor} />

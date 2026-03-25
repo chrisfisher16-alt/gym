@@ -1,8 +1,11 @@
 import { useMemo, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { useNutritionStore } from '../stores/nutrition-store';
 
 let Haptics: typeof import('expo-haptics') | null = null;
-try { Haptics = require('expo-haptics'); } catch {}
+if (Platform.OS !== 'web') {
+  try { Haptics = require('expo-haptics'); } catch {}
+}
 
 export function useWaterTracking() {
   const logWater = useNutritionStore((s) => s.logWater);
@@ -17,7 +20,9 @@ export function useWaterTracking() {
   const progress = waterTarget > 0 ? waterIntake / waterTarget : 0;
 
   const hapticFeedback = useCallback(() => {
-    Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') {
+      Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   }, []);
 
   const add8oz = useCallback(() => {

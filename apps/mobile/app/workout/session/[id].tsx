@@ -7,6 +7,7 @@ import { useTheme } from '../../../src/theme';
 import { useWorkoutHistory } from '../../../src/hooks/useWorkoutHistory';
 import { Card, Badge } from '../../../src/components/ui';
 import { formatFullDate, formatTime, formatDuration, formatVolume, formatWeight } from '../../../src/lib/workout-utils';
+import { useProfileStore } from '../../../src/stores/profile-store';
 
 const MOOD_LABELS = ['', 'Terrible', 'Bad', 'Okay', 'Good', 'Great'];
 const MOOD_ICONS: Array<keyof typeof Ionicons.glyphMap> = [
@@ -25,7 +26,8 @@ export default function SessionDetailScreen() {
   const { getSessionById } = useWorkoutHistory();
 
   const session = getSessionById(id ?? '');
-  const unit = 'lbs';
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
   if (!session) {
     return (
@@ -105,8 +107,8 @@ export default function SessionDetailScreen() {
         </Card>
 
         {/* Exercises */}
-        {session.exercises.map((exercise) => (
-          <Card key={exercise.exerciseId + Math.random()} style={{ marginBottom: spacing.md }}>
+        {session.exercises.map((exercise, index) => (
+          <Card key={`${exercise.exerciseId}-${index}`} style={{ marginBottom: spacing.md }}>
             <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>
               {exercise.exerciseName}
             </Text>

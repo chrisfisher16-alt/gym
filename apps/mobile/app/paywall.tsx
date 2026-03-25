@@ -352,7 +352,14 @@ export default function PaywallScreen() {
                     <Text
                       style={[typography.caption, { color: colors.success, fontWeight: '600' }]}
                     >
-                      Save 16%
+                      Save {(() => {
+                        const plan = plans.find((p) => p.highlight) ?? plans[0];
+                        if (!plan) return '16%';
+                        const monthly = parseFloat(plan.price.replace(/[^0-9.]/g, ''));
+                        const yearly = parseFloat(plan.priceYearly.replace(/[^0-9.]/g, ''));
+                        if (!monthly || !yearly) return '16%';
+                        return `${Math.round((1 - (yearly / (monthly * 12))) * 100)}%`;
+                      })()}
                     </Text>
                   </View>
                 )}

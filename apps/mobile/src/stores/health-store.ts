@@ -128,7 +128,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
       set({
         syncEnabled,
-        lastSyncAt: storedLastSync ? new Date(storedLastSync) : null,
+        lastSyncAt: storedLastSync && !isNaN(new Date(storedLastSync).getTime()) ? new Date(storedLastSync) : null,
         isConnected,
         provider,
         todaySteps: storedSteps ? Number(storedSteps) : 0,

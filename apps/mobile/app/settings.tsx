@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +28,7 @@ export default function SettingsScreen() {
   const notificationStatus = useNotificationStore((s) => s.preferences.permissionStatus);
   const { tier, tierName, isSubscribed, isTrial } = useEntitlement();
   const profileData = useProfileStore((s) => s.profile);
-  const updateProfile = useProfileStore((s) => s.updateProfile);
+  const updateAuthProfile = useAuthStore((s) => s.updateProfile);
   const setCoachPreferences = useAuthStore((s) => s.setCoachPreferences);
   const colorMode = useThemeStore((s) => s.colorMode);
   const setColorMode = useThemeStore((s) => s.setColorMode);
@@ -173,7 +173,9 @@ export default function SettingsScreen() {
           showChevron
           onPress={() => {
             const current = profileData.unitPreference ?? 'imperial';
-            updateProfile({ unitPreference: current === 'imperial' ? 'metric' : 'imperial' });
+            const newValue = current === 'imperial' ? 'metric' : 'imperial';
+            updateAuthProfile({ unit_preference: newValue });
+            useProfileStore.getState().updateProfile({ unitPreference: newValue });
           }}
         />
         <Divider />
@@ -284,6 +286,8 @@ export default function SettingsScreen() {
           colors={colors}
           typography={typography}
           spacing={spacing}
+          showChevron
+          onPress={() => Linking.openURL(`mailto:${APP_CONFIG.supportEmail}`)}
         />
         <Divider />
         <SettingRow
@@ -293,6 +297,7 @@ export default function SettingsScreen() {
           colors={colors}
           typography={typography}
           spacing={spacing}
+          onPress={() => crossPlatformAlert('About', `Health Coach\nVersion ${Constants.expoConfig?.version ?? '1.0.0'}\nBuild ${Constants.expoConfig?.extra?.buildNumber ?? '1'}`)}
         />
         <Divider />
         <SettingRow
@@ -460,9 +465,14 @@ function CoachToneExpandable({
   const tones: CoachTone[] = ['direct', 'balanced', 'encouraging'];
 
   const selectTone = (tone: CoachTone) => {
-    if (coachPreferences) {
-      setCoachPreferences({ ...coachPreferences, tone, coach_tone: tone });
-    }
+    const now = new Date().toISOString();
+    const currentPrefs = coachPreferences || {
+      user_id: useAuthStore.getState().user?.id ?? '',
+      tone: 'balanced' as CoachTone,
+      created_at: now,
+      updated_at: now,
+    };
+    setCoachPreferences({ ...currentPrefs, tone, coach_tone: tone, updated_at: now });
   };
 
   return (

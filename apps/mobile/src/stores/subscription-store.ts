@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { EntitlementTier, PricingConfig } from '@health-coach/shared';
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 import {
@@ -56,6 +57,25 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   initialize: async (userId) => {
     if (get().isInitialized) return;
     set({ isLoading: true, error: null });
+
+    // Restore persisted promo grant (if any)
+    try {
+      const raw = await AsyncStorage.getItem('formiq_promo_grant');
+      if (raw) {
+        const { tier } = JSON.parse(raw) as { tier: EntitlementTier; code: string };
+        const plan = mapPricingConfig(tier as Exclude<EntitlementTier, 'free'>);
+        set({
+          tier,
+          isSubscribed: true,
+          isTrial: false,
+          trialEndsAt: null,
+          currentPlan: plan,
+          isLoading: false,
+          isInitialized: true,
+        });
+        return;
+      }
+    } catch {}
 
     try {
       // In dev mode without RevenueCat, use dev mock
@@ -237,6 +257,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       currentPlan: plan,
     });
 
+    // Persist promo grant so it survives app restart
+    AsyncStorage.setItem(
+      'formiq_promo_grant',
+      JSON.stringify({ tier: promo.tier, code: normalizedCode }),
+    ).catch(() => {});
+
     return { success: true };
   },
 
@@ -272,6 +298,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   logout: async () => {
     await rcLogout();
+    await AsyncStorage.removeItem('formiq_promo_grant').catch(() => {});
     set({
       tier: 'free',
       isSubscribed: false,

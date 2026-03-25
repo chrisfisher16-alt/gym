@@ -33,11 +33,11 @@ export default function ForgotPasswordScreen() {
 
   const onSubmit = async (data: ForgotForm) => {
     setFormError('');
-    try {
-      await resetPassword(data.email);
+    const { error } = await resetPassword(data.email);
+    if (error) {
+      setFormError(error);
+    } else {
       setSent(true);
-    } catch (err: any) {
-      setFormError(err?.message || 'Failed to send reset email.');
     }
   };
 

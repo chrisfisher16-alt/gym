@@ -2,6 +2,8 @@
 // Rule-based local logic — no API calls, no coach-store interaction.
 // Generates contextual one-line insights from user data.
 
+import { getDateString } from './nutrition-utils';
+
 export interface Insight {
   id: string;
   message: string;
@@ -94,7 +96,7 @@ const rules: Rule[] = [
       ctx.timeOfDay < 20 &&
       ctx.lastWorkoutDate != null
     ) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getDateString();
       if (ctx.lastWorkoutDate !== today) {
         return {
           id: 'workout-nudge-afternoon',
@@ -146,8 +148,8 @@ const rules: Rule[] = [
   // 7. Rest day (no workout today, but had one yesterday)
   (ctx) => {
     if (ctx.lastWorkoutDate == null) return null;
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().split('T')[0];
+    const today = getDateString();
+    const yesterday = getDateString(new Date(Date.now() - 86_400_000));
     if (ctx.lastWorkoutDate === yesterday && ctx.lastWorkoutDate !== today) {
       return {
         id: 'rest-day-hydrate',

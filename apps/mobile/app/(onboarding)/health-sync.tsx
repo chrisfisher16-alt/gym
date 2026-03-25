@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { OnboardingScreen } from '../../src/components/onboarding';
@@ -25,7 +25,7 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
-const FEET_OPTIONS = [3, 4, 5, 6, 7, 8];
+const FEET_OPTIONS = [4, 5, 6, 7];
 const INCHES_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
 /** Convert an age (years) to a synthetic DOB string for storage */
@@ -94,14 +94,28 @@ export default function HealthSyncScreen() {
 
   // ── Handlers ─────────────────────────────────────────────────────
 
-  const handleSync = () => {
+  const isNavigating = useRef(false);
+
+  const handleSync = async () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     selectionFeedback();
+    try {
+      const { useHealthStore } = require('../../src/stores/health-store');
+      await useHealthStore.getState().requestPermissions();
+    } catch {
+      // Health connect failed — continue anyway
+    }
     setHealthSyncEnabled(true);
     router.push('/(onboarding)/goals');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   const handleNext = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     router.push('/(onboarding)/goals');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   const handleGenderSelect = (g: Gender) => {
@@ -155,6 +169,9 @@ export default function HealthSyncScreen() {
     const age = parseInt(cleaned, 10);
     if (age >= 13 && age <= 120) {
       setDateOfBirth(ageToDOBString(age));
+    } else {
+      setDateOfBirth('');
+      Alert.alert('Invalid Age', 'Age must be between 13 and 120.');
     }
   };
 
@@ -206,7 +223,14 @@ export default function HealthSyncScreen() {
           <SegToggle
             options={UNIT_OPTIONS}
             selected={unitPreference}
-            onSelect={setUnitPreference}
+            onSelect={(newUnit: UnitPreference) => {
+              if (newUnit !== unitPreference && weightKg != null) {
+                // Reconvert displayed weight to new unit
+                const displayed = newUnit === 'metric' ? weightKg : kgToLbs(weightKg);
+                setWeightText(String(displayed));
+              }
+              setUnitPreference(newUnit);
+            }}
           />
         </View>
 

@@ -453,7 +453,9 @@ export const useSmartWorkoutStore = create<SmartWorkoutState>((set, get) => ({
 
       const goal: WorkoutGoal =
         options?.goal ??
-        mapFitnessGoalToWorkoutGoal(onboardingState.fitnessGoal);
+        mapFitnessGoalToWorkoutGoal(
+          (profileState.profile.fitnessGoal as any) ?? onboardingState.fitnessGoal
+        );
 
       const equipment: string[] =
         profileState.profile.fitnessEquipment.length > 0
@@ -464,7 +466,9 @@ export const useSmartWorkoutStore = create<SmartWorkoutState>((set, get) => ({
 
       const availableMinutes: number =
         options?.availableMinutes ??
-        parseDurationMinutes(onboardingState.sessionDuration);
+        parseDurationMinutes(
+          (profileState.profile.sessionDuration as any) ?? onboardingState.sessionDuration
+        );
 
       const experienceLevel =
         profileState.profile.trainingExperience ??

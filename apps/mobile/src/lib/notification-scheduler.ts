@@ -19,12 +19,20 @@ import type {
 
 // ── Lazy-load native module (crashes on web) ──────────────────────
 
-let Notifications: typeof import('expo-notifications') | null = null;
+let _Notifications: typeof import('expo-notifications') | null = null;
+let _notificationsLoaded = false;
 
-if (Platform.OS !== 'web') {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {}
+function getNotifications() {
+  if (!_notificationsLoaded && Platform.OS !== 'web') {
+    _notificationsLoaded = true;
+    try {
+      _Notifications = require('expo-notifications');
+    } catch (e) {
+      console.warn('expo-notifications not available:', e);
+      _Notifications = null;
+    }
+  }
+  return _Notifications;
 }
 
 // ── Quiet-hours gate ─────────────────────────────────────────────
@@ -54,6 +62,7 @@ export async function scheduleWorkoutReminder(
   time: string,
   days: DayOfWeek[],
 ): Promise<string[]> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return [];
 
   const { hour, minute } = parseTime(time);
@@ -104,6 +113,7 @@ export async function scheduleMealReminder(
   mealType: MealType,
   time: string,
 ): Promise<string[]> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return [];
 
   const { hour, minute } = parseTime(time);
@@ -141,6 +151,7 @@ export async function scheduleHydrationReminder(
   quietStart?: string,
   quietEnd?: string,
 ): Promise<string[]> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return [];
 
   const ids: string[] = [];
@@ -186,6 +197,7 @@ export async function scheduleSupplementReminder(
   supplementName: string,
   time: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return '';
 
   const { hour, minute } = parseTime(time);
@@ -210,6 +222,7 @@ export async function scheduleWeeklyCheckin(
   dayOfWeek: DayOfWeek,
   time: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return '';
 
   const { hour, minute } = parseTime(time);
@@ -234,6 +247,7 @@ export async function scheduleWeeklyCheckin(
 export async function scheduleDailyBriefing(
   time: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return '';
 
   const { hour, minute } = parseTime(time);
@@ -282,6 +296,7 @@ export async function clearSmartNotifications(): Promise<void> {
  * Safe to call repeatedly — clears old smart notifications first.
  */
 export async function scheduleSmartNotifications(): Promise<void> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return;
 
   // Check permissions & user preference

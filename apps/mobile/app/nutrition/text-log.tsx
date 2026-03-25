@@ -40,6 +40,8 @@ export default function TextLogScreen() {
       if (!mealName) {
         setMealName(text.trim().substring(0, 40));
       }
+    } catch (error) {
+      Alert.alert('Analysis Failed', 'Could not analyze meal text. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }

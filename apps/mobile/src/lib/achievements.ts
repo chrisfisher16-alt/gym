@@ -1,5 +1,6 @@
 import type { CompletedSession } from '../types/workout';
 import type { BodyMeasurement, ProgressPhoto } from '../stores/measurements-store';
+import { getDateString } from './nutrition-utils';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -31,14 +32,14 @@ export function calculateStreak(history: CompletedSession[]): number {
   if (history.length === 0) return 0;
 
   const workoutDates = new Set(
-    history.map((s) => new Date(s.completedAt).toISOString().split('T')[0]),
+    history.map((s) => getDateString(new Date(s.completedAt))),
   );
 
   const sortedDates = Array.from(workoutDates).sort().reverse();
   if (sortedDates.length === 0) return 0;
 
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const today = getDateString();
+  const yesterday = getDateString(new Date(Date.now() - 86400000));
 
   // Streak must include today or yesterday
   if (sortedDates[0] !== today && sortedDates[0] !== yesterday) return 0;

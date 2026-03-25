@@ -6,33 +6,44 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import type { NotificationData, NotificationType } from '../types/notifications';
 
-// ── Lazy-load native module (crashes on web) ──────────────────────
+// ── Lazily-loaded native module ───────────────────────────────────
+// Deferred to first use so a missing native module (e.g. PushNotificationIOS
+// in simulators without expo-notifications configured) doesn't crash at startup.
 
-let Notifications: typeof import('expo-notifications') | null = null;
+let _Notifications: typeof import('expo-notifications') | null = null;
+let _notificationsLoaded = false;
+let _handlerConfigured = false;
 
-if (Platform.OS !== 'web') {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {}
-}
-
-// ── Configuration ─────────────────────────────────────────────────
-
-if (Notifications) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+function getNotifications() {
+  if (!_notificationsLoaded && Platform.OS !== 'web') {
+    _notificationsLoaded = true;
+    try {
+      _Notifications = require('expo-notifications');
+    } catch (e) {
+      console.warn('expo-notifications not available:', e);
+      _Notifications = null;
+    }
+  }
+  // Configure notification handler once on first successful load
+  if (_Notifications && !_handlerConfigured) {
+    _handlerConfigured = true;
+    _Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+  return _Notifications;
 }
 
 // ── Permissions ───────────────────────────────────────────────────
 
 export async function requestPermissions(): Promise<'granted' | 'denied' | 'undetermined'> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) {
     return 'denied';
   }
@@ -56,6 +67,7 @@ export async function requestPermissions(): Promise<'granted' | 'denied' | 'unde
 }
 
 export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) {
     return 'denied';
   }
@@ -68,6 +80,7 @@ export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'und
 // ── Push Token ────────────────────────────────────────────────────
 
 export async function registerPushToken(): Promise<string | null> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) {
     return null;
   }
@@ -93,6 +106,7 @@ export async function scheduleLocalNotification(
   data?: NotificationData,
   categoryIdentifier?: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (!Notifications) return '';
 
   const id = await Notifications.scheduleNotificationAsync({
@@ -111,11 +125,13 @@ export async function scheduleLocalNotification(
 // ── Cancel Notifications ──────────────────────────────────────────
 
 export async function cancelNotification(id: string): Promise<void> {
+  const Notifications = getNotifications();
   if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(id);
 }
 
 export async function cancelAllNotifications(): Promise<void> {
+  const Notifications = getNotifications();
   if (!Notifications) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
@@ -125,6 +141,7 @@ export async function cancelAllNotifications(): Promise<void> {
  * Returns the number of notifications cancelled.
  */
 export async function cancelNotificationsByType(type: string): Promise<number> {
+  const Notifications = getNotifications();
   if (!Notifications) return 0;
   const all = await Notifications.getAllScheduledNotificationsAsync();
   let cancelled = 0;
@@ -139,6 +156,7 @@ export async function cancelNotificationsByType(type: string): Promise<number> {
 }
 
 export async function getScheduledNotifications() {
+  const Notifications = getNotifications();
   if (!Notifications) return [];
   return Notifications.getAllScheduledNotificationsAsync();
 }
@@ -146,6 +164,7 @@ export async function getScheduledNotifications() {
 // ── Notification Categories (Action Buttons) ──────────────────────
 
 export async function setupNotificationCategories(): Promise<void> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return;
 
   await Notifications.setNotificationCategoryAsync('workout_reminder', [

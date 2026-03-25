@@ -7,7 +7,7 @@
  *  C. Session duration (optional)
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useTheme } from '../../src/theme';
@@ -84,8 +84,12 @@ export default function ScheduleScreen() {
     setSessionDuration(duration);
   };
 
+  const isNavigating = useRef(false);
   const handleNext = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     router.push('/(onboarding)/gym-type');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   // ── Render ─────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { getAIConfig, callAI, type AIMessage } from './ai-provider';
 import { useWorkoutStore } from '../stores/workout-store';
 import { useNutritionStore } from '../stores/nutrition-store';
 import { useProfileStore } from '../stores/profile-store';
-import { calculateDailyTotals } from './nutrition-utils';
+import { calculateDailyTotals, getDateString } from './nutrition-utils';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -72,26 +72,28 @@ export async function dismissWeeklySummary(weekStart: string): Promise<void> {
 
 // ── Date Helpers ─────────────────────────────────────────────────────
 
-/** Get the Monday of the current week (or last Monday if today is Sunday). */
+/** Get the Monday of last week (Monday-based weeks).
+ *  Uses `(getDay() + 6) % 7` so Sunday (0) maps to 6 instead of 0. */
 export function getLastWeekStart(): string {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun, 1=Mon, ...
-  // Go back to last Monday
-  const daysBack = day === 0 ? 13 : day + 6;
+  const dayMondayBased = (now.getDay() + 6) % 7; // Mon=0 … Sun=6
+  // Go back to this Monday, then another 7 days for last Monday
+  const daysBack = dayMondayBased + 7;
   const lastMonday = new Date(now);
   lastMonday.setDate(now.getDate() - daysBack);
   lastMonday.setHours(0, 0, 0, 0);
-  return lastMonday.toISOString().split('T')[0];
+  return getDateString(lastMonday);
 }
 
 export function getLastWeekEnd(): string {
   const now = new Date();
-  const day = now.getDay();
-  const daysBack = day === 0 ? 7 : day;
+  const dayMondayBased = (now.getDay() + 6) % 7; // Mon=0 … Sun=6
+  // Last Sunday = go back dayMondayBased + 1 days (one day before this Monday)
+  const daysBack = dayMondayBased + 1;
   const lastSunday = new Date(now);
   lastSunday.setDate(now.getDate() - daysBack);
   lastSunday.setHours(23, 59, 59, 999);
-  return lastSunday.toISOString().split('T')[0];
+  return getDateString(lastSunday);
 }
 
 function getDateRange(startDate: string, endDate: string): string[] {
@@ -99,7 +101,7 @@ function getDateRange(startDate: string, endDate: string): string[] {
   const current = new Date(startDate);
   const end = new Date(endDate);
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0]);
+    dates.push(getDateString(current));
     current.setDate(current.getDate() + 1);
   }
   return dates;

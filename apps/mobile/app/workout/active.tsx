@@ -606,7 +606,7 @@ export default function ActiveWorkoutScreen() {
           <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
             Exercises: {activeSession.exercises.filter((e) => !e.isSkipped).length}
           </Text>
-          {editingRest ? (
+          {!isDrilledIn && (editingRest ? (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <TextInput
                 style={[
@@ -648,7 +648,7 @@ export default function ActiveWorkoutScreen() {
                 Rest: {defaultRestSeconds}s
               </Text>
             </TouchableOpacity>
-          )}
+          ))}
           <TouchableOpacity
             onPress={() => setIsReorderMode((prev) => !prev)}
             style={[

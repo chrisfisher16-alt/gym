@@ -2,6 +2,7 @@
 // Supports multiple LLM providers from the mobile app directly.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ export interface AICallOptions {
 // ── Timeout / Abort Support ─────────────────────────────────────────
 
 const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds
+const STREAMING_TIMEOUT_MS = 60_000; // 60 seconds — generous for first byte & between chunks
 
 function createTimeoutSignal(
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
@@ -93,13 +95,59 @@ function createTimeoutSignal(
   };
 }
 
+/**
+ * A timeout that resets every time `resetTimeout()` is called.
+ * Used for streaming responses so the timer measures time since the
+ * *last* chunk, not since the request started.
+ */
+function createResettableTimeoutSignal(
+  timeoutMs: number,
+  externalSignal?: AbortSignal,
+): { signal: AbortSignal; resetTimeout: () => void; cleanup: () => void } {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout>;
+
+  const resetTimeout = () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(
+      () => controller.abort(new Error('Request timed out. Please try again.')),
+      timeoutMs,
+    );
+  };
+
+  resetTimeout(); // Start initial timeout
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeoutId);
+          controller.abort(externalSignal.reason);
+        },
+        { once: true },
+      );
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    resetTimeout,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
 // ── Storage ─────────────────────────────────────────────────────────
 
-const AI_CONFIG_KEY = '@ai/config';
+const SECURE_AI_CONFIG_KEY = 'ai_config';
+/** @deprecated Used only for migration from AsyncStorage to SecureStore. */
+const LEGACY_AI_CONFIG_KEY = '@ai/config';
 
 const DEFAULT_CONFIG: AIConfig = {
-  provider: 'groq',
-  model: 'llama-3.3-70b-versatile',
+  provider: 'claude',
+  model: 'claude-sonnet-4-20250514',
 };
 
 let cachedConfig: AIConfig | null = null;
@@ -107,24 +155,37 @@ let cachedConfig: AIConfig | null = null;
 export async function getAIConfig(): Promise<AIConfig> {
   if (cachedConfig) return cachedConfig;
   try {
-    const stored = await AsyncStorage.getItem(AI_CONFIG_KEY);
+    // Try SecureStore first
+    const stored = await SecureStore.getItemAsync(SECURE_AI_CONFIG_KEY);
     if (stored) {
       cachedConfig = JSON.parse(stored);
+      return cachedConfig!;
+    }
+    // Migrate from AsyncStorage if present (one-time)
+    const legacy = await AsyncStorage.getItem(LEGACY_AI_CONFIG_KEY);
+    if (legacy) {
+      await SecureStore.setItemAsync(SECURE_AI_CONFIG_KEY, legacy);
+      await AsyncStorage.removeItem(LEGACY_AI_CONFIG_KEY);
+      cachedConfig = JSON.parse(legacy);
       return cachedConfig!;
     }
   } catch {
     // Ignore storage errors
   }
+  // First launch — persist the default so chat can read it immediately
+  cachedConfig = DEFAULT_CONFIG;
+  SecureStore.setItemAsync(SECURE_AI_CONFIG_KEY, JSON.stringify(DEFAULT_CONFIG)).catch(() => {});
   return DEFAULT_CONFIG;
 }
 
 export async function setAIConfig(config: AIConfig): Promise<void> {
   cachedConfig = config;
-  await AsyncStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+  await SecureStore.setItemAsync(SECURE_AI_CONFIG_KEY, JSON.stringify(config));
 }
 
 export function clearConfigCache(): void {
   cachedConfig = null;
+  SecureStore.deleteItemAsync(SECURE_AI_CONFIG_KEY).catch(() => {});
 }
 
 /**
@@ -133,15 +194,11 @@ export function clearConfigCache(): void {
  */
 export async function migrateAIConfig(): Promise<void> {
   try {
-    const stored = await AsyncStorage.getItem(AI_CONFIG_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as AIConfig;
-      // Migrate: ensure providerKeys exist for backward compatibility
-      if (parsed.apiKey && !parsed.providerKeys) {
-        parsed.providerKeys = { [parsed.provider]: parsed.apiKey };
-        await AsyncStorage.setItem(AI_CONFIG_KEY, JSON.stringify(parsed));
-        cachedConfig = parsed;
-      }
+    const config = await getAIConfig();
+    // Migrate: ensure providerKeys exist for backward compatibility
+    if (config.apiKey && !config.providerKeys) {
+      config.providerKeys = { [config.provider]: config.apiKey };
+      await setAIConfig(config);
     }
   } catch {
     // Ignore storage errors
@@ -473,7 +530,7 @@ async function callClaudeAPIStreaming(
   };
   if (systemField) body.system = systemField;
 
-  const { signal, cleanup } = createTimeoutSignal(DEFAULT_TIMEOUT_MS, options.signal);
+  const { signal, resetTimeout, cleanup } = createResettableTimeoutSignal(STREAMING_TIMEOUT_MS, options.signal);
 
   try {
     const response = await fetch(baseUrl, {
@@ -497,7 +554,11 @@ async function callClaudeAPIStreaming(
       throw new Error(`AI provider error (${response.status}): ${errorText.slice(0, 200)}`);
     }
 
-    const reader = response.body!.getReader();
+    if (!response.body) {
+      throw new Error('Streaming not supported — response body is null');
+    }
+
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let fullContent = '';
     let modelName = model;
@@ -510,6 +571,8 @@ async function callClaudeAPIStreaming(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+
+      resetTimeout(); // Got data — reset the idle timeout
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -618,7 +681,7 @@ async function callOpenAICompatibleStreaming(
     stream: true,
   };
 
-  const { signal, cleanup } = createTimeoutSignal(DEFAULT_TIMEOUT_MS, options.signal);
+  const { signal, resetTimeout, cleanup } = createResettableTimeoutSignal(STREAMING_TIMEOUT_MS, options.signal);
 
   try {
     const response = await fetch(baseUrl, {
@@ -642,7 +705,11 @@ async function callOpenAICompatibleStreaming(
       throw new Error(`AI provider error (${response.status}): ${errorText.slice(0, 200)}`);
     }
 
-    const reader = response.body!.getReader();
+    if (!response.body) {
+      throw new Error('Streaming not supported — response body is null');
+    }
+
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let fullContent = '';
     let modelName = model;
@@ -651,6 +718,8 @@ async function callOpenAICompatibleStreaming(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+
+      resetTimeout(); // Got data — reset the idle timeout
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -724,14 +793,17 @@ export async function callAI(
   config: AIConfig,
   options?: AICallOptions,
 ): Promise<AIProviderResponse> {
-  return callWithRetry(() => {
-    if (options?.onToken) {
-      if (config.provider === 'claude') {
-        return callClaudeAPIStreaming(messages, config, options);
-      }
-      return callOpenAICompatibleStreaming(messages, config, options);
+  // Streaming calls are NOT retried — a retry after partial token delivery
+  // would send duplicate tokens to the UI.
+  if (options?.onToken) {
+    if (config.provider === 'claude') {
+      return callClaudeAPIStreaming(messages, config, options);
     }
+    return callOpenAICompatibleStreaming(messages, config, options);
+  }
 
+  // Non-streaming calls can safely retry on transient errors.
+  return callWithRetry(() => {
     if (config.provider === 'claude') {
       return callClaudeAPI(messages, config, options);
     }

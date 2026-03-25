@@ -23,7 +23,7 @@ export function ScreenContainer({
   const { colors, spacing } = useTheme();
 
   const content = (
-    <View style={[padded && { paddingHorizontal: spacing.base }, contentStyle]}>
+    <View style={[{ flex: scrollable ? undefined : 1 }, padded && { paddingHorizontal: spacing.base }, contentStyle]}>
       {children}
     </View>
   );

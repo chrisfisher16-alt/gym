@@ -3,7 +3,7 @@
  * and adjusts the pre-filled equipment list for their gym type.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -66,16 +66,17 @@ export default function EquipmentScreen() {
   const setEquipmentWeights = useOnboardingStore((s) => s.setEquipmentWeights);
   const toggleEquipmentWeight = useOnboardingStore((s) => s.toggleEquipmentWeight);
 
-  // Pre-populate equipment based on gym type (only on first mount when empty)
+  // Re-apply equipment preset whenever gym type changes
+  const [lastPresetGymType, setLastPresetGymType] = useState<string | null>(null);
+
   useEffect(() => {
-    if (selectedEquipment.length === 0 && gymType) {
+    if (gymType && gymType !== lastPresetGymType) {
       const preset = getEquipmentPreset(gymType);
-      if (preset.length > 0) {
-        setSelectedEquipment(preset);
-      }
+      setSelectedEquipment(preset);
+      setLastPresetGymType(gymType);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
+  }, [gymType]);
 
   // All categories start expanded
   const [collapsed, setCollapsed] = useState<Record<EquipmentCategory, boolean>>(() => {
@@ -137,6 +138,14 @@ export default function EquipmentScreen() {
     setEquipmentWeights(weightSheetItem.id, []);
   };
 
+  const isNavigating = useRef(false);
+  const handleNavigateNext = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    router.push('/(onboarding)/notifications');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
+  };
+
   // For the currently open weight sheet
   const sheetWeights = weightSheetItem ? getSelectedWeights(weightSheetItem) : [];
   const sheetWeightSet = useMemo(() => new Set(sheetWeights), [sheetWeights]);
@@ -151,7 +160,7 @@ export default function EquipmentScreen() {
       subtitle="We've set up likely equipment. Adjust anything that's wrong."
       ctaLabel="Looks Good"
       ctaEnabled
-      onNext={() => router.push('/(onboarding)/notifications')}
+      onNext={handleNavigateNext}
     >
       <View style={{ marginTop: spacing.sm }}>
         {gymType === 'no_equipment' && (

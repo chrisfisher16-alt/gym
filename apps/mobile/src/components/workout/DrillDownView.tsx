@@ -32,7 +32,6 @@ import type {
   ActiveSet,
 } from '../../types/workout';
 import { Image } from 'expo-image';
-import { ExerciseIllustration } from '../ExerciseIllustration';
 import { ExerciseImageViewer } from './ExerciseImageViewer';
 import { getExerciseImages } from '../../lib/exercise-image-map';
 import { WorkoutInputToolbar } from './WorkoutInputToolbar';
@@ -48,7 +47,7 @@ export interface DrillDownViewProps {
   onBack: () => void;
   onLogSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number, isAutoFilled?: boolean) => void;
   onCompleteSet: (exerciseInstanceId: string, setId: string) => void;
-  onStartRestTimer: (durationSeconds: number) => void;
+  onStartRestTimer: (durationSeconds: number, exerciseId?: string) => void;
   onSetCurrentExerciseIndex: (index: number) => void;
   onNextExercise: () => void;
   onFinishWorkout: () => void;
@@ -98,15 +97,8 @@ export function DrillDownView({
 }: DrillDownViewProps) {
   const { colors, spacing, radius, typography } = useTheme();
 
-  // ── Exercise library entry ──────────────────────────────────────────
-  const allExercises = useWorkoutStore((s) => s.exercises);
   const getExerciseRestTime = useWorkoutStore((s) => s.getExerciseRestTime);
   const updateExerciseRestTime = useWorkoutStore((s) => s.updateExerciseRestTime);
-  const exerciseLib = useMemo(
-    () => allExercises.find((e) => e.id === exercise.exerciseId),
-    [allExercises, exercise.exerciseId],
-  );
-
   // ── Toolbar focus tracking ─────────────────────────────────────────
   const [focusedInput, setFocusedInput] = useState<InputType | null>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -401,7 +393,7 @@ export function DrillDownView({
 
       // Check if we just completed a full round (cycled back to first member)
       if (nextMemberIdx === 0) {
-        onStartRestTimer(restTime);
+        onStartRestTimer(restTime, exercise.exerciseId);
       }
 
       // Navigate to the next superset member
@@ -411,7 +403,7 @@ export function DrillDownView({
       }
     } else {
       // Not in a superset - start rest timer
-      onStartRestTimer(restTime);
+      onStartRestTimer(restTime, exercise.exerciseId);
 
       // If this was the last set and last exercise, finish workout
       if (isLastSet && isLastExercise && !nextIncomplete) {
@@ -542,7 +534,7 @@ export function DrillDownView({
         {/* ── Exercise Image ──────────────────────────────────────── */}
         {formCheckMode && exerciseImages ? (
           <View style={{ paddingHorizontal: spacing.base }}>
-            <View style={{ flexDirection: 'row', height: 200, borderRadius: radius.lg, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', height: 160, borderRadius: radius.lg, overflow: 'hidden' }}>
               <View style={{ flex: 1, position: 'relative', backgroundColor: colors.surface }}>
                 <Image source={{ uri: exerciseImages.startPosition }} style={{ flex: 1 }} contentFit="contain" cachePolicy="disk" />
                 <View style={styles.formCheckLabel}>
@@ -567,19 +559,67 @@ export function DrillDownView({
           />
         )}
 
-        {/* ── Form Check toggle ──────────────────────────────────── */}
-        {hasImages && (
-          <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
+        {/* ── Action Bar (Rest Timer, Replace, Form Check) ──── */}
+        <View style={[styles.actionBar, { marginTop: spacing.sm, gap: spacing.sm, paddingHorizontal: spacing.base, flexWrap: 'wrap' }]}>
+          {/* Rest Time Badge */}
+          {editingRest ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TextInput
+                style={[
+                  styles.restEditInput,
+                  typography.labelSmall,
+                  {
+                    color: colors.text,
+                    backgroundColor: colors.surfaceSecondary,
+                    borderColor: colors.primary,
+                    borderRadius: radius.sm,
+                  },
+                ]}
+                value={restInput}
+                onChangeText={setRestInput}
+                keyboardType="number-pad"
+                autoFocus
+                selectTextOnFocus
+                onSubmitEditing={handleRestSubmit}
+                onBlur={handleRestSubmit}
+              />
+              <Text style={[typography.caption, { color: colors.textTertiary, marginLeft: 2 }]}>s</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={handleRestEdit}
+              style={[styles.actionChip, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.full }]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="timer-outline" size={14} color={colors.primary} />
+              <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: 4 }]}>
+                {restTime}s
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Replace button */}
+          <TouchableOpacity
+            onPress={() => onReplaceExercise(exercise)}
+            style={[styles.actionChip, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.full }]}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="swap-horizontal-outline" size={14} color={colors.textSecondary} />
+            <Text style={[typography.labelSmall, { color: colors.textSecondary, marginLeft: 4 }]}>
+              Replace
+            </Text>
+          </TouchableOpacity>
+
+          {/* Form Check toggle */}
+          {hasImages && (
             <TouchableOpacity
               onPress={() => setFormCheckMode((prev) => !prev)}
               activeOpacity={0.7}
               style={[
-                styles.formCheckToggle,
+                styles.actionChip,
                 {
                   backgroundColor: formCheckMode ? colors.primary : colors.surfaceSecondary,
                   borderRadius: radius.full,
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.xs,
                 },
               ]}
             >
@@ -593,88 +633,24 @@ export function DrillDownView({
                   typography.labelSmall,
                   {
                     color: formCheckMode ? colors.textInverse : colors.textSecondary,
-                    marginLeft: spacing.xs,
+                    marginLeft: 4,
                   },
                 ]}
               >
                 Form Check
               </Text>
             </TouchableOpacity>
-          </View>
-        )}
+          )}
+        </View>
 
         {/* ── Exercise Header ─────────────────────────────────────── */}
         <View style={[styles.headerSection, { paddingHorizontal: spacing.base }]}>
-          {exerciseLib && (
-            <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
-              <ExerciseIllustration
-                exerciseId={exercise.exerciseId}
-                category={exerciseLib.category}
-                equipment={exerciseLib.equipment}
-                primaryMuscles={exerciseLib.primaryMuscles}
-                size="medium"
-              />
-            </View>
-          )}
-
           <Text
             style={[typography.displayMedium, { color: colors.text, textAlign: 'center' }]}
             numberOfLines={2}
           >
             {exercise.exerciseName}
           </Text>
-
-          {/* ── Action Bar ──────────────────────────────────────── */}
-          <View style={[styles.actionBar, { marginTop: spacing.sm, gap: spacing.md }]}>
-            {/* Rest Time Badge */}
-            {editingRest ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <TextInput
-                  style={[
-                    styles.restEditInput,
-                    typography.labelSmall,
-                    {
-                      color: colors.text,
-                      backgroundColor: colors.surfaceSecondary,
-                      borderColor: colors.primary,
-                      borderRadius: radius.sm,
-                    },
-                  ]}
-                  value={restInput}
-                  onChangeText={setRestInput}
-                  keyboardType="number-pad"
-                  autoFocus
-                  selectTextOnFocus
-                  onSubmitEditing={handleRestSubmit}
-                  onBlur={handleRestSubmit}
-                />
-                <Text style={[typography.caption, { color: colors.textTertiary, marginLeft: 2 }]}>s</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                onPress={handleRestEdit}
-                style={[styles.actionChip, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.full }]}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="timer-outline" size={14} color={colors.primary} />
-                <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: 4 }]}>
-                  {restTime}s
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Replace button */}
-            <TouchableOpacity
-              onPress={() => onReplaceExercise(exercise)}
-              style={[styles.actionChip, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.full }]}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="swap-horizontal-outline" size={14} color={colors.textSecondary} />
-              <Text style={[typography.labelSmall, { color: colors.textSecondary, marginLeft: 4 }]}>
-                Replace
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           {/* ── Tappable Set Progress Dots ─────────────────────── */}
           <View style={[styles.progressRow, { marginTop: spacing.md }]}>
@@ -1320,10 +1296,6 @@ const styles = StyleSheet.create({
     width: 44,
     minHeight: 28,
     paddingHorizontal: 4,
-  },
-  formCheckToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   formCheckLabel: {
     position: 'absolute',

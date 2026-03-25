@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { OnboardingScreen } from '../../src/components/onboarding/OnboardingScreen';
@@ -15,12 +15,16 @@ export default function GymTypeScreen() {
     setGymType(type);
   };
 
+  const isNavigating = useRef(false);
   const handleNext = () => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     if (gymType === 'large_gym') {
       router.push('/(onboarding)/gym-search');
     } else {
       router.push('/(onboarding)/equipment');
     }
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   return (

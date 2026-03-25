@@ -14,6 +14,10 @@ import { useWorkoutStore } from '../../src/stores/workout-store';
 import { useProfileStore } from '../../src/stores/profile-store';
 import { formatFullDate, formatWeight } from '../../src/lib/workout-utils';
 import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
+import { checkWorkoutLogLimit } from '../../src/lib/usage-limits';
 
 export default function ExerciseDetailScreen() {
   const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
@@ -25,6 +29,8 @@ export default function ExerciseDetailScreen() {
   const history = useWorkoutStore((s) => s.history);
   const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
   const [showStartSheet, setShowStartSheet] = useState(false);
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const exercise = getExerciseById(exerciseId ?? '');
   const record = getRecordForExercise(exerciseId ?? '');
@@ -59,9 +65,32 @@ export default function ExerciseDetailScreen() {
 
   const handleBuildOwn = () => {
     setShowStartSheet(false);
-    startEmptyWorkout();
-    addExerciseToSession(exercise);
-    router.push('/workout/active');
+
+    const doStart = () => {
+      startEmptyWorkout();
+      addExerciseToSession(exercise);
+      router.push('/workout/active');
+    };
+
+    if (canAccess('unlimited_workouts')) {
+      doStart();
+      return;
+    }
+    // Free tier — check usage
+    checkWorkoutLogLimit().then((usage) => {
+      if (usage.allowed) {
+        doStart();
+      } else {
+        crossPlatformAlert(
+          'Workout Limit Reached',
+          `You've used all ${usage.limit} free workouts this month. Upgrade to Workout Coach for unlimited workouts.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_workouts', source: 'exercise_detail' }) },
+          ],
+        );
+      }
+    });
   };
 
   const handleBuildForMuscles = () => {

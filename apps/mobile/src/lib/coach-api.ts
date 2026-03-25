@@ -42,6 +42,7 @@ export async function sendChatMessage(
   context: string = 'general',
   history: AIMessage[] = [],
   onToken?: (token: string) => void,
+  signal?: AbortSignal,
 ): Promise<ChatResponse> {
   // Load any existing conversation summaries for context continuity
   const summaries = conversationId ? await loadSummaries(conversationId) : [];
@@ -52,6 +53,7 @@ export async function sendChatMessage(
     conversationId,
     conversationSummaries: summaries.length > 0 ? summaries : undefined,
     onToken,
+    signal,
   });
 
   return {
