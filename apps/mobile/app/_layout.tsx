@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { ToastProvider } from '../src/components/Toast';
 import { NetworkBanner } from '../src/components/NetworkBanner';
 import { CommandPaletteProvider, useCommandPalette } from '../src/providers/CommandPaletteProvider';
@@ -107,6 +108,7 @@ export default function RootLayout() {
     <CoachPeekProvider>
     <QuickInputProvider>
     <ToastProvider>
+      <ErrorBoundary>
       <NetworkBanner />
       <Stack screenOptions={{
         headerShown: false,
@@ -132,6 +134,7 @@ export default function RootLayout() {
         <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
       <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      </ErrorBoundary>
     </ToastProvider>
     </QuickInputProvider>
     </CoachPeekProvider>

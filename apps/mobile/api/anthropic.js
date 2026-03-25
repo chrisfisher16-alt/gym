@@ -1,8 +1,52 @@
 const https = require('https');
 
+// --- Rate Limiting (in-memory, per IP) ---
+const rateLimits = new Map();
+const RATE_LIMIT = 15; // requests per minute per IP
+const RATE_WINDOW = 60000; // 1 minute
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = rateLimits.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimits.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= RATE_LIMIT;
+}
+
+// --- Model Whitelist ---
+const ALLOWED_MODELS = [
+  'claude-sonnet-4-20250514',
+  'claude-haiku-4-20250414',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku-20241022',
+  'claude-3-haiku-20240307',
+];
+
+// --- CORS Origins ---
+const ALLOWED_ORIGINS = [
+  /^http:\/\/localhost(:\d+)?$/,  // dev
+  /^https:\/\/.*\.vercel\.app$/,  // Vercel previews
+];
+
 module.exports = async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Cleanup old rate-limit entries (prevent memory leak in serverless)
+  if (rateLimits.size > 10000) {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimits) {
+      if (now > entry.resetAt) rateLimits.delete(ip);
+    }
+  }
+
+  // --- CORS headers (tightened) ---
+  const origin = req.headers.origin;
+  const corsOrigin = !origin ? '*' :  // No origin = native app
+    ALLOWED_ORIGINS.some(p => p.test(origin)) ? origin :
+    'https://vercel-deploy-mauve-six.vercel.app'; // default fallback
+
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key, anthropic-version, anthropic-beta');
 
@@ -14,6 +58,31 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
+  }
+
+  // --- Rate limit check ---
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({ error: 'Rate limit exceeded. Try again in a minute.' });
+  }
+
+  // --- Body validation ---
+  if (!req.body) {
+    return res.status(400).json({ error: 'Request body required' });
+  }
+
+  const bodyStr = JSON.stringify(req.body);
+  if (bodyStr.length > 200000) { // ~200KB limit
+    return res.status(413).json({ error: 'Request body too large' });
+  }
+
+  if (req.body.model && !ALLOWED_MODELS.includes(req.body.model)) {
+    return res.status(400).json({ error: 'Model not allowed' });
+  }
+
+  // Cap max_tokens
+  if (req.body.max_tokens && req.body.max_tokens > 4096) {
+    req.body.max_tokens = 4096;
   }
 
   try {
@@ -47,7 +116,7 @@ module.exports = async function handler(req, res) {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': corsOrigin,
         });
         proxyRes.pipe(res);
       });

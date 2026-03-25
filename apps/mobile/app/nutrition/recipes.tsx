@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   Switch,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -196,12 +198,32 @@ export default function RecipesScreen() {
 
   // ── Common Handlers ────────────────────────────────────────────────
 
-  const handleLogRecipe = (recipeId: string) => {
-    const hour = new Date().getHours();
-    const mealType: MealType = hour < 10 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+  const pickMealType = (): Promise<MealType | ''> => {
+    const options = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Cancel'];
+    return new Promise((resolve) => {
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          { options, cancelButtonIndex: 4, title: 'Log as...' },
+          (idx) => resolve(idx < 4 ? (options[idx].toLowerCase() as MealType) : ''),
+        );
+      } else {
+        Alert.alert('Log as...', undefined, [
+          ...options.slice(0, 4).map((opt) => ({
+            text: opt,
+            onPress: () => resolve(opt.toLowerCase() as MealType),
+          })),
+          { text: 'Cancel', style: 'cancel' as const, onPress: () => resolve('') },
+        ]);
+      }
+    });
+  };
+
+  const handleLogRecipe = async (recipeId: string) => {
+    const mealType = await pickMealType();
+    if (!mealType) return;
     logRecipe(recipeId, mealType);
     if (Platform.OS !== 'web') {
-      crossPlatformAlert('Logged', 'Recipe has been logged as a meal.');
+      crossPlatformAlert('Logged', `Recipe has been logged as ${mealType}.`);
     }
   };
 
