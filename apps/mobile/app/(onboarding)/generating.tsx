@@ -70,7 +70,7 @@ export default function GeneratingScreen() {
   const effectiveDays = getEffectiveTrainingDays();
   const goal = fitnessGoal ?? ONBOARDING_DEFAULTS.fitnessGoal;
   const experience = experienceLevel ?? ONBOARDING_DEFAULTS.experienceLevel;
-  const recommendation = getRecommendedProgram(goal, experience, effectiveDays.length);
+  const recommendation = getRecommendedProgram(goal, experience, effectiveDays.length, sessionDuration);
 
   // Look up display labels
   const goalLabel =
@@ -300,6 +300,22 @@ export default function GeneratingScreen() {
             score += Math.round(ratio * (isHomeOrNoEquip ? 40 : 15));
           }
 
+          // Duration match bonus — programs closer to user's preferred duration score higher
+          if (sessionDuration) {
+            const targetMinutes = { '30_min': 30, '45_min': 45, '60_min': 55, '75_plus_min': 75 }[sessionDuration] || 55;
+            // Estimate program duration from exercise count (no estimatedMinutes on seed programs)
+            const totalSets = p.days.reduce((sum, day) => sum + day.exercises.reduce((s, ex) => s + ex.targetSets, 0), 0);
+            const avgSetsPerDay = p.days.length > 0 ? totalSets / p.days.length : 0;
+            // Rough estimate: ~2.5 min per set (including rest)
+            const estimatedProgramMinutes = Math.round(avgSetsPerDay * 2.5);
+            if (estimatedProgramMinutes > 0) {
+              const diff = Math.abs(estimatedProgramMinutes - targetMinutes);
+              if (diff <= 10) score += 15;      // Close match
+              else if (diff <= 20) score += 5;   // Acceptable
+              else score -= 10;                   // Poor match
+            }
+          }
+
           return { program: p, score };
         });
 
@@ -393,6 +409,7 @@ export default function GeneratingScreen() {
     { label: 'Goal', value: goalLabel, screen: '/(onboarding)/goals' },
     { label: 'Experience', value: experienceLabel, screen: '/(onboarding)/goals' },
     { label: 'Schedule', value: scheduleLabel, screen: '/(onboarding)/schedule' },
+    { label: 'Session Length', value: durationLabel || '45 min', screen: '/(onboarding)/schedule' },
     { label: 'Training Style', value: recommendation.style },
     { label: 'Equipment', value: gymLabel, screen: '/(onboarding)/gym-type' },
   ];

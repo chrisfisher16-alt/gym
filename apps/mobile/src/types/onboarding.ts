@@ -406,17 +406,31 @@ export interface ProgramRecommendation {
   repRangeNote: string;
 }
 
+/** Map session duration preference to target minutes */
+const SESSION_DURATION_MINUTES: Record<SessionDuration, number> = {
+  '30_min': 30,
+  '45_min': 45,
+  '60_min': 55, // realistic for a "60 min" selection
+  '75_plus_min': 75,
+};
+
 /** Generate a program recommendation based on onboarding data */
 export function getRecommendedProgram(
   goal: FitnessGoal,
   experience: ExperienceLevel,
   daysPerWeek: number,
+  sessionDuration?: SessionDuration | null,
 ): ProgramRecommendation {
   const isAdvanced = experience === '2_to_4_years' || experience === '4_plus_years';
   const isBeginnerish = experience === 'beginner' || experience === 'less_than_1_year';
+  const targetMinutes = sessionDuration ? SESSION_DURATION_MINUTES[sessionDuration] : null;
+  const isShortSession = sessionDuration === '30_min';
+  const isLongSession = sessionDuration === '75_plus_min';
+
+  let rec: ProgramRecommendation;
 
   if (daysPerWeek <= 2) {
-    return {
+    rec = {
       name: 'Full Body Foundation',
       description: 'Hit every muscle group each session for maximum efficiency.',
       style: 'Full Body',
@@ -424,11 +438,9 @@ export function getRecommendedProgram(
       estimatedMinutes: 50,
       repRangeNote: goal === 'get_stronger' ? '3-6 reps, heavy compound lifts' : '8-12 reps, balanced volume',
     };
-  }
-
-  if (daysPerWeek === 3) {
+  } else if (daysPerWeek === 3) {
     if (goal === 'get_stronger') {
-      return {
+      rec = {
         name: isAdvanced ? 'Strength & Power 3-Day' : 'Starting Strength',
         description: isAdvanced
           ? 'Periodized strength program with compound focus.'
@@ -438,22 +450,23 @@ export function getRecommendedProgram(
         estimatedMinutes: isAdvanced ? 65 : 50,
         repRangeNote: '3-6 reps, compound-focused',
       };
+    } else {
+      rec = {
+        name: isBeginnerish ? 'Full Body Starter' : 'Push / Pull / Legs',
+        description: isBeginnerish
+          ? 'Three balanced sessions per week to build your foundation.'
+          : 'One push day, one pull day, one leg day — efficient and proven.',
+        style: isBeginnerish ? 'Full Body' : 'Push / Pull / Legs',
+        daysPerWeek: 3,
+        estimatedMinutes: 55,
+        repRangeNote: goal === 'lose_fat' ? '10-15 reps with shorter rest' : '8-12 reps for hypertrophy',
+      };
     }
-    return {
-      name: isBeginnerish ? 'Full Body Starter' : 'Push / Pull / Legs',
-      description: isBeginnerish
-        ? 'Three balanced sessions per week to build your foundation.'
-        : 'One push day, one pull day, one leg day — efficient and proven.',
-      style: isBeginnerish ? 'Full Body' : 'Push / Pull / Legs',
-      daysPerWeek: 3,
-      estimatedMinutes: 55,
-      repRangeNote: goal === 'lose_fat' ? '10-15 reps with shorter rest' : '8-12 reps for hypertrophy',
-    };
-  }
-
-  if (daysPerWeek === 4) {
+  } else if (daysPerWeek === 4) {
+    // Style bias: short sessions prefer Upper/Lower (fewer exercises per session)
+    // Long sessions open up PPL even at 4 days
     if (goal === 'get_stronger') {
-      return {
+      rec = {
         name: 'Upper / Lower Strength',
         description: 'Four-day split balancing heavy compounds and accessory work.',
         style: 'Upper / Lower',
@@ -461,39 +474,74 @@ export function getRecommendedProgram(
         estimatedMinutes: 60,
         repRangeNote: '3-6 reps on compounds, 8-12 on accessories',
       };
+    } else if (isLongSession && isAdvanced) {
+      // 75+ min sessions: PPL viable even at 4 days for advanced lifters
+      rec = {
+        name: 'Push / Pull / Legs + Arms',
+        description: 'High-volume 4-day split with a dedicated arm day for thorough sessions.',
+        style: 'Push / Pull / Legs',
+        daysPerWeek: 4,
+        estimatedMinutes: 75,
+        repRangeNote: '8-15 reps, high volume with thorough warm-up',
+      };
+    } else {
+      rec = {
+        name: isAdvanced ? 'Upper / Lower Hypertrophy' : 'Upper / Lower Split',
+        description: 'Two upper days, two lower days. Great balance of volume and recovery.',
+        style: 'Upper / Lower',
+        daysPerWeek: 4,
+        estimatedMinutes: 55,
+        repRangeNote: goal === 'lose_fat' ? '10-15 reps, circuit-style finishers' : '8-12 reps, progressive overload',
+      };
     }
-    return {
-      name: isAdvanced ? 'Upper / Lower Hypertrophy' : 'Upper / Lower Split',
-      description: 'Two upper days, two lower days. Great balance of volume and recovery.',
-      style: 'Upper / Lower',
-      daysPerWeek: 4,
+  } else if (daysPerWeek === 5) {
+    // Short sessions: prefer PPL + UL hybrid (spreads volume thinner per session)
+    if (isLongSession && isAdvanced) {
+      rec = {
+        name: '5-Day Hypertrophy Split',
+        description: 'High-volume bro split for experienced lifters with longer sessions.',
+        style: 'Bro Split',
+        daysPerWeek: 5,
+        estimatedMinutes: 75,
+        repRangeNote: goal === 'get_stronger' ? '4-8 reps, periodized intensity' : '8-15 reps, volume-focused',
+      };
+    } else {
+      rec = {
+        name: isAdvanced && !isShortSession ? '5-Day Hypertrophy Split' : 'Push / Pull / Legs + Upper / Lower',
+        description: isAdvanced && !isShortSession
+          ? 'High-volume split for experienced lifters.'
+          : 'Five days of focused training with dedicated muscle group sessions.',
+        style: isAdvanced && !isShortSession ? 'Bro Split' : 'PPL + UL Hybrid',
+        daysPerWeek: 5,
+        estimatedMinutes: 60,
+        repRangeNote: goal === 'get_stronger' ? '4-8 reps, periodized intensity' : '8-15 reps, volume-focused',
+      };
+    }
+  } else {
+    // 6 days
+    rec = {
+      name: 'Push / Pull / Legs x2',
+      description: 'Six-day PPL rotation — each muscle group trained twice per week.',
+      style: 'Push / Pull / Legs',
+      daysPerWeek: 6,
       estimatedMinutes: 55,
-      repRangeNote: goal === 'lose_fat' ? '10-15 reps, circuit-style finishers' : '8-12 reps, progressive overload',
+      repRangeNote: goal === 'get_stronger' ? 'Heavy/light periodization' : '8-12 reps with progressive overload',
     };
   }
 
-  if (daysPerWeek === 5) {
-    return {
-      name: isAdvanced ? '5-Day Hypertrophy Split' : 'Push / Pull / Legs + Upper / Lower',
-      description: isAdvanced
-        ? 'High-volume split for experienced lifters.'
-        : 'Five days of focused training with dedicated muscle group sessions.',
-      style: isAdvanced ? 'Bro Split' : 'PPL + UL Hybrid',
-      daysPerWeek: 5,
-      estimatedMinutes: 60,
-      repRangeNote: goal === 'get_stronger' ? '4-8 reps, periodized intensity' : '8-15 reps, volume-focused',
-    };
+  // Override estimatedMinutes to match the user's session duration preference
+  if (targetMinutes != null) {
+    rec.estimatedMinutes = targetMinutes;
   }
 
-  // 6 days
-  return {
-    name: 'Push / Pull / Legs x2',
-    description: 'Six-day PPL rotation — each muscle group trained twice per week.',
-    style: 'Push / Pull / Legs',
-    daysPerWeek: 6,
-    estimatedMinutes: 55,
-    repRangeNote: goal === 'get_stronger' ? 'Heavy/light periodization' : '8-12 reps with progressive overload',
-  };
+  // Update descriptions to reflect duration extremes
+  if (isShortSession) {
+    rec.description = rec.description.replace(/\.$/, '') + ' — efficient, compound-focused sessions with minimal rest.';
+  } else if (isLongSession) {
+    rec.description = rec.description.replace(/\.$/, '') + ' — high volume with thorough warm-up sets.';
+  }
+
+  return rec;
 }
 
 // ── Onboarding State Shape ──────────────────────────────────────────
