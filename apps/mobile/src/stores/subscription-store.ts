@@ -91,6 +91,34 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       }
     } catch {}
 
+    // Check Supabase entitlements table as source of truth
+    try {
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) {
+        const { data: entitlement } = await supabase
+          .from('entitlements')
+          .select('tier, is_trial, trial_ends_at')
+          .eq('user_id', userId)
+          .single();
+
+        if (entitlement && entitlement.tier !== 'free') {
+          const plan = mapPricingConfig(entitlement.tier as Exclude<EntitlementTier, 'free'>);
+          set({
+            tier: entitlement.tier as EntitlementTier,
+            isSubscribed: true,
+            isTrial: entitlement.is_trial ?? false,
+            trialEndsAt: entitlement.trial_ends_at ? new Date(entitlement.trial_ends_at) : null,
+            currentPlan: plan,
+            isLoading: false,
+            isInitialized: true,
+          });
+          return;
+        }
+      }
+    } catch {
+      // Supabase query failed, continue to other sources
+    }
+
     try {
       // In dev mode without RevenueCat, use dev mock
       if (isDevMode() && !isRevenueCatConfigured()) {
@@ -250,12 +278,15 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   applyPromoCode: async (code) => {
     try {
-      const { data, error } = await supabase.rpc('validate_promo_code', {
-        promo_code: code.trim().toUpperCase(),
+      const { data, error } = await supabase.functions.invoke('validate-promo', {
+        body: { code: code.trim().toUpperCase() },
       });
 
-      if (error || !data?.success) {
-        return { success: false, error: data?.error_message || 'Invalid promo code' };
+      if (error) {
+        return { success: false, error: 'Failed to validate promo code' };
+      }
+      if (!data?.success) {
+        return { success: false, error: data?.error ?? 'Invalid promo code' };
       }
 
       const plan = mapPricingConfig(data.tier as Exclude<EntitlementTier, 'free'>);
