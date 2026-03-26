@@ -38,7 +38,7 @@ function safeSetColorScheme(mode: ColorMode) {
   if (Platform.OS === 'web') return;
   try {
     if (mode === 'auto') {
-      Appearance.setColorScheme(undefined as any);
+      Appearance.setColorScheme(null);
     } else {
       Appearance.setColorScheme(mode);
     }

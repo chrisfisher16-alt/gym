@@ -40,6 +40,7 @@ interface FeedbackState {
   submitFeedback: (payload: FeedbackPayload) => Promise<{ success: boolean; queued?: boolean }>;
   shouldShowPrompt: () => boolean;
   recordPromptShown: () => void;
+  reset: () => void;
 }
 
 // ── Storage keys ───────────────────────────────────────────────────────
@@ -224,6 +225,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     set({ promptShownCount: newCount, lastPromptWorkoutCount: workoutCount });
     AsyncStorage.setItem(KEYS.PROMPT_SHOWN_COUNT, String(newCount));
     AsyncStorage.setItem(KEYS.LAST_PROMPT_WORKOUT, String(workoutCount));
+  },
+
+  reset: () => {
+    set({ isSubmitting: false, lastSubmittedAt: null, lastCategory: null, promptShownCount: 0, lastPromptWorkoutCount: 0 });
   },
 }));
 

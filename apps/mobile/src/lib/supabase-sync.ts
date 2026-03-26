@@ -40,6 +40,7 @@ export interface SyncQueueItem {
   createdAt: string;
   retryCount: number;
   maxRetries: number;
+  nextRetryAfter?: number;
 }
 
 export interface SyncStatus {
@@ -64,6 +65,8 @@ async function saveQueue(queue: SyncQueueItem[]): Promise<void> {
   await AsyncStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
 }
 
+const MAX_QUEUE_SIZE = 500;
+
 export async function enqueue(
   type: SyncItemType,
   table: string,
@@ -77,6 +80,10 @@ export async function enqueue(
   if (payloadId) {
     const duplicate = queue.find((q) => q.type === type && (q.payload.id as string) === payloadId);
     if (duplicate) return; // Already queued
+  }
+
+  if (queue.length >= MAX_QUEUE_SIZE) {
+    queue.shift(); // Drop oldest
   }
 
   queue.push({
@@ -97,10 +104,15 @@ export async function getSyncStatus(): Promise<SyncStatus> {
     const stored = await AsyncStorage.getItem(SYNC_STATUS_KEY);
     const status = stored ? JSON.parse(stored) : {};
     const queue = await getQueue();
+
+    // If isSyncing is persisted as true but the in-memory guard is false,
+    // the app was restarted (or crashed) mid-sync — force-reset the flag.
+    const isSyncing = status.isSyncing && _isProcessing;
+
     return {
       lastSyncAt: status.lastSyncAt ?? null,
       pendingCount: queue.length,
-      isSyncing: status.isSyncing ?? false,
+      isSyncing,
       lastError: status.lastError ?? null,
     };
   } catch {
@@ -172,10 +184,20 @@ export async function processQueue(): Promise<{ processed: number; failed: numbe
   let failed = 0;
 
   for (const item of queue) {
+    if (item.nextRetryAfter && item.nextRetryAfter > Date.now()) {
+      remaining.push(item); // Keep in queue but skip for now
+      continue;
+    }
+
     const success = await processItem(item);
     if (success) {
       processed++;
     } else {
+      const baseDelay = 1000; // 1 second
+      const maxDelay = 60000; // 60 seconds
+      const delay = Math.min(maxDelay, baseDelay * Math.pow(2, item.retryCount));
+      const jitter = Math.random() * delay * 0.3; // 30% jitter
+      item.nextRetryAfter = Date.now() + delay + jitter;
       item.retryCount++;
       if (item.retryCount < item.maxRetries) {
         remaining.push(item);
@@ -185,6 +207,9 @@ export async function processQueue(): Promise<{ processed: number; failed: numbe
         try {
           const dlRaw = await AsyncStorage.getItem(DEAD_LETTER_KEY);
           const deadLetter: SyncQueueItem[] = dlRaw ? JSON.parse(dlRaw) : [];
+          if (deadLetter.length >= 100) {
+            deadLetter.shift(); // Drop oldest to cap size
+          }
           deadLetter.push(item);
           await AsyncStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(deadLetter));
         } catch {}
@@ -227,6 +252,10 @@ export async function retryDeadLetterQueue(): Promise<{ processed: number; faile
   await AsyncStorage.removeItem(DEAD_LETTER_KEY);
 
   return processQueue();
+}
+
+export async function clearQueue(): Promise<void> {
+  await AsyncStorage.removeItem(SYNC_QUEUE_KEY);
 }
 
 // ─── Pull from Supabase ────────────────────────────────────────────────────────

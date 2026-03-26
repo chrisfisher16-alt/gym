@@ -16,11 +16,12 @@ import { enqueueWorkoutSession, mergeWorkoutHistory, isMergeInProgress } from '.
 let bridgeInitialized = false;
 
 /**
- * Counter-based guard to prevent health → measurement → health circular updates.
- * When > 0, the measurements→health subscription skips firing.
- * A counter (instead of a boolean) is race-safe under React 18 concurrent mode.
+ * Synchronous boolean guards to prevent health ↔ measurement circular updates.
+ * Each flag is set before the cross-store write and cleared in a finally block,
+ * so the paired subscription always sees the flag regardless of sync/async timing.
  */
-let healthSyncCounter = 0;
+let isHealthSyncing = false;
+let isMeasurementSyncing = false;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -59,6 +60,23 @@ function sumTotalWater(): number {
   return total;
 }
 
+// ── Batched XP ──────────────────────────────────────────────────────
+// Accumulates rapid XP awards and flushes them in a single store update.
+let pendingXP = 0;
+let xpFlushTimeout: NodeJS.Timeout | null = null;
+
+function batchAwardXP(amount: number, reason?: string) {
+  pendingXP += amount;
+  if (xpFlushTimeout) clearTimeout(xpFlushTimeout);
+  xpFlushTimeout = setTimeout(() => {
+    if (pendingXP > 0) {
+      useAchievementsStore.getState().awardXP(pendingXP, reason);
+      pendingXP = 0;
+    }
+    xpFlushTimeout = null;
+  }, 100); // 100ms debounce — batches rapid completions
+}
+
 // ── Bridge ──────────────────────────────────────────────────────────
 
 export function initializeStoreBridge(): () => void {
@@ -67,12 +85,18 @@ export function initializeStoreBridge(): () => void {
 
   const unsubscribers: (() => void)[] = [];
 
-  // ── 1. Workout completion → Achievement check + XP ─────────────
-  // When history length increases, check for new achievements and award XP.
+  // ── 1+2+8. Consolidated workout store subscription ─────────────
+  // Single subscription handles: workout completion (XP + achievements),
+  // set completion (XP), and sync enqueue.
   let lastHistoryLength = useWorkoutStore.getState().history.length;
+  let lastCompletedSets = countCompletedSets();
+  let lastHistoryIds = new Set(
+    useWorkoutStore.getState().history.map((s) => s.id),
+  );
 
   unsubscribers.push(
     useWorkoutStore.subscribe((state) => {
+      // ── Workout completion → Achievement check + XP
       const currentLength = state.history.length;
       if (currentLength > lastHistoryLength) {
         lastHistoryLength = currentLength;
@@ -86,35 +110,39 @@ export function initializeStoreBridge(): () => void {
           );
         }, 100);
       }
-    }),
-  );
 
-  // ── 2. Set completion → XP ─────────────────────────────────────
-  // When a set is completed in the active session, award 10 XP.
-  let lastCompletedSets = countCompletedSets();
-
-  unsubscribers.push(
-    useWorkoutStore.subscribe((state) => {
+      // ── Set completion → XP (batched)
       if (!state.activeSession) {
         lastCompletedSets = 0;
-        return;
-      }
-      const currentSets = countCompletedSets();
-      if (currentSets > lastCompletedSets) {
-        const newSets = currentSets - lastCompletedSets;
-        lastCompletedSets = currentSets;
-        setTimeout(() => {
-          for (let i = 0; i < newSets; i++) {
-            useAchievementsStore.getState().awardXP(10, 'set_complete');
-          }
-        }, 50);
       } else {
-        lastCompletedSets = currentSets;
+        const currentSets = countCompletedSets();
+        if (currentSets > lastCompletedSets) {
+          const newSets = currentSets - lastCompletedSets;
+          lastCompletedSets = currentSets;
+          batchAwardXP(newSets * 10, 'set_complete');
+        } else {
+          lastCompletedSets = currentSets;
+        }
+      }
+
+      // ── Sync: enqueue new workout completions
+      if (isMergeInProgress()) {
+        lastHistoryIds = new Set(state.history.map((s) => s.id));
+      } else {
+        const currentIds = new Set(state.history.map((s) => s.id));
+        for (const session of state.history) {
+          if (!lastHistoryIds.has(session.id)) {
+            enqueueWorkoutSession(session).then(() => {
+              processQueue().catch(() => {});
+            }).catch(() => {});
+          }
+        }
+        lastHistoryIds = currentIds;
       }
     }),
   );
 
-  // ── 3. Meal logged → XP ───────────────────────────────────────
+  // ── 3. Meal logged → XP (batched) ─────────────────────────────
   // When a new meal is added, award 15 XP.
   let lastMealCount = countTotalMeals();
 
@@ -124,11 +152,7 @@ export function initializeStoreBridge(): () => void {
       if (currentCount > lastMealCount) {
         const newMeals = currentCount - lastMealCount;
         lastMealCount = currentCount;
-        setTimeout(() => {
-          for (let i = 0; i < newMeals; i++) {
-            useAchievementsStore.getState().awardXP(15, 'meal_logged');
-          }
-        }, 50);
+        batchAwardXP(newMeals * 15, 'meal_logged');
       } else {
         lastMealCount = currentCount;
       }
@@ -144,9 +168,7 @@ export function initializeStoreBridge(): () => void {
       const currentTotal = sumTotalWater();
       if (currentTotal > lastWaterTotal) {
         lastWaterTotal = currentTotal;
-        setTimeout(() => {
-          useAchievementsStore.getState().awardXP(5, 'water_logged');
-        }, 50);
+        batchAwardXP(5, 'water_logged');
       } else {
         lastWaterTotal = currentTotal;
       }
@@ -163,21 +185,18 @@ export function initializeStoreBridge(): () => void {
       if (
         currentWeight != null &&
         currentWeight !== lastHealthWeight &&
-        healthSyncCounter === 0
+        !isHealthSyncing &&
+        !isMeasurementSyncing
       ) {
         lastHealthWeight = currentWeight;
-        healthSyncCounter++;
-        const mySync = healthSyncCounter;
-        try {
-          useMeasurementsStore
-            .getState()
-            .addWeightFromHealthSync(currentWeight, new Date().toISOString());
-        } finally {
-          // Allow the measurements subscription to see this as a health sync
-          setTimeout(() => {
-            if (healthSyncCounter === mySync) healthSyncCounter = 0;
-          }, 50);
-        }
+        isHealthSyncing = true;
+        useMeasurementsStore
+          .getState()
+          .addWeightFromHealthSync(currentWeight, new Date().toISOString())
+          .catch(err => console.warn('[StoreBridge] Measurement sync failed:', err))
+          .finally(() => {
+            isHealthSyncing = false;
+          });
       }
     }),
   );
@@ -189,7 +208,7 @@ export function initializeStoreBridge(): () => void {
   unsubscribers.push(
     useMeasurementsStore.subscribe((state) => {
       // Skip if this change came from a health sync (circular guard)
-      if (healthSyncCounter > 0) return;
+      if (isHealthSyncing || isMeasurementSyncing) return;
 
       const currentLength = state.measurements.length;
       if (currentLength <= lastMeasurementsLength) {
@@ -204,7 +223,12 @@ export function initializeStoreBridge(): () => void {
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
       if (latest?.weightKg != null) {
-        useHealthStore.getState().setRecentWeight(latest.weightKg);
+        isMeasurementSyncing = true;
+        try {
+          useHealthStore.getState().setRecentWeight(latest.weightKg);
+        } finally {
+          isMeasurementSyncing = false;
+        }
       }
     }),
   );
@@ -216,31 +240,7 @@ export function initializeStoreBridge(): () => void {
     );
   }, 5000);
 
-  // ── 8. Sync: enqueue new workout completions ───────────────────
-  // When a new session is added to history, enqueue it for Supabase sync.
-  let lastHistoryIds = new Set(
-    useWorkoutStore.getState().history.map((s) => s.id),
-  );
-
-  unsubscribers.push(
-    useWorkoutStore.subscribe((state) => {
-      // Skip if this change came from a remote merge (avoid re-enqueuing)
-      if (isMergeInProgress()) {
-        lastHistoryIds = new Set(state.history.map((s) => s.id));
-        return;
-      }
-      const currentIds = new Set(state.history.map((s) => s.id));
-      for (const session of state.history) {
-        if (!lastHistoryIds.has(session.id)) {
-          // New session detected — enqueue for sync (non-blocking)
-          enqueueWorkoutSession(session).then(() => {
-            processQueue().catch(() => {});
-          }).catch(() => {});
-        }
-      }
-      lastHistoryIds = currentIds;
-    }),
-  );
+  // ── 8. (Consolidated into subscription 1+2+8 above) ────────────
 
   // ── 9. Sync: auto-process queue on connectivity + merge remote ─
   startAutoSync();
@@ -256,10 +256,13 @@ export function initializeStoreBridge(): () => void {
   return () => {
     clearTimeout(smartNotifTimer);
     clearTimeout(mergeTimer);
+    if (xpFlushTimeout) clearTimeout(xpFlushTimeout);
     stopAutoSync();
     for (const unsub of unsubscribers) {
       unsub();
     }
+    pendingXP = 0;
+    xpFlushTimeout = null;
     bridgeInitialized = false;
   };
 }

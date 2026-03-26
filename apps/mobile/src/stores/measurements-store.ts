@@ -104,9 +104,12 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     );
     let measurements: BodyMeasurement[];
     if (existingIndex >= 0) {
-      // Update existing entry for the same date
+      // Update existing entry for the same date — filter out undefined to avoid overwriting existing values
       measurements = [...get().measurements];
-      measurements[existingIndex] = { ...measurements[existingIndex], ...measurement };
+      const definedValues = Object.fromEntries(
+        Object.entries(measurement).filter(([_, v]) => v !== undefined),
+      );
+      measurements[existingIndex] = { ...measurements[existingIndex], ...definedValues };
     } else {
       const newMeasurement: BodyMeasurement = {
         ...measurement,
@@ -175,8 +178,16 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     const photos = [...get().photos, newPhoto].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
-    set({ photos });
-    await AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.PHOTOS, JSON.stringify(photos));
+      set({ photos });
+    } catch (error) {
+      // Clean up copied file to prevent orphaning
+      if (permanentUri !== photo.uri) {
+        FileSystem.deleteAsync(permanentUri, { idempotent: true }).catch(() => {});
+      }
+      throw error;
+    }
   },
 
   deletePhoto: async (id) => {
@@ -191,8 +202,9 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
 
   reset: async () => {
     set({ measurements: [], photos: [], isInitialized: false });
-    await Promise.all(
-      Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
-    ).catch(() => {});
+    await Promise.all([
+      ...Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
+      FileSystem.deleteAsync(`${FileSystem.documentDirectory}progress-photos/`, { idempotent: true }).catch(() => {}),
+    ]).catch(() => {});
   },
 }));

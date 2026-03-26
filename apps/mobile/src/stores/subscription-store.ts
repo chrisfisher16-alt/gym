@@ -64,18 +64,30 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     try {
       const raw = await AsyncStorage.getItem('formiq_promo_grant');
       if (raw) {
-        const { tier } = JSON.parse(raw) as { tier: EntitlementTier; code: string };
-        const plan = mapPricingConfig(tier as Exclude<EntitlementTier, 'free'>);
-        set({
-          tier,
-          isSubscribed: true,
-          isTrial: false,
-          trialEndsAt: null,
-          currentPlan: plan,
-          isLoading: false,
-          isInitialized: true,
-        });
-        return;
+        const grant = JSON.parse(raw) as {
+          tier: EntitlementTier;
+          code: string;
+          grantedAt?: number;
+          expiresAt?: number;
+        };
+
+        // Check if the promo grant has expired
+        if (grant.expiresAt && Date.now() > grant.expiresAt) {
+          await AsyncStorage.removeItem('formiq_promo_grant');
+          // Fall through to normal initialization below
+        } else {
+          const plan = mapPricingConfig(grant.tier as Exclude<EntitlementTier, 'free'>);
+          set({
+            tier: grant.tier,
+            isSubscribed: true,
+            isTrial: false,
+            trialEndsAt: null,
+            currentPlan: plan,
+            isLoading: false,
+            isInitialized: true,
+          });
+          return;
+        }
       }
     } catch {}
 
@@ -256,10 +268,16 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
         currentPlan: plan,
       });
 
-      // Persist promo grant so it survives app restart
+      // Persist promo grant so it survives app restart (expires after 30 days)
+      const PROMO_GRANT_DAYS = 30;
       AsyncStorage.setItem(
         'formiq_promo_grant',
-        JSON.stringify({ tier: data.tier, code: code.trim().toUpperCase() }),
+        JSON.stringify({
+          tier: data.tier,
+          code: code.trim().toUpperCase(),
+          grantedAt: Date.now(),
+          expiresAt: Date.now() + PROMO_GRANT_DAYS * 24 * 60 * 60 * 1000,
+        }),
       ).catch(() => {});
 
       return { success: true };

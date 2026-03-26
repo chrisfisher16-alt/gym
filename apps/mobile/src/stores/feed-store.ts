@@ -239,9 +239,24 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     if (!isSupabaseConfigured) return;
 
     try {
-      const { error } = await supabase.from('social_feed').delete().eq('id', feedItemId);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('Feed delete error: not authenticated');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('social_feed')
+        .delete()
+        .eq('id', feedItemId)
+        .eq('user_id', user.id)
+        .select();
       if (error) {
         console.error('Feed delete error:', error);
+        return;
+      }
+      if (!data || data.length === 0) {
+        console.error('Feed delete error: post not found or not owned by user');
         return;
       }
       set({ items: get().items.filter((i) => i.id !== feedItemId) });

@@ -64,8 +64,8 @@ function gatherAchievementData(): AchievementData {
 
   const history = workoutState.history;
   const totalWorkouts = history.length;
-  const totalPRs = history.reduce((sum, s) => sum + s.prCount, 0);
-  const totalVolumeKg = history.reduce((sum, s) => sum + s.totalVolume, 0);
+  const totalPRs = history.reduce((sum, s) => sum + (s.prCount ?? 0), 0);
+  const totalVolumeKg = history.reduce((sum, s) => sum + (s.totalVolume ?? 0), 0);
   const totalVolumeLbs = totalVolumeKg * 2.20462;
   const currentStreak = calculateStreak(history);
 
@@ -112,7 +112,9 @@ function gatherAchievementData(): AchievementData {
   if (activeProgram) {
     const now = new Date();
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+    const dayOfWeek = now.getDay();
+    const dayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    weekStart.setDate(now.getDate() - dayOffset); // Monday
     weekStart.setHours(0, 0, 0, 0);
 
     const thisWeekWorkouts = history.filter(
@@ -206,8 +208,8 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
         if (achievement.condition(data)) {
           newlyEarned.push(achievement.id);
         }
-      } catch {
-        // Skip failed condition checks
+      } catch (err) {
+        console.warn('[Achievements] Condition check failed for', achievement.id, err);
       }
     }
 
@@ -219,7 +221,7 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
       }));
 
       const earned = [...state.earned, ...newEarnedEntries];
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(earned));
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(earned)).catch((err) => console.error('Achievement persist failed:', err));
       set({ earned, newlyEarned });
     }
 
