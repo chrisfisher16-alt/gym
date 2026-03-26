@@ -128,9 +128,38 @@ export default function ActiveWorkoutScreen() {
   const unit = unitPref === 'metric' ? 'kg' : 'lbs';
   const exerciseLibrary = useWorkoutStore((s) => s.exercises);
   const uncompleteSet = useWorkoutStore((s) => s.uncompleteSet);
+  const updateExerciseRestTime = useWorkoutStore((s) => s.updateExerciseRestTime);
   const workoutPhase = useWorkoutPhase();
   const reducedMotion = useReducedMotion();
   const isDrilledIn = drilledExerciseIndex !== null;
+
+  const handleRestSave = useCallback((inputValue: string) => {
+    const val = parseInt(inputValue, 10);
+    if (isNaN(val) || val <= 0) {
+      setEditingRest(false);
+      return;
+    }
+    setEditingRest(false);
+    setDefaultRestSeconds(val);
+
+    // Ask user if they want to apply to all exercises
+    crossPlatformAlert(
+      'Apply to All Exercises?',
+      `Set rest time to ${val}s for all exercises in this workout?`,
+      [
+        { text: 'Just Default', style: 'cancel' },
+        {
+          text: 'Apply to All',
+          onPress: () => {
+            if (!activeSession) return;
+            for (const ex of activeSession.exercises) {
+              updateExerciseRestTime(ex.id, val);
+            }
+          },
+        },
+      ],
+    );
+  }, [activeSession, setDefaultRestSeconds, updateExerciseRestTime]);
 
   // ── Undo System ─────────────────────────────────────────────────
   const { pushUndo, popUndo, canUndo, clearStack: clearUndoStack } = useWorkoutUndo();
@@ -716,16 +745,8 @@ export default function ActiveWorkoutScreen() {
                 keyboardType="number-pad"
                 autoFocus
                 selectTextOnFocus
-                onSubmitEditing={() => {
-                  const val = parseInt(restInput, 10);
-                  if (!isNaN(val) && val > 0) setDefaultRestSeconds(val);
-                  setEditingRest(false);
-                }}
-                onBlur={() => {
-                  const val = parseInt(restInput, 10);
-                  if (!isNaN(val) && val > 0) setDefaultRestSeconds(val);
-                  setEditingRest(false);
-                }}
+                onSubmitEditing={() => handleRestSave(restInput)}
+                onBlur={() => handleRestSave(restInput)}
               />
               <Text style={[typography.caption, { color: colors.textTertiary, marginLeft: 2 }]}>s</Text>
             </View>

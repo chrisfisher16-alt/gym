@@ -2,7 +2,7 @@ import type { MuscleGroup, Equipment } from '../types/workout';
 
 // ── Types ───────────────────────────────────────────────────────────
 
-export type MovementType = 'push' | 'pull' | 'squat' | 'hinge' | 'carry' | 'rotation' | 'isometric';
+export type MovementType = 'push' | 'pull' | 'squat' | 'hinge' | 'carry' | 'rotation' | 'isometric' | 'cardio';
 
 export interface ExerciseIllustration {
   muscleGroups: string[]; // primary muscles highlighted
@@ -137,12 +137,29 @@ export const EXERCISE_ILLUSTRATIONS: Record<string, ExerciseIllustration> = {
   ex_ab_wheel: { muscleGroups: ['Abdominals', 'Core'], equipmentIcon: 'body-outline', movementType: 'push', emoji: '🛞' },
 
   // CARDIO / FULL BODY
-  ex_treadmill_run: { muscleGroups: ['Full Body'], equipmentIcon: 'cog-outline', movementType: 'carry', emoji: '🏃' },
-  ex_rowing_machine: { muscleGroups: ['Full Body'], equipmentIcon: 'cog-outline', movementType: 'pull', emoji: '🚣' },
+  ex_treadmill_run: { muscleGroups: ['Full Body'], equipmentIcon: 'walk-outline', movementType: 'cardio', emoji: '🏃' },
+  ex_rowing_machine: { muscleGroups: ['Full Body'], equipmentIcon: 'cog-outline', movementType: 'cardio', emoji: '🚣' },
   ex_clean_and_press: { muscleGroups: ['Full Body'], equipmentIcon: 'barbell-outline', movementType: 'push', emoji: '🏋️' },
   ex_kettlebell_swing: { muscleGroups: ['Glutes', 'Hamstrings', 'Core'], equipmentIcon: 'bowling-ball-outline', movementType: 'hinge', emoji: '🔔' },
   ex_burpee: { muscleGroups: ['Full Body'], equipmentIcon: 'body-outline', movementType: 'push', emoji: '🤸' },
   ex_thruster: { muscleGroups: ['Quadriceps', 'Anterior Deltoid'], equipmentIcon: 'barbell-outline', movementType: 'push', emoji: '🚀' },
+
+  // CARDIO
+  ex_treadmill_walk: { muscleGroups: ['Lower Body'], equipmentIcon: 'walk-outline', movementType: 'cardio', emoji: '🚶' },
+  ex_walking_treadmill: { muscleGroups: ['Lower Body'], equipmentIcon: 'walk-outline', movementType: 'cardio', emoji: '🚶' },
+  ex_running_treadmill: { muscleGroups: ['Full Body'], equipmentIcon: 'walk-outline', movementType: 'cardio', emoji: '🏃' },
+  ex_elliptical: { muscleGroups: ['Full Body'], equipmentIcon: 'cog-outline', movementType: 'cardio', emoji: '🏃' },
+  ex_stationary_bike: { muscleGroups: ['Lower Body'], equipmentIcon: 'bicycle-outline', movementType: 'cardio', emoji: '🚴' },
+  ex_stairmaster: { muscleGroups: ['Lower Body'], equipmentIcon: 'cog-outline', movementType: 'cardio', emoji: '🪜' },
+  ex_jump_rope: { muscleGroups: ['Full Body'], equipmentIcon: 'body-outline', movementType: 'cardio', emoji: '🪢' },
+  ex_battle_ropes: { muscleGroups: ['Shoulders', 'Arms', 'Core'], equipmentIcon: 'body-outline', movementType: 'cardio', emoji: '🪢' },
+  ex_bicycling: { muscleGroups: ['Lower Body'], equipmentIcon: 'bicycle-outline', movementType: 'cardio', emoji: '🚴' },
+  ex_bicycling_stationary: { muscleGroups: ['Lower Body'], equipmentIcon: 'bicycle-outline', movementType: 'cardio', emoji: '🚴' },
+  ex_swimming: { muscleGroups: ['Full Body'], equipmentIcon: 'water-outline', movementType: 'cardio', emoji: '🏊' },
+  ex_step_mill: { muscleGroups: ['Lower Body'], equipmentIcon: 'cog-outline', movementType: 'cardio', emoji: '🪜' },
+  ex_bike_ride: { muscleGroups: ['Lower Body'], equipmentIcon: 'bicycle-outline', movementType: 'cardio', emoji: '🚴' },
+  ex_trail_running_walking: { muscleGroups: ['Full Body'], equipmentIcon: 'walk-outline', movementType: 'cardio', emoji: '🏃' },
+  ex_skating: { muscleGroups: ['Lower Body'], equipmentIcon: 'body-outline', movementType: 'cardio', emoji: '⛸️' },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -171,7 +188,7 @@ export function getExerciseIllustration(
 
 function guessMovementType(category?: MuscleGroup, equipment?: Equipment): MovementType {
   if (category === 'core') return 'isometric';
-  if (category === 'cardio') return 'carry';
+  if (category === 'cardio') return 'cardio';
   if (category === 'back') return 'pull';
   if (category === 'chest' || category === 'shoulders') return 'push';
   if (category === 'legs') return 'squat';

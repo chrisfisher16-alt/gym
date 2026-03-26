@@ -7,6 +7,7 @@ import type { CompletedSession, CompletedSet } from '../types/workout';
 export interface GhostSetData {
   weight: number | null; // last session's weight for this set (null for bodyweight)
   reps: number | null; // last session's reps for this set
+  durationSeconds: number | null; // last session's duration for time-based exercises
   date: string; // ISO string of when the ghost data is from
 }
 
@@ -28,7 +29,7 @@ function extractGhostFromSession(
 
   const workingSets = exerciseEntry.sets.filter(
     (s: CompletedSet) =>
-      s.setType === 'working' && (s.weight != null || s.reps != null),
+      s.setType === 'working' && (s.weight != null || s.reps != null || s.durationSeconds != null),
   );
   if (workingSets.length === 0) return null;
 
@@ -44,6 +45,7 @@ function extractGhostFromSession(
   return {
     weight: matched.weight ?? null,
     reps: matched.reps ?? null,
+    durationSeconds: matched.durationSeconds ?? null,
     date: session.completedAt,
   };
 }

@@ -200,13 +200,23 @@ export function DrillDownView({
   const [localWeight, setLocalWeight] = useState('');
   const [localReps, setLocalReps] = useState('');
 
+  const isTimeBased = exercise.isTimeBased ?? false;
+
+  // For time-based exercises, use logTimedSet from store directly
+  const logTimedSet = useWorkoutStore((s) => s.logTimedSet);
+
   // Sync local inputs when the current set changes
   useEffect(() => {
     if (currentSet) {
-      setLocalWeight(currentSet.weight !== undefined ? currentSet.weight.toString() : '');
-      setLocalReps(currentSet.reps !== undefined ? currentSet.reps.toString() : '');
+      if (isTimeBased) {
+        setLocalReps(currentSet.durationSeconds ? Math.round(currentSet.durationSeconds / 60).toString() : '');
+        setLocalWeight('');
+      } else {
+        setLocalWeight(currentSet.weight !== undefined ? currentSet.weight.toString() : '');
+        setLocalReps(currentSet.reps !== undefined ? currentSet.reps.toString() : '');
+      }
     }
-  }, [currentSet?.id, currentSet?.weight, currentSet?.reps]);
+  }, [currentSet?.id, currentSet?.weight, currentSet?.reps, currentSet?.durationSeconds, isTimeBased]);
 
   // ── Ghost set (previous performance overlay) ──────────────────────
   const ghost = useGhostSet(exercise.exerciseId, currentSetIndex);
@@ -215,6 +225,16 @@ export function DrillDownView({
   // Determine ghost comparison state: 'below' | 'matching' | 'exceeding' | 'none'
   const ghostState = useMemo(() => {
     if (!ghost) return 'none' as const;
+    if (isTimeBased) {
+      // For time-based exercises, compare duration
+      const d = parseInt(localReps, 10) || 0; // localReps stores minutes for time-based
+      const ghostD = ghost.durationSeconds ? Math.round(ghost.durationSeconds / 60) : 0;
+      if (ghostD === 0) return 'none' as const;
+      if (d === 0) return 'below' as const;
+      if (d > ghostD) return 'exceeding' as const;
+      if (d === ghostD) return 'matching' as const;
+      return 'below' as const;
+    }
     const w = parseFloat(localWeight) || 0;
     const ghostW = ghost.weight ?? 0;
     // For bodyweight exercises, compare reps instead
@@ -231,7 +251,7 @@ export function DrillDownView({
     if (w > ghostW) return 'exceeding' as const;
     if (w === ghostW) return 'matching' as const;
     return 'below' as const;
-  }, [ghost, localWeight, localReps, isBodyweight]);
+  }, [ghost, localWeight, localReps, isBodyweight, isTimeBased]);
 
   // Animated values for ghost opacity and gold glow
   const ghostOpacity = useSharedValue(ghost ? 0.2 : 0);
@@ -388,10 +408,6 @@ export function DrillDownView({
     isLoggingRef.current = true;
     if (!currentSet) { isLoggingRef.current = false; return; }
 
-    const w = parseFloat(localWeight);
-    const r = parseInt(localReps, 10);
-    if (isNaN(w) || isNaN(r)) return;
-
     // Button scale animation
     Animated.sequence([
       Animated.timing(logBtnScale, { toValue: 0.92, duration: 80, useNativeDriver: true }),
@@ -402,18 +418,32 @@ export function DrillDownView({
     flashAnim.setValue(1);
     Animated.timing(flashAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start();
 
-    // 1. Log weight/reps then complete the set
-    onLogSet(exercise.id, currentSet.id, w, r);
-    onCompleteSet(exercise.id, currentSet.id);
-    onCascadeWeight?.(exercise.id, currentSetIndex, w, r);
-    mediumImpact();
-
-    // 2. Auto-fill: if the next incomplete set has empty weight/reps, pre-populate it
     const nextIncomplete = exercise.sets.find(
       (s) => !s.isCompleted && s.id !== currentSet.id,
     );
-    if (nextIncomplete && nextIncomplete.weight === undefined && nextIncomplete.reps === undefined) {
-      onLogSet(exercise.id, nextIncomplete.id, w, r, true);
+
+    if (isTimeBased) {
+      // Time-based exercise: convert minutes → seconds and use logTimedSet
+      const minutes = parseInt(localReps, 10);
+      if (isNaN(minutes)) { isLoggingRef.current = false; return; }
+      const durationSeconds = minutes * 60;
+      logTimedSet(exercise.id, currentSet.id, durationSeconds);
+      mediumImpact();
+    } else {
+      const w = parseFloat(localWeight);
+      const r = parseInt(localReps, 10);
+      if (isNaN(w) || isNaN(r)) { isLoggingRef.current = false; return; }
+
+      // 1. Log weight/reps then complete the set
+      onLogSet(exercise.id, currentSet.id, w, r);
+      onCompleteSet(exercise.id, currentSet.id);
+      onCascadeWeight?.(exercise.id, currentSetIndex, w, r);
+      mediumImpact();
+
+      // 2. Auto-fill: if the next incomplete set has empty weight/reps, pre-populate it
+      if (nextIncomplete && nextIncomplete.weight === undefined && nextIncomplete.reps === undefined) {
+        onLogSet(exercise.id, nextIncomplete.id, w, r, true);
+      }
     }
 
     // 3. Determine what happens after logging
@@ -463,6 +493,8 @@ export function DrillDownView({
     isLastExercise,
     onCascadeWeight,
     currentSetIndex,
+    isTimeBased,
+    logTimedSet,
   ]);
 
   // ── CTA button logic ───────────────────────────────────────────────
@@ -767,11 +799,13 @@ export function DrillDownView({
             {/* Column headers */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingLeft: 36 }}>
               <Text style={[typography.caption, { color: colors.textTertiary, flex: 1, textAlign: 'center' }]}>
-                Reps
+                {isTimeBased ? 'Duration' : 'Reps'}
               </Text>
-              <Text style={[typography.caption, { color: colors.textTertiary, flex: 1, textAlign: 'center' }]}>
-                {isBodyweight ? 'Added Weight' : `Weight (${unit})`}
-              </Text>
+              {!isTimeBased && (
+                <Text style={[typography.caption, { color: colors.textTertiary, flex: 1, textAlign: 'center' }]}>
+                  {isBodyweight ? 'Added Weight' : `Weight (${unit})`}
+                </Text>
+              )}
             </View>
 
             {/* Set rows */}
@@ -813,8 +847,8 @@ export function DrillDownView({
                     </Text>
                   </View>
 
-                  {/* Reps input */}
-                  <View style={{ flex: 1, marginRight: 8 }}>
+                  {/* Reps / Duration input */}
+                  <View style={{ flex: 1, marginRight: isTimeBased ? 0 : 8 }}>
                     <TextInput
                       style={{
                         borderWidth: 1,
@@ -829,46 +863,49 @@ export function DrillDownView({
                         textAlign: 'center',
                         fontVariant: ['tabular-nums'] as any,
                       }}
-                      value={isCurrent ? localReps : (s.reps?.toString() ?? '')}
+                      value={isTimeBased
+                        ? (isCurrent ? localReps : (s.durationSeconds ? `${Math.round(s.durationSeconds / 60)}` : ''))
+                        : (isCurrent ? localReps : (s.reps?.toString() ?? ''))}
                       onChangeText={isCurrent ? setLocalReps : undefined}
                       onFocus={() => { handleDotPress(i); handleInputFocus('reps'); }}
                       onBlur={handleInputBlur}
                       keyboardType="number-pad"
-                      placeholder="0"
+                      placeholder={isTimeBased ? 'min' : '0'}
                       placeholderTextColor={colors.textTertiary}
                       selectTextOnFocus
                       editable={isCurrent && !isCompleted}
                     />
                   </View>
 
-                  {/* Weight input */}
-                  <View style={{ flex: 1 }}>
-                    <TextInput
-                      style={{
-                        borderWidth: 1,
-                        borderColor: isCurrent ? (ghostState === 'exceeding' ? GOLD_DARK : colors.border) : colors.borderLight ?? colors.border,
-                        borderRadius: radius.md,
-                        paddingVertical: 8,
-                        paddingHorizontal: 12,
-                        fontSize: 18,
-                        fontWeight: '600',
-                        color: isCurrent && ghostState === 'exceeding' ? GOLD_DARK : colors.text,
-                        backgroundColor: isCurrent ? colors.surface : 'transparent',
-                        textAlign: 'center',
-                        fontVariant: ['tabular-nums'] as any,
-                      }}
-                      value={isCurrent ? localWeight : (s.weight?.toString() ?? '')}
-                      onChangeText={isCurrent ? setLocalWeight : undefined}
-                      onFocus={() => { handleDotPress(i); handleInputFocus('weight'); }}
-                      onBlur={handleInputBlur}
-                      keyboardType="decimal-pad"
-                      placeholder="0"
-                      placeholderTextColor={colors.textTertiary}
-                      selectTextOnFocus
-                      editable={isCurrent && !isCompleted}
-                    />
-
-                  </View>
+                  {/* Weight input (hidden for time-based exercises) */}
+                  {!isTimeBased && (
+                    <View style={{ flex: 1 }}>
+                      <TextInput
+                        style={{
+                          borderWidth: 1,
+                          borderColor: isCurrent ? (ghostState === 'exceeding' ? GOLD_DARK : colors.border) : colors.borderLight ?? colors.border,
+                          borderRadius: radius.md,
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          fontSize: 18,
+                          fontWeight: '600',
+                          color: isCurrent && ghostState === 'exceeding' ? GOLD_DARK : colors.text,
+                          backgroundColor: isCurrent ? colors.surface : 'transparent',
+                          textAlign: 'center',
+                          fontVariant: ['tabular-nums'] as any,
+                        }}
+                        value={isCurrent ? localWeight : (s.weight?.toString() ?? '')}
+                        onChangeText={isCurrent ? setLocalWeight : undefined}
+                        onFocus={() => { handleDotPress(i); handleInputFocus('weight'); }}
+                        onBlur={handleInputBlur}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={colors.textTertiary}
+                        selectTextOnFocus
+                        editable={isCurrent && !isCompleted}
+                      />
+                    </View>
+                  )}
 
                   {/* PR badge */}
                   {isCompleted && s.isPR && (
@@ -883,9 +920,11 @@ export function DrillDownView({
               <Reanimated.View pointerEvents="none" style={[styles.ghostRow, ghostTextStyle, { marginTop: 4 }]}>
                 <Text style={[styles.ghostLabel, { color: colors.textTertiary }]}>Last time</Text>
                 <Text style={[styles.ghostNumbers, { color: colors.textTertiary }]}>
-                  {ghost.weight != null && ghost.weight > 0
-                    ? `${ghost.weight} ${unit} × ${ghost.reps ?? '?'}`
-                    : `${ghost.reps ?? '?'} reps`}
+                  {isTimeBased
+                    ? `${ghost.durationSeconds ? Math.round(ghost.durationSeconds / 60) : '?'} min`
+                    : ghost.weight != null && ghost.weight > 0
+                      ? `${ghost.weight} ${unit} × ${ghost.reps ?? '?'}`
+                      : `${ghost.reps ?? '?'} reps`}
                 </Text>
                 {ghostState === 'matching' && (
                   <Text style={[styles.ghostIndicator, { color: colors.textTertiary }]}>=</Text>
@@ -925,7 +964,9 @@ export function DrillDownView({
                     ]}
                   >
                     <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
-                      Set {s.setNumber}: {s.weight ?? 0} × {s.reps ?? 0}
+                      Set {s.setNumber}: {isTimeBased
+                        ? `${s.durationSeconds ? Math.round(s.durationSeconds / 60) : 0} min`
+                        : `${s.weight ?? 0} × ${s.reps ?? 0}`}
                       {s.isPR ? ' 🏆' : ''}
                     </Text>
                   </View>
@@ -937,8 +978,8 @@ export function DrillDownView({
 
       {/* ── Bottom Section (fixed) ────────────────────────────────── */}
       <View style={[styles.bottomSection, { backgroundColor: colors.surface, borderTopColor: colors.borderLight, paddingHorizontal: spacing.base, paddingTop: spacing.sm, paddingBottom: spacing.lg }]}>
-        {/* Contextual input toolbar */}
-        {focusedInput && (
+        {/* Contextual input toolbar (hidden for time-based weight input) */}
+        {focusedInput && !(isTimeBased && focusedInput === 'weight') && (
           <WorkoutInputToolbar
             inputType={focusedInput}
             currentValue={
@@ -946,8 +987,8 @@ export function DrillDownView({
                 ? parseFloat(localWeight) || 0
                 : parseInt(localReps, 10) || 0
             }
-            lastSessionValue={ghost?.weight}
-            unitLabel={unit}
+            lastSessionValue={isTimeBased ? undefined : ghost?.weight}
+            unitLabel={isTimeBased && focusedInput === 'reps' ? 'min' : unit}
             onSetValue={(val) => {
               if (focusedInput === 'weight') {
                 setLocalWeight(val.toString());
@@ -957,9 +998,11 @@ export function DrillDownView({
                 }
               } else {
                 setLocalReps(val.toString());
-                const w = parseFloat(localWeight);
-                if (!isNaN(w) && currentSet) {
-                  onLogSet(exercise.id, currentSet.id, w, val);
+                if (!isTimeBased) {
+                  const w = parseFloat(localWeight);
+                  if (!isNaN(w) && currentSet) {
+                    onLogSet(exercise.id, currentSet.id, w, val);
+                  }
                 }
               }
             }}
