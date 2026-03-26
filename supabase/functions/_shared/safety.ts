@@ -27,7 +27,7 @@ const MEDICAL_DIAGNOSIS_PATTERNS = [
 const DANGEROUS_CALORIE_PATTERNS = [
   /eat (?:only |just )?([\d,]+)\s*(?:cal|kcal|calories)/i,
   /(?:restrict|limit) (?:yourself )?to ([\d,]+)\s*(?:cal|kcal|calories)/i,
-  /(\d{2,3})\s*(?:cal|kcal|calories)\s*(?:per |a )?day/i,
+  /(\d{2,4})\s*(?:cal|kcal|calories)\s*(?:per |a )?day/i,
 ];
 
 const EATING_DISORDER_PATTERNS = [
@@ -101,7 +101,7 @@ export function validateOutput(content: string, userGender?: string): SafetyChec
     const match = content.match(pattern);
     if (match) {
       const calories = parseInt(match[1].replace(',', ''), 10);
-      const minCalories = userGender === 'female' ? 1200 : 1500;
+      const minCalories = userGender === 'male' ? 1500 : 1200;
       if (calories > 0 && calories < minCalories) {
         return {
           safe: false,

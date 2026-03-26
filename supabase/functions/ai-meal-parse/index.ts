@@ -6,6 +6,24 @@ import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
 import type { MealParseRequest, MealParseResponse, ParsedMealItem } from '../_shared/types.ts';
 
+// ── Rate Limiting (in-memory) ───────────────────────────────────────
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+function checkMealParseRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
 // ── Common Food Database (primary lookup) ────────────────────────────
 
 const FOOD_DB: Record<string, Omit<ParsedMealItem, 'is_estimate' | 'confidence'>> = {
@@ -52,6 +70,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { user_id, supabase } = await verifyAuth(req);
+
+    // Rate limit
+    if (!checkMealParseRateLimit(user_id)) {
+      return errorResponse('Rate limit exceeded. Please try again later.', 429);
+    }
+
     const body: MealParseRequest = await req.json();
     const { text } = body;
 

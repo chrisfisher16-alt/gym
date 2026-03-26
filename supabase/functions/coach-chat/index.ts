@@ -3,6 +3,7 @@
 
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.2';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
 import {
   loadUserContext,
@@ -216,10 +217,14 @@ Deno.serve(async (req: Request) => {
   if (corsResp) return corsResp;
 
   const startTime = Date.now();
+  let userMessageId: string | undefined;
+  let supabase: SupabaseClient | null = null;
 
   try {
     // Auth
-    const { user_id, supabase } = await verifyAuth(req);
+    const auth = await verifyAuth(req);
+    const { user_id } = auth;
+    supabase = auth.supabase;
 
     // Parse request
     const body: ChatRequest = await req.json();
@@ -276,6 +281,18 @@ Deno.serve(async (req: Request) => {
 
     // Get or create conversation
     let convId = conversation_id;
+    if (convId) {
+      // Verify the conversation belongs to the authenticated user
+      const { data: conv } = await supabase
+        .from('coach_conversations')
+        .select('id')
+        .eq('id', convId)
+        .eq('user_id', user_id)
+        .single();
+      if (!conv) {
+        return errorResponse('Conversation not found', 404);
+      }
+    }
     if (!convId) {
       const { data: newConv } = await supabase
         .from('coach_conversations')
@@ -305,6 +322,7 @@ Deno.serve(async (req: Request) => {
       })
       .select('id')
       .single();
+    userMessageId = userMsg?.id;
 
     // Build messages array (no system message — system content goes via cacheOptions)
     const previousMessages = await loadConversationMessages(supabase, convId);
@@ -354,7 +372,7 @@ Deno.serve(async (req: Request) => {
               },
               body: JSON.stringify({
                 tool_name: toolCall.function.name,
-                params: JSON.parse(toolCall.function.arguments),
+                params: (() => { try { return JSON.parse(toolCall.function.arguments); } catch { return {}; } })(),
                 user_id,
               }),
             },
@@ -496,7 +514,10 @@ Deno.serve(async (req: Request) => {
 
     console.error('Coach chat error:', error);
 
-    // Error telemetry skipped — user_id not available in error scope
+    // Clean up orphaned user message if AI call failed
+    if (userMessageId && supabase) {
+      await supabase.from('coach_messages').delete().eq('id', userMessageId).catch(() => {});
+    }
 
     return errorResponse('Coach is temporarily unavailable. Please try again.', 500);
   }

@@ -3,6 +3,7 @@
 // equipment availability, and training history with progressive overload.
 
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
+import { verifyAuth } from '../_shared/auth.ts';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -1036,10 +1037,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Rate limiting by IP or auth token
-    const rateLimitKey = req.headers.get('Authorization')?.replace('Bearer ', '').slice(0, 16)
-      ?? req.headers.get('x-forwarded-for')
-      ?? 'anonymous';
+    const { user_id } = await verifyAuth(req);
+
+    // Rate limit by authenticated user
+    const rateLimitKey = user_id;
 
     if (!checkRateLimit(rateLimitKey)) {
       return errorResponse('Rate limit exceeded. Maximum 10 generations per hour.', 429);

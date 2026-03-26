@@ -136,7 +136,7 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`AI API error (${response.status}): ${errorText}`);
+      throw new Error(`AI API error (${response.status}): ${errorText.slice(0, 200)}`);
     }
 
     const data = await response.json();
@@ -212,7 +212,7 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
+      throw new Error(`Anthropic API error (${response.status}): ${errorText.slice(0, 200)}`);
     }
 
     const data = await response.json();

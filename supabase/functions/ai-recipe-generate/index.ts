@@ -243,7 +243,12 @@ Deno.serve(async (req: Request) => {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
     }
 
-    const data = JSON.parse(cleaned);
+    let data;
+    try {
+      data = JSON.parse(cleaned);
+    } catch {
+      return errorResponse('Failed to parse AI recipe response. Please try again.', 502);
+    }
 
     if (!data.name || !data.ingredients || !Array.isArray(data.ingredients) || data.ingredients.length === 0) {
       throw new Error('AI response missing required recipe fields');

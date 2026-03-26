@@ -23,7 +23,7 @@ const USER_TABLES = [
   { table: 'workout_programs', column: 'user_id' },
 
   // Nutrition
-  { table: 'meal_items', column: 'user_id' },
+  // meal_items: omitted — cascades via ON DELETE CASCADE from meal_logs
   { table: 'meal_logs', column: 'user_id' },
   { table: 'saved_meals', column: 'user_id' },
   { table: 'nutrition_day_logs', column: 'user_id' },
@@ -33,7 +33,7 @@ const USER_TABLES = [
   { table: 'user_supplements', column: 'user_id' },
 
   // Coach / AI
-  { table: 'coach_messages', column: 'user_id' },
+  // coach_messages: omitted — cascades via ON DELETE CASCADE from coach_conversations
   { table: 'coach_conversations', column: 'user_id' },
   { table: 'coach_memory_summaries', column: 'user_id' },
   { table: 'coach_preferences', column: 'user_id' },
@@ -65,26 +65,26 @@ Deno.serve(async (req: Request) => {
   if (corsResp) return corsResp;
 
   try {
-    const { user_id, supabase } = await verifyAuth(req);
+    const { user_id, supabaseAdmin } = await verifyAuth(req);
 
     const errors: string[] = [];
 
-    // Delete user data from all tables
+    // Delete user data from all tables (admin client bypasses RLS)
     for (const { table, column, via } of USER_TABLES) {
       try {
         if (via) {
           // Indirect relationship — e.g. workout_days via workout_programs
-          const { data: parentRows } = await supabase
+          const { data: parentRows } = await supabaseAdmin
             .from(via)
             .select('id')
             .eq('user_id', user_id);
 
           if (parentRows && parentRows.length > 0) {
             const parentIds = parentRows.map((r: { id: string }) => r.id);
-            await supabase.from(table).delete().in(column, parentIds);
+            await supabaseAdmin.from(table).delete().in(column, parentIds);
           }
         } else {
-          await supabase.from(table).delete().eq(column, user_id);
+          await supabaseAdmin.from(table).delete().eq(column, user_id);
         }
       } catch (e) {
         // Log but continue — table may not exist in all environments
@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Delete the auth user via admin API
-    const { error: deleteError } = await supabase.auth.admin.deleteUser(user_id);
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user_id);
     if (deleteError) {
       console.error('Failed to delete auth user:', deleteError);
       return errorResponse('Failed to delete account. Please contact support.', 500);

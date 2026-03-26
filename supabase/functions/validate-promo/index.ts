@@ -1,7 +1,10 @@
 // ── Validate Promo Code Edge Function ────────────────────────────────
-// Looks up a promo code in the promo_codes table and returns the
-// associated tier if valid.  Uses service_role so the table stays
-// hidden from unauthenticated clients.
+// Atomically validates and redeems a promo code via the redeem_promo_code
+// Postgres function.  Uses service_role so the table stays hidden from
+// unauthenticated clients.
+//
+// QA-026: Atomic check-and-increment eliminates TOCTOU race condition.
+// QA-027: Per-user redemption tracking prevents duplicate redemptions.
 
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
@@ -11,7 +14,7 @@ Deno.serve(async (req: Request) => {
   if (corsResp) return corsResp;
 
   try {
-    const { user_id, supabase } = await verifyAuth(req);
+    const { user_id, supabaseAdmin } = await verifyAuth(req);
 
     const { code } = await req.json();
 
@@ -21,35 +24,29 @@ Deno.serve(async (req: Request) => {
 
     const normalizedCode = code.trim().toUpperCase();
 
-    // Look up the promo code (service_role bypasses RLS)
-    const { data: promo, error } = await supabase
-      .from('promo_codes')
-      .select('*')
-      .eq('code', normalizedCode)
-      .eq('is_active', true)
-      .single();
+    // Atomic redemption: validates, increments, and records per-user usage
+    // in a single Postgres transaction via the redeem_promo_code function.
+    const { data, error } = await supabaseAdmin
+      .rpc('redeem_promo_code', {
+        promo_code: normalizedCode,
+        redeemer_id: user_id,
+      });
 
-    if (error || !promo) {
-      return jsonResponse({ success: false, error: 'Invalid promo code' });
+    if (error) {
+      console.error('redeem_promo_code RPC error:', error);
+      return errorResponse('Failed to validate promo code', 500);
     }
 
-    // Check expiration
-    if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
-      return jsonResponse({ success: false, error: 'This promo code has expired' });
+    const result = data?.[0] ?? data;
+
+    if (!result?.success) {
+      return jsonResponse({
+        success: false,
+        error: result?.error_message ?? 'Invalid promo code',
+      });
     }
 
-    // Check max uses
-    if (promo.max_uses !== null && promo.current_uses >= promo.max_uses) {
-      return jsonResponse({ success: false, error: 'This promo code has reached its limit' });
-    }
-
-    // Increment usage count
-    await supabase
-      .from('promo_codes')
-      .update({ current_uses: promo.current_uses + 1 })
-      .eq('id', promo.id);
-
-    return jsonResponse({ success: true, tier: promo.tier });
+    return jsonResponse({ success: true, tier: result.tier });
   } catch (error) {
     if (error instanceof AuthError) {
       return errorResponse(error.message, 401);

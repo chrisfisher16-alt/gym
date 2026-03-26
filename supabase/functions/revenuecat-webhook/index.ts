@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.2';
-import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
+import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -43,6 +43,20 @@ function mapPlatform(store: string): 'ios' | 'android' | 'web' {
   return 'web';
 }
 
+// ── Constant-time string comparison ──────────────────────────────────
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
+}
+
 // ── Main Handler ──────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -53,11 +67,16 @@ Deno.serve(async (req: Request) => {
     return errorResponse('Method not allowed', 405);
   }
 
-  // Verify webhook authorization
-  const authHeader = req.headers.get('Authorization');
+  // Verify webhook authorization (fail-closed: reject if secret is not configured)
   const webhookSecret = Deno.env.get('REVENUECAT_WEBHOOK_SECRET');
+  if (!webhookSecret) {
+    console.error('[RevenueCat Webhook] REVENUECAT_WEBHOOK_SECRET is not set');
+    return errorResponse('Server configuration error', 500);
+  }
 
-  if (webhookSecret && authHeader !== `Bearer ${webhookSecret}`) {
+  const authHeader = req.headers.get('Authorization');
+  const expected = `Bearer ${webhookSecret}`;
+  if (!timingSafeEqual(authHeader ?? '', expected)) {
     return errorResponse('Unauthorized', 401);
   }
 
@@ -82,6 +101,13 @@ Deno.serve(async (req: Request) => {
   const eventType = event.type;
 
   console.log(`[RevenueCat Webhook] Event: ${eventType} | User: ${userId} | Product: ${event.product_id}`);
+
+  // Validate that the user exists before modifying entitlements
+  const { data: userRecord, error: userError } = await supabase.auth.admin.getUserById(userId);
+  if (userError || !userRecord?.user) {
+    console.error(`[RevenueCat Webhook] Unknown user: ${userId}`);
+    return errorResponse('Unknown user', 400);
+  }
 
   try {
     // Log the event
@@ -133,14 +159,22 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'CANCELLATION': {
+        const expiresAt = event.expiration_at_ms;
+        const isExpired = !expiresAt || expiresAt <= Date.now();
+
         await supabase
           .from('subscriptions')
           .update({
             status: 'canceled',
             cancelled_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            ...(isExpired ? { current_period_end: new Date().toISOString() } : {}),
           })
           .eq('user_id', userId);
+
+        if (isExpired) {
+          await updateEntitlement(supabase, userId, 'free');
+        }
         break;
       }
 

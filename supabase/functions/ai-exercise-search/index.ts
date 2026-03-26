@@ -2,6 +2,7 @@
 // Natural language exercise search with text matching + AI fallback.
 
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
+import { verifyAuth } from '../_shared/auth.ts';
 import { createAIProvider } from '../_shared/ai-provider.ts';
 import type { AIMessage, CacheableSystemBlock } from '../_shared/types.ts';
 
@@ -559,11 +560,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Rate limit by IP or auth token
-    const rateLimitKey = req.headers.get('Authorization')?.slice(0, 40) ??
-      req.headers.get('x-forwarded-for') ??
-      req.headers.get('x-real-ip') ??
-      'anonymous';
+    const { user_id } = await verifyAuth(req);
+
+    // Rate limit by authenticated user
+    const rateLimitKey = user_id;
 
     if (!checkRateLimit(rateLimitKey)) {
       return errorResponse('Rate limit exceeded: 20 requests per minute', 429);
