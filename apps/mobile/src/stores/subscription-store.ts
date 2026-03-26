@@ -16,6 +16,8 @@ import {
 } from '../lib/revenuecat';
 import { isDevMode, getDevSubscription, onDevSubscriptionChange } from '../lib/dev-subscription';
 import { mapPricingConfig, PLANS } from '../lib/pricing-config';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from './auth-store';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -34,7 +36,7 @@ interface SubscriptionState {
   initialize: (userId?: string) => Promise<void>;
   purchase: (pkg: PurchasesPackage) => Promise<{ success: boolean; error?: string }>;
   restore: () => Promise<{ success: boolean; error?: string }>;
-  applyPromoCode: (code: string) => { success: boolean; error?: string };
+  applyPromoCode: (code: string) => Promise<{ success: boolean; error?: string }>;
   checkEntitlements: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   logout: () => Promise<void>;
@@ -234,36 +236,37 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     }
   },
 
-  applyPromoCode: (code) => {
-    const normalizedCode = code.trim().toUpperCase();
+  applyPromoCode: async (code) => {
+    try {
+      const userId = useAuthStore.getState().session?.user?.id;
+      const { data, error } = await supabase.functions.invoke('validate-promo', {
+        body: { code },
+      });
 
-    // Valid promo codes
-    const PROMO_CODES: Record<string, { tier: EntitlementTier }> = {
-      'FISHER25': { tier: 'full_health_coach' },
-    };
+      if (error || !data?.success) {
+        return { success: false, error: data?.error || 'Invalid promo code' };
+      }
 
-    const promo = PROMO_CODES[normalizedCode];
-    if (!promo) {
-      return { success: false, error: 'Invalid promo code' };
+      const plan = mapPricingConfig(data.tier as Exclude<EntitlementTier, 'free'>);
+
+      set({
+        tier: data.tier,
+        isSubscribed: true,
+        isTrial: false,
+        trialEndsAt: null,
+        currentPlan: plan,
+      });
+
+      // Persist promo grant so it survives app restart
+      AsyncStorage.setItem(
+        'formiq_promo_grant',
+        JSON.stringify({ tier: data.tier, code: code.trim().toUpperCase() }),
+      ).catch(() => {});
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to validate promo code' };
     }
-
-    const plan = mapPricingConfig(promo.tier as Exclude<EntitlementTier, 'free'>);
-
-    set({
-      tier: promo.tier,
-      isSubscribed: true,
-      isTrial: false,
-      trialEndsAt: null,
-      currentPlan: plan,
-    });
-
-    // Persist promo grant so it survives app restart
-    AsyncStorage.setItem(
-      'formiq_promo_grant',
-      JSON.stringify({ tier: promo.tier, code: normalizedCode }),
-    ).catch(() => {});
-
-    return { success: true };
   },
 
   checkEntitlements: async () => {

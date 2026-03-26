@@ -126,10 +126,10 @@ export default function PaywallScreen() {
     }
   }, [restore]);
 
-  const handleApplyPromo = useCallback(() => {
+  const handleApplyPromo = useCallback(async () => {
     if (!promoCode.trim()) return;
     setPromoError(null);
-    const result = applyPromoCode(promoCode);
+    const result = await applyPromoCode(promoCode);
     if (result.success) {
       setPromoSuccess(true);
       setPromoError(null);
