@@ -7,6 +7,10 @@ import { useTheme } from '../../src/theme';
 import { useMealLog } from '../../src/hooks/useMealLog';
 import { Button, ScreenContainer } from '../../src/components/ui';
 import { getMealTypeLabel } from '../../src/lib/nutrition-utils';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
+import { checkMealLogLimit } from '../../src/lib/usage-limits';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
 import type { MealType } from '../../src/types/nutrition';
 
 export default function QuickAddScreen() {
@@ -16,6 +20,8 @@ export default function QuickAddScreen() {
   const mealType = validMealTypes.includes(rawMealType as typeof validMealTypes[number]) ? rawMealType : 'snack';
   const { colors, spacing, radius, typography } = useTheme();
   const { quickAddCalories } = useMealLog();
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
@@ -26,9 +32,24 @@ export default function QuickAddScreen() {
   const parseSafe = (v: string) => Math.max(0, parseFloat(v) || 0);
   const parseSafeInt = (v: string) => Math.max(0, parseInt(v) || 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const cal = parseSafeInt(calories);
     if (cal <= 0) return; // #62: require calories > 0
+
+    if (!canAccess('unlimited_meals')) {
+      const usage = await checkMealLogLimit();
+      if (!usage.allowed) {
+        crossPlatformAlert(
+          'Daily Meal Limit Reached',
+          `You've logged ${usage.limit} meals today. Upgrade to Nutrition Coach for unlimited meal logging.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_meals', source: 'quick_add' }) },
+          ],
+        );
+        return;
+      }
+    }
 
     quickAddCalories(
       name || 'Quick Add',

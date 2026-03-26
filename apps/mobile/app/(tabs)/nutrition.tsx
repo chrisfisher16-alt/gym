@@ -284,7 +284,7 @@ export default function NutritionTab() {
                 ...item,
                 id: `${item.id}_dup_${Date.now()}`,
               })),
-            });
+            }, getDateString(new Date()));
             showToast('Meal logged again', 'success', 1500);
           },
         },
@@ -738,9 +738,9 @@ export default function NutritionTab() {
                   onPress={() => {
                     let oz = parseInt(customWaterAmount, 10);
                     if (oz > 0) {
-                      if (oz > 5000) {
-                        showToast('Maximum 5000ml', 'warning', 1500);
-                        oz = 5000;
+                      if (oz > 200) {
+                        showToast('Maximum 200 oz', 'warning', 1500);
+                        oz = 200;
                       }
                       addCustom(oz);
                       setShowCustomWater(false);

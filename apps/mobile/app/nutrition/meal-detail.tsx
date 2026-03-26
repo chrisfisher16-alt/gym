@@ -27,13 +27,13 @@ export default function MealDetailScreen() {
   const { deleteMeal, addMealItem, editMealItem, removeMealItem } = useMealLog();
   const saveMealAsTemplate = useNutritionStore((s) => s.saveMealAsTemplate);
 
-  // Derive meal reactively from the store to avoid stale data (#58)
-  const meal = useNutritionStore((state) => {
-    for (const log of Object.values(state.dailyLogs)) {
+  // Derive meal and its date reactively from the store to avoid stale data (#58)
+  const { meal, mealDate } = useNutritionStore((state) => {
+    for (const [dateKey, log] of Object.entries(state.dailyLogs)) {
       const found = log.meals.find((m) => m.id === mealId);
-      if (found) return found;
+      if (found) return { meal: found, mealDate: dateKey };
     }
-    return undefined;
+    return { meal: undefined, mealDate: undefined };
   });
   const [editing, setEditing] = useState(false);
 
@@ -61,7 +61,7 @@ export default function MealDetailScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          deleteMeal(meal.id);
+          deleteMeal(meal.id, mealDate);
           router.back();
         },
       },
@@ -79,7 +79,7 @@ export default function MealDetailScreen() {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => removeMealItem(meal.id, itemId),
+        onPress: () => removeMealItem(meal.id, itemId, mealDate),
       },
     ]);
   };
@@ -97,7 +97,7 @@ export default function MealDetailScreen() {
       unit: 'serving',
       is_estimate: true,
     };
-    addMealItem(meal.id, newItem);
+    addMealItem(meal.id, newItem, mealDate);
   };
 
   return (
@@ -180,7 +180,7 @@ export default function MealDetailScreen() {
                     <TextInput
                       style={[typography.label, { color: colors.text, padding: 0 }]}
                       value={item.name}
-                      onChangeText={(v) => editMealItem(meal.id, item.id, { name: v })}
+                      onChangeText={(v) => editMealItem(meal.id, item.id, { name: v }, mealDate)}
                     />
                   ) : (
                     <Text style={[typography.label, { color: colors.text }]}>{item.name}</Text>
@@ -210,7 +210,7 @@ export default function MealDetailScreen() {
                         <TextInput
                           style={[styles.editField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, color: colors.text, ...typography.label }]}
                           value={String(item[field])}
-                          onChangeText={(v) => editMealItem(meal.id, item.id, { [field]: parseFloat(v) || 0 })}
+                          onChangeText={(v) => editMealItem(meal.id, item.id, { [field]: parseFloat(v) || 0 }, mealDate)}
                           keyboardType="numeric"
                         />
                       </View>

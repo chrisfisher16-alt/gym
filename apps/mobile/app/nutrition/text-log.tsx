@@ -5,7 +5,6 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,6 +17,10 @@ import { useMealLog } from '../../src/hooks/useMealLog';
 import { Card, Button, Badge, ScreenContainer } from '../../src/components/ui';
 import { analyzeMealText } from '../../src/lib/ai-meal-analyzer';
 import { calculateMealTotals, generateNutritionId } from '../../src/lib/nutrition-utils';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
+import { checkMealLogLimit } from '../../src/lib/usage-limits';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
 import type { MealItemEntry, MealType } from '../../src/types/nutrition';
 
 export default function TextLogScreen() {
@@ -25,6 +28,8 @@ export default function TextLogScreen() {
   const { mealType = 'lunch' } = useLocalSearchParams<{ mealType: string }>();
   const { colors, spacing, radius, typography } = useTheme();
   const { logMeal } = useMealLog();
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const [text, setText] = useState('');
   const [parsedItems, setParsedItems] = useState<MealItemEntry[] | null>(null);
@@ -41,7 +46,7 @@ export default function TextLogScreen() {
         setMealName(text.trim().substring(0, 40));
       }
     } catch (error) {
-      Alert.alert('Analysis Failed', 'Could not analyze meal text. Please try again.');
+      crossPlatformAlert('Analysis Failed', 'Could not analyze meal text. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -68,8 +73,23 @@ export default function TextLogScreen() {
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!parsedItems || parsedItems.length === 0) return;
+
+    if (!canAccess('unlimited_meals')) {
+      const usage = await checkMealLogLimit();
+      if (!usage.allowed) {
+        crossPlatformAlert(
+          'Daily Meal Limit Reached',
+          `You've logged ${usage.limit} meals today. Upgrade to Nutrition Coach for unlimited meal logging.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_meals', source: 'text_log' }) },
+          ],
+        );
+        return;
+      }
+    }
 
     logMeal({
       mealType: mealType as MealType,

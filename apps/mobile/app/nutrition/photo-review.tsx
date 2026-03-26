@@ -18,6 +18,10 @@ import { useMealLog } from '../../src/hooks/useMealLog';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { analyzePhotoMeal } from '../../src/lib/ai-meal-analyzer';
 import { calculateMealTotals, generateNutritionId } from '../../src/lib/nutrition-utils';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
+import { checkMealLogLimit } from '../../src/lib/usage-limits';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
 import type { MealItemEntry, MealType } from '../../src/types/nutrition';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,6 +30,8 @@ export default function PhotoReviewScreen() {
   const { imageUri, mealType = 'lunch' } = useLocalSearchParams<{ imageUri: string; mealType: string }>();
   const { colors, spacing, radius, typography } = useTheme();
   const { logMeal } = useMealLog();
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const [items, setItems] = useState<MealItemEntry[]>([]);
   const [mealName, setMealName] = useState('Photo Meal');
@@ -39,6 +45,14 @@ export default function PhotoReviewScreen() {
     const decodedUri = decodeURIComponent(imageUri);
     analyzePhotoMeal(decodedUri)
       .then((result) => setItems(result))
+      .catch((err) => {
+        console.error('Photo analysis error:', err);
+        crossPlatformAlert(
+          'Analysis Failed',
+          'Could not analyze the photo. Please add items manually.',
+          [{ text: 'OK' }],
+        );
+      })
       .finally(() => setIsAnalyzing(false));
   }, [imageUri]);
 
@@ -75,8 +89,23 @@ export default function PhotoReviewScreen() {
     ]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (items.length === 0) return;
+
+    if (!canAccess('unlimited_meals')) {
+      const usage = await checkMealLogLimit();
+      if (!usage.allowed) {
+        crossPlatformAlert(
+          'Daily Meal Limit Reached',
+          `You've logged ${usage.limit} meals today. Upgrade to Nutrition Coach for unlimited meal logging.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_meals', source: 'photo_review' }) },
+          ],
+        );
+        return;
+      }
+    }
 
     logMeal({
       mealType: mealType as MealType,
