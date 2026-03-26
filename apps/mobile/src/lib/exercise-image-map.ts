@@ -1026,6 +1026,11 @@ export const EXERCISE_IMAGES: Record<string, ExerciseImageSet> = {
   'ex_weighted_crunches': imageSet('Weighted_Crunches'),
   'ex_weighted_sit-ups_-_with_bands': imageSet('Weighted_Sit-Ups_-_With_Bands'),
   'ex_wind_sprints': imageSet('Wind_Sprints'),
+
+  // Warmup / Cooldown
+  'ex_cat_cow': imageSet('Cat_Stretch'),
+  'ex_hip_circles': imageSet('Standing_Hip_Circles'),
+  'ex_walking_lunge_cooldown': imageSet('Bodyweight_Walking_Lunge'),
 };
 
 /** Look up images for a given exercise ID. Returns undefined if no mapping exists. */

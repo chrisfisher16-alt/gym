@@ -11,6 +11,7 @@ import {
   Modal,
   ActivityIndicator,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +44,7 @@ import ReanimatedAnimated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -142,6 +144,70 @@ export default function ActiveWorkoutScreen() {
   const hintStyle = useAnimatedStyle(() => ({
     opacity: hintOpacity.value,
     transform: [{ translateX: hintTranslateX.value }],
+  }));
+
+  // ── Draggable Coach FAB ────────────────────────────────────────
+  const FAB_SIZE = 48;
+  const FAB_MARGIN = 16;
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+  const fabX = useSharedValue(0);
+  const fabY = useSharedValue(0);
+  const fabStartX = useSharedValue(0);
+  const fabStartY = useSharedValue(0);
+
+  // Default resting position: right:16, bottom:70 → anchor is bottom-right
+  // translateX: negative = move left, positive = move right
+  // translateY: negative = move up, positive = move down
+  // Bounds: the FAB starts at right:16, bottom:70
+  const fabMinX = -(screenWidth - FAB_SIZE - FAB_MARGIN * 2); // all the way to left edge
+  const fabMaxX = 0; // right edge (default)
+  const fabMinY = -(screenHeight - FAB_SIZE - 70 - FAB_MARGIN); // up toward top
+  const fabMaxY = 0; // bottom (default)
+
+  const openCoach = useCallback(() => {
+    setShowCoach(true);
+  }, []);
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      fabStartX.value = fabX.value;
+      fabStartY.value = fabY.value;
+    })
+    .onChange((e) => {
+      'worklet';
+      const nextX = fabStartX.value + e.translationX;
+      const nextY = fabStartY.value + e.translationY;
+      fabX.value = Math.max(fabMinX, Math.min(fabMaxX, nextX));
+      fabY.value = Math.max(fabMinY, Math.min(fabMaxY, nextY));
+    })
+    .onEnd(() => {
+      'worklet';
+      // Snap to nearest horizontal edge
+      const currentRight = -fabX.value + FAB_MARGIN; // distance from right
+      const currentLeft = screenWidth - FAB_SIZE - currentRight; // distance from left
+      if (currentLeft < currentRight) {
+        // Snap to left edge
+        fabX.value = withSpring(fabMinX, { damping: 20, stiffness: 200 });
+      } else {
+        // Snap to right edge
+        fabX.value = withSpring(fabMaxX, { damping: 20, stiffness: 200 });
+      }
+    })
+    .minDistance(8);
+
+  const tapGesture = Gesture.Tap().onEnd(() => {
+    'worklet';
+    runOnJS(openCoach)();
+  });
+
+  const fabGesture = Gesture.Race(panGesture, tapGesture);
+
+  const fabAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: fabX.value },
+      { translateY: fabY.value },
+    ],
   }));
 
   const performUndo = useCallback(() => {
@@ -1038,20 +1104,22 @@ export default function ActiveWorkoutScreen() {
           onSelect={handleSwapSelect}
         />
 
-        {/* Coach Button */}
-        <TouchableOpacity
-          onPress={() => setShowCoach(true)}
-          style={[
-            styles.coachFab,
-            {
-              backgroundColor: colors.primary,
-              borderRadius: radius.full,
-              shadowColor: colors.shadow,
-            },
-          ]}
-        >
-          <Ionicons name="chatbubble-ellipses" size={22} color={colors.textInverse} />
-        </TouchableOpacity>
+        {/* Coach Button (draggable) */}
+        <GestureDetector gesture={fabGesture}>
+          <ReanimatedAnimated.View
+            style={[
+              styles.coachFab,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radius.full,
+                shadowColor: colors.shadow,
+              },
+              fabAnimatedStyle,
+            ]}
+          >
+            <Ionicons name="chatbubble-ellipses" size={22} color={colors.textInverse} />
+          </ReanimatedAnimated.View>
+        </GestureDetector>
 
         {/* In-Workout Coach */}
         <InWorkoutCoach

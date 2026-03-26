@@ -867,11 +867,7 @@ export function DrillDownView({
                       selectTextOnFocus
                       editable={isCurrent && !isCompleted}
                     />
-                    {isBodyweight && isCurrent && !isCompleted && (
-                      <Text style={[typography.caption, { color: colors.textTertiary, textAlign: 'center', marginTop: 2, fontSize: 10 }]}>
-                        Added Weight
-                      </Text>
-                    )}
+
                   </View>
 
                   {/* PR badge */}
@@ -1001,54 +997,7 @@ export function DrillDownView({
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Prev Set / Next Set Navigation */}
-        <View style={[styles.setNavRow, { marginTop: spacing.sm }]}>
-          <TouchableOpacity
-            onPress={goToPrevSet}
-            disabled={!canGoPrevSet}
-            style={styles.setNavButton}
-            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={16}
-              color={canGoPrevSet ? colors.primary : colors.textTertiary}
-            />
-            <Text
-              style={[
-                typography.labelSmall,
-                { color: canGoPrevSet ? colors.primary : colors.textTertiary, marginLeft: 2 },
-              ]}
-            >
-              Prev Set
-            </Text>
-          </TouchableOpacity>
 
-          <Text style={[typography.caption, { color: colors.textTertiary }]}>
-            Set {currentSetIndex + 1}/{totalSets}
-          </Text>
-
-          <TouchableOpacity
-            onPress={goToNextSet}
-            disabled={!canGoNextSet}
-            style={styles.setNavButton}
-            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-          >
-            <Text
-              style={[
-                typography.labelSmall,
-                { color: canGoNextSet ? colors.primary : colors.textTertiary, marginRight: 2 },
-              ]}
-            >
-              Next Set
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={canGoNextSet ? colors.primary : colors.textTertiary}
-            />
-          </TouchableOpacity>
-        </View>
       </View>
     </View>
   );
