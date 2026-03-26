@@ -921,6 +921,11 @@ export default function ActiveWorkoutScreen() {
               onFinishWorkout={handleFinish}
               onCascadeWeight={cascadeWeight}
               onReplaceExercise={(ex) => setSwapModalExercise(ex)}
+              onCreateSuperset={(exId) => setSupersetSourceId(exId)}
+              onRemoveSuperset={(exId) => {
+                const ex = activeSession.exercises.find((e) => e.id === exId);
+                if (ex?.supersetGroupId) handleRemoveSupersetGroup(ex.supersetGroupId);
+              }}
               supersetInfo={(() => {
                 const ex = activeSession.exercises[drilledExerciseIndex];
                 if (!ex.supersetGroupId) return undefined;

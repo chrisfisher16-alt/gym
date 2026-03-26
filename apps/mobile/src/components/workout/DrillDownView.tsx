@@ -9,6 +9,7 @@ import {
   Animated,
   ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -53,6 +54,8 @@ export interface DrillDownViewProps {
   onFinishWorkout: () => void;
   onCascadeWeight?: (exerciseInstanceId: string, fromSetIndex: number, weight: number, reps: number) => void;
   onReplaceExercise: (exercise: ActiveExercise) => void;
+  onCreateSuperset?: (exerciseId: string) => void;
+  onRemoveSuperset?: (exerciseId: string) => void;
   supersetInfo?: {
     groupId: string;
     position: number;
@@ -95,6 +98,8 @@ export function DrillDownView({
   onFinishWorkout,
   onCascadeWeight,
   onReplaceExercise,
+  onCreateSuperset,
+  onRemoveSuperset,
   supersetInfo,
 }: DrillDownViewProps) {
   const { colors, spacing, radius, typography } = useTheme();
@@ -119,6 +124,25 @@ export function DrillDownView({
       setFocusedInput(null);
     }, 120);
   }, []);
+
+  // ── Superset hint (one-time) ──────────────────────────────────────
+  const [showSupersetHint, setShowSupersetHint] = useState(false);
+  useEffect(() => {
+    const HINT_KEY = '@workout/superset_hint_seen';
+    AsyncStorage.getItem(HINT_KEY).then((val) => {
+      if (!val) setShowSupersetHint(true);
+    }).catch(() => {});
+  }, []);
+
+  const dismissSupersetHint = useCallback(() => {
+    setShowSupersetHint(false);
+    AsyncStorage.setItem('@workout/superset_hint_seen', '1').catch(() => {});
+  }, []);
+
+  // Auto-dismiss hint once user is in a superset
+  useEffect(() => {
+    if (supersetInfo && showSupersetHint) dismissSupersetHint();
+  }, [supersetInfo, showSupersetHint, dismissSupersetHint]);
 
   // ── Form Check mode ─────────────────────────────────────────────────
   const [formCheckMode, setFormCheckMode] = useState(false);
@@ -654,7 +678,66 @@ export function DrillDownView({
               </Text>
             </TouchableOpacity>
           )}
+
+          {/* Superset chip */}
+          <TouchableOpacity
+            onPress={() => {
+              if (supersetInfo) {
+                onRemoveSuperset?.(exercise.id);
+              } else {
+                onCreateSuperset?.(exercise.id);
+              }
+            }}
+            activeOpacity={0.7}
+            style={[
+              styles.actionChip,
+              {
+                backgroundColor: supersetInfo ? colors.primary : colors.surfaceSecondary,
+                borderRadius: radius.full,
+              },
+            ]}
+          >
+            <Ionicons
+              name="link-outline"
+              size={14}
+              color={supersetInfo ? colors.textInverse : colors.textSecondary}
+            />
+            <Text
+              style={[
+                typography.labelSmall,
+                {
+                  color: supersetInfo ? colors.textInverse : colors.textSecondary,
+                  marginLeft: 4,
+                },
+              ]}
+            >
+              {supersetInfo ? `Superset ${supersetInfo.position}/${supersetInfo.total}` : 'Superset'}
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* ── Superset hint (first time only) ───────────────────── */}
+        {showSupersetHint && !supersetInfo && (
+          <TouchableOpacity
+            onPress={dismissSupersetHint}
+            activeOpacity={0.7}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: spacing.xs,
+              paddingVertical: 4,
+              paddingHorizontal: spacing.md,
+              gap: 6,
+            }}
+          >
+            <Ionicons name="information-circle-outline" size={14} color={colors.textTertiary} />
+            <Text style={[typography.caption, { color: colors.textTertiary }]}>
+              Tap "Superset" above to pair exercises together
+            </Text>
+            <Ionicons name="close" size={12} color={colors.textTertiary} />
+          </TouchableOpacity>
+        )}
 
         {/* ── Exercise Header ─────────────────────────────────────── */}
         <View style={[styles.headerSection, { paddingHorizontal: spacing.base }]}>
