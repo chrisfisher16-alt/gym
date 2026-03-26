@@ -278,15 +278,25 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   applyPromoCode: async (code) => {
     try {
-      const { data, error } = await supabase.functions.invoke('validate-promo', {
-        body: { code: code.trim().toUpperCase() },
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) {
+        return { success: false, error: 'You must be signed in to redeem a promo code' };
+      }
+
+      const { data: rpcResult, error } = await supabase.rpc('redeem_promo_code', {
+        promo_code: code.trim().toUpperCase(),
+        redeemer_id: userId,
       });
 
+      // rpc returns an array of rows; grab the first
+      const data = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+
       if (error) {
+        console.warn('[SubscriptionStore] Promo RPC error:', error);
         return { success: false, error: 'Failed to validate promo code' };
       }
       if (!data?.success) {
-        return { success: false, error: data?.error ?? 'Invalid promo code' };
+        return { success: false, error: data?.error_message ?? 'Invalid promo code' };
       }
 
       const plan = mapPricingConfig(data.tier as Exclude<EntitlementTier, 'free'>);
