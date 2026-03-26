@@ -171,7 +171,7 @@ export default function MeasurementsScreen() {
     }
   }, [imperial, heightFeet, heightInches, heightCmInput]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const weightKg = parseWeight(weight, imperial);
     const heightCm = getHeightCm();
     const parsed: Partial<BodyMeasurement> = {};
@@ -188,23 +188,27 @@ export default function MeasurementsScreen() {
       return;
     }
 
-    addMeasurement({
-      date: new Date().toISOString(),
-      weightKg,
-      heightCm,
-      ...parsed,
-      notes: notes || undefined,
-    });
+    try {
+      await addMeasurement({
+        date: new Date().toISOString(),
+        weightKg,
+        heightCm,
+        ...parsed,
+        notes: notes || undefined,
+      });
 
-    // Reset form
-    setWeight('');
-    setHeightFeet('');
-    setHeightInches('');
-    setHeightCmInput('');
-    setFormFields({});
-    setNotes('');
-    setEstimatedFields(new Set());
-    crossPlatformAlert('Saved', 'Measurement recorded successfully.');
+      // Reset form
+      setWeight('');
+      setHeightFeet('');
+      setHeightInches('');
+      setHeightCmInput('');
+      setFormFields({});
+      setNotes('');
+      setEstimatedFields(new Set());
+      crossPlatformAlert('Saved', 'Measurement recorded successfully.');
+    } catch (e) {
+      crossPlatformAlert('Error', 'Failed to save measurement. Please try again.');
+    }
   }, [weight, formFields, notes, imperial, addMeasurement, getHeightCm]);
 
   // AI estimation
@@ -292,23 +296,31 @@ export default function MeasurementsScreen() {
         crossPlatformAlert('Label Photo', 'Select a label for this photo:', [
           {
             text: 'Front',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Side',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Back',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'No Label',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
         ]);
       }
@@ -336,23 +348,31 @@ export default function MeasurementsScreen() {
         crossPlatformAlert('Label Photo', 'Select a label for this photo:', [
           {
             text: 'Front',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Side',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Back',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'No Label',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
         ]);
       }
@@ -367,7 +387,13 @@ export default function MeasurementsScreen() {
     (id: string) => {
       crossPlatformAlert('Delete Measurement', 'Are you sure?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteMeasurement(id) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteMeasurement(id).catch((e) => console.error('Failed to delete measurement:', e));
+          },
+        },
       ]);
     },
     [deleteMeasurement],
@@ -377,7 +403,13 @@ export default function MeasurementsScreen() {
     (id: string) => {
       crossPlatformAlert('Delete Photo', 'Are you sure?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deletePhoto(id) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deletePhoto(id).catch((e) => console.error('Failed to delete photo:', e));
+          },
+        },
       ]);
     },
     [deletePhoto],

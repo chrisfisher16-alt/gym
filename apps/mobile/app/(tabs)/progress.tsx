@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme';
@@ -32,6 +32,7 @@ import { ACHIEVEMENTS } from '../../src/lib/achievements';
 import { AchievementBadge } from '../../src/components/AchievementBadge';
 import { getHealthProviderName } from '../../src/lib/health';
 import { CoachFAB } from '../../src/components/CoachFAB';
+import { AchievementUnlockOverlay } from '../../src/components/AchievementUnlockOverlay';
 import { MUSCLE_GROUP_LABELS } from '../../src/lib/exercise-data';
 import type { MuscleGroup, CompletedSession } from '../../src/types/workout';
 import {
@@ -115,17 +116,12 @@ export default function ProgressTab() {
   // Achievements store
   const earnedAchievements = useAchievementsStore((s) => s.earned);
   const checkAchievements = useAchievementsStore((s) => s.checkAchievements);
-  const clearNewlyEarned = useAchievementsStore((s) => s.clearNewlyEarned);
   const initAchievements = useAchievementsStore((s) => s.initialize);
   const achievementsInitialized = useAchievementsStore((s) => s.isInitialized);
 
   // Profile
   const unitPref = useProfileStore((s) => s.profile.unitPreference);
   const imperial = unitPref === 'imperial';
-
-  // Congrats toast state
-  const [showCongrats, setShowCongrats] = useState(false);
-  const [congratsAchievements, setCongratsAchievements] = useState<string[]>([]);
 
   const photoCount = useMeasurementsStore((s) => s.photos.length);
   const totalMealsLogged = useMemo(() => {
@@ -211,7 +207,7 @@ export default function ProgressTab() {
     : recentPRs.map((pr) => ({ ...pr, reps: 0 }));
   const displayVolume = demo ? demoVolume : weeklyVolume;
   const latestMeasurementWeight = measurements.length > 0
-    ? measurements[measurements.length - 1].weightKg
+    ? measurements[0].weightKg
     : null;
   const displayWeight = demo
     ? DEMO_HEALTH_DATA.recentWeight
@@ -230,20 +226,10 @@ export default function ProgressTab() {
     if (!isInitialized && !demo) return;
     if (!achievementsInitialized) return;
     const timer = setTimeout(() => {
-      const newly = checkAchievements();
-      if (newly.length > 0) {
-        setCongratsAchievements(newly);
-        setShowCongrats(true);
-      }
+      checkAchievements();
     }, 500);
     return () => clearTimeout(timer);
   }, [isInitialized, achievementsInitialized, totalWorkouts, totalPRs, measurements.length]);
-
-  const handleDismissCongrats = useCallback(() => {
-    setShowCongrats(false);
-    setCongratsAchievements([]);
-    clearNewlyEarned();
-  }, [clearNewlyEarned]);
 
   // ── Measurements data for card ─────────────────────────────────
 
@@ -738,6 +724,7 @@ export default function ProgressTab() {
             expandedContent={
               <View>
                 <Sparkline data={workoutSparkline} width={100} height={40} showFill animated />
+                <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>12-week trend</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm }}>
                   <Text style={[typography.caption, { color: trendColor(getTrendDirection(workoutSparkline), colors) }]}>
                     {trendArrow(getTrendDirection(workoutSparkline))} {getTrendDirection(workoutSparkline) === 'up' ? 'Improving' : getTrendDirection(workoutSparkline) === 'down' ? 'Declining' : 'Steady'}
@@ -928,7 +915,7 @@ export default function ProgressTab() {
                 style={[typography.h2, { color: colors.text }]}
                 formatter={(n) => `${Math.round(imperial ? n * KG_TO_LB : n).toLocaleString()} ${imperial ? 'lbs' : 'kg'}`}
               />
-              <View style={[styles.volBar, { marginTop: spacing.sm }]}>
+              <View style={[styles.volBar, { marginTop: spacing.sm, backgroundColor: colors.border }]}>
                 <View
                   style={{
                     height: 8,
@@ -950,7 +937,7 @@ export default function ProgressTab() {
                 style={[typography.h2, { color: colors.textSecondary }]}
                 formatter={(n) => `${Math.round(imperial ? n * KG_TO_LB : n).toLocaleString()} ${imperial ? 'lbs' : 'kg'}`}
               />
-              <View style={[styles.volBar, { marginTop: spacing.sm }]}>
+              <View style={[styles.volBar, { marginTop: spacing.sm, backgroundColor: colors.border }]}>
                 <View
                   style={{
                     height: 8,
@@ -1290,6 +1277,7 @@ export default function ProgressTab() {
                     borderRadius: radius.md,
                     paddingHorizontal: spacing.sm,
                     paddingVertical: spacing.xs,
+                    minHeight: 44,
                   },
                 ]}
               >
@@ -1651,80 +1639,8 @@ export default function ProgressTab() {
         </ExpandableCard>
       </View>
 
-      {/* Congratulations Modal */}
-      <Modal
-        visible={showCongrats}
-        transparent
-        animationType="fade"
-        onRequestClose={handleDismissCongrats}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={handleDismissCongrats}
-        >
-          <View
-            style={[
-              styles.congratsContainer,
-              {
-                backgroundColor: colors.surface,
-                borderRadius: radius.lg,
-                padding: spacing.xl,
-                shadowColor: colors.shadow,
-              },
-            ]}
-          >
-            <Text style={{ fontSize: 48, textAlign: 'center', marginBottom: spacing.md }}>
-              {String.fromCodePoint(0x1F3C6)}
-            </Text>
-            <Text
-              style={[
-                typography.h2,
-                { color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-              ]}
-            >
-              Achievement Unlocked!
-            </Text>
-            {congratsAchievements.map((id) => {
-              const achievement = ACHIEVEMENTS.find((a) => a.id === id);
-              if (!achievement) return null;
-              return (
-                <View key={id} style={{ alignItems: 'center', marginTop: spacing.md }}>
-                  <AchievementBadge
-                    achievement={achievement}
-                    earned
-                    earnedDate={new Date().toISOString()}
-                    size="md"
-                  />
-                  <Text
-                    style={[
-                      typography.bodySmall,
-                      { color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' },
-                    ]}
-                  >
-                    {achievement.description}
-                  </Text>
-                </View>
-              );
-            })}
-            <TouchableOpacity
-              onPress={handleDismissCongrats}
-              style={[
-                styles.congratsButton,
-                {
-                  backgroundColor: colors.primary,
-                  borderRadius: radius.md,
-                  marginTop: spacing.xl,
-                  paddingVertical: spacing.md,
-                  paddingHorizontal: spacing.xl,
-                },
-              ]}
-            >
-              <Text style={[typography.label, { color: colors.textInverse }]}>Awesome!</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      {/* Achievement Unlock Overlay */}
+      <AchievementUnlockOverlay />
 
       {/* Quick Action Sheet */}
       <QuickActionSheet {...quickActions.sheetProps} />
@@ -1811,7 +1727,6 @@ const styles = StyleSheet.create({
   volBar: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E5E7EB',
     overflow: 'hidden',
   },
   changeRow: {
@@ -1876,26 +1791,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  congratsContainer: {
-    width: '100%',
-    maxWidth: 340,
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  congratsButton: {
-    alignItems: 'center',
-    width: '100%',
-  },
+
   muscleDetailCard: {},
   expandedLink: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
+import { useSharedValue, useDerivedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useTheme } from '../theme';
 import type { MuscleId } from '../types/workout';
 import { FRONT_BODY_OUTLINE, FRONT_MUSCLES } from '../data/anatomy-paths-front';
@@ -93,31 +94,28 @@ const PULSE_MAX = 0.55;
 const PULSE_DURATION = 2000; // 2 seconds full cycle
 
 function usePulseOpacity(enabled: boolean): number {
-  const [opacity, setOpacity] = useState(PULSE_MIN);
-  const rafRef = useRef<number | null>(null);
-  const startRef = useRef(0);
+  const progress = useSharedValue(0);
 
   useEffect(() => {
-    if (!enabled) {
-      setOpacity(PULSE_MIN);
-      return;
+    if (enabled) {
+      progress.value = 0;
+      progress.value = withRepeat(
+        withTiming(1, { duration: PULSE_DURATION }),
+        -1, // infinite
+        true, // reverse: 0→1→0
+      );
+    } else {
+      progress.value = 0;
     }
-    startRef.current = Date.now();
-    const tick = () => {
-      const elapsed = (Date.now() - startRef.current) % PULSE_DURATION;
-      const t = elapsed / PULSE_DURATION;
-      // Sine wave: 0→1→0 over the cycle
-      const sine = (Math.sin(t * Math.PI * 2 - Math.PI / 2) + 1) / 2;
-      setOpacity(PULSE_MIN + sine * (PULSE_MAX - PULSE_MIN));
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [enabled]);
+  }, [enabled, progress]);
 
-  return opacity;
+  // Derive the actual opacity on the JS side so it can be passed as a prop.
+  // useDerivedValue runs on the UI thread but .value can be read on JS.
+  const opacity = useDerivedValue(
+    () => PULSE_MIN + progress.value * (PULSE_MAX - PULSE_MIN),
+  );
+
+  return opacity.value;
 }
 
 function MuscleAnatomyDiagramInner({

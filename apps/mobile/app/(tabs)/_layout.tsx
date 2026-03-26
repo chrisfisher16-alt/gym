@@ -14,7 +14,6 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.borderLight,
-          paddingBottom: 4,
           height: 56,
         },
         tabBarLabelStyle: {
@@ -22,21 +21,13 @@ export default function TabsLayout() {
           fontWeight: '500',
         },
         animation: 'fade',
-        transitionSpec: {
-          animation: 'spring',
-          config: {
-            damping: 20,
-            stiffness: 200,
-            mass: 0.8,
-            overshootClamping: true,
-          },
-        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Today',
+          tabBarAccessibilityLabel: 'Today tab',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="today-outline" size={size} color={color} />
           ),
@@ -46,6 +37,7 @@ export default function TabsLayout() {
         name="workout"
         options={{
           title: 'Workout',
+          tabBarAccessibilityLabel: 'Workout tab',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="barbell-outline" size={size} color={color} />
           ),
@@ -55,6 +47,7 @@ export default function TabsLayout() {
         name="nutrition"
         options={{
           title: 'Nutrition',
+          tabBarAccessibilityLabel: 'Nutrition tab',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="nutrition-outline" size={size} color={color} />
           ),
@@ -64,6 +57,7 @@ export default function TabsLayout() {
         name="coach"
         options={{
           title: 'Coach',
+          tabBarAccessibilityLabel: 'Coach tab',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
           ),
@@ -73,6 +67,7 @@ export default function TabsLayout() {
         name="progress"
         options={{
           title: 'Progress',
+          tabBarAccessibilityLabel: 'Progress tab',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="trending-up-outline" size={size} color={color} />
           ),

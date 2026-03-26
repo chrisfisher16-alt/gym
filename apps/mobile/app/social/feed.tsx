@@ -288,7 +288,7 @@ export default function FeedScreen() {
       <View style={[styles.header, { paddingHorizontal: spacing.md, paddingTop: spacing.sm }]}>
         <TouchableOpacity
           onPress={() => router.back()}
-          hitSlop={12}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
@@ -299,7 +299,7 @@ export default function FeedScreen() {
         </Text>
         <TouchableOpacity
           onPress={() => router.push('/social/friends')}
-          hitSlop={12}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           accessibilityRole="button"
           accessibilityLabel="Friends"
         >

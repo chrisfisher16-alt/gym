@@ -1,12 +1,12 @@
 export const lightColors = {
   // Primary — warm gold
-  primary: '#C4A265',
+  primary: '#B8944F',
   primaryLight: '#D4B97A',
   primaryDark: '#A8874E',
   primaryMuted: '#F5EFE0',
 
   // Background
-  background: '#FAFAF7',
+  background: '#FAFAFA',
   surface: '#FAF9F6',
   surfaceSecondary: '#F5F3EE',
 
@@ -32,7 +32,7 @@ export const lightColors = {
   infoLight: '#DBEAFE',
 
   // PR / Achievements
-  gold: '#C4A265',
+  gold: '#B8944F',
   goldLight: '#F5EFE0',
 
   // Disabled
@@ -90,7 +90,7 @@ export const lightColors = {
 
 export const darkColors: typeof lightColors = {
   // Primary — warm gold
-  primary: '#C4A265',
+  primary: '#CFAE80',
   primaryLight: '#D4B97A',
   primaryDark: '#A8874E',
   primaryMuted: '#2A2418',
@@ -122,7 +122,7 @@ export const darkColors: typeof lightColors = {
   infoLight: '#1E3A5F',
 
   // PR / Achievements
-  gold: '#C4A265',
+  gold: '#CFAE80',
   goldLight: '#2A2418',
 
   // Disabled

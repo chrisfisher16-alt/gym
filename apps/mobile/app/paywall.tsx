@@ -489,6 +489,7 @@ export default function PaywallScreen() {
                   ]}
                   placeholder="Enter promo code"
                   placeholderTextColor={colors.textTertiary}
+                  accessibilityLabel="Promo code"
                   value={promoCode}
                   onChangeText={(text) => {
                     setPromoCode(text);

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Platform, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../src/theme';
@@ -50,6 +50,7 @@ export default function TodayTab() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const isLoading = Platform.OS === 'web' ? false : authLoading;
   const profileStore = useProfileStore((s) => s.profile);
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
   const personalRecords = useWorkoutStore((s) => s.personalRecords);
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
   const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
@@ -121,16 +122,17 @@ export default function TodayTab() {
     const timer = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  // Also refresh on navigation focus via a visibility-based approach
+  // Also refresh on navigation focus
   const lastFocusRef = useRef(Date.now());
-  useEffect(() => {
-    // AppState-based focus: when component mounts or deps change, refresh
-    const elapsed = Date.now() - lastFocusRef.current;
-    if (elapsed > 60_000) {
-      setNow(new Date());
-    }
-    lastFocusRef.current = Date.now();
-  });
+  useFocusEffect(
+    useCallback(() => {
+      const elapsed = Date.now() - lastFocusRef.current;
+      if (elapsed > 60_000) {
+        setNow(new Date());
+      }
+      lastFocusRef.current = Date.now();
+    }, [])
+  );
   const hour = now.getHours();
   const timeOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
   const greeting = timeOfDay === 'morning' ? 'Good morning' : timeOfDay === 'afternoon' ? 'Good afternoon' : 'Good evening';
@@ -179,6 +181,14 @@ export default function TodayTab() {
   }, []);
 
   useEffect(() => { loadBriefing(); }, [loadBriefing]);
+
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadBriefing(true);
+    setRefreshing(false);
+  }, [loadBriefing]);
 
   const fallback = timeOfDay === 'morning'
     ? 'Start your day strong. Check your workout plan and hit your nutrition targets.'
@@ -342,7 +352,8 @@ export default function TodayTab() {
     }
     if (status === 'completed') {
       const vol = todayDone?.totalVolume;
-      return vol ? `Great session today — ${fmt(vol)} lbs total volume!` : 'Workout complete — nice work today!';
+      const unitLabel = unitPref === 'metric' ? 'kg' : 'lbs';
+      return vol ? `Great session today — ${fmt(vol)} ${unitLabel} total volume!` : 'Workout complete — nice work today!';
     }
     // Pending workout
     if (timeOfDay === 'morning' && todayWorkout && showWorkout) {
@@ -354,7 +365,7 @@ export default function TodayTab() {
       return `${fmt(calsLeft)} calories left — finish strong`;
     }
     return undefined;
-  }, [todayWorkoutStatus, todayDone, todayWorkout, timeOfDay, showWorkout, showNutrition, calP, dT, dC]);
+  }, [todayWorkoutStatus, todayDone, todayWorkout, timeOfDay, showWorkout, showNutrition, calP, dT, dC, unitPref]);
 
   // ── Gradient ──────────────────────────────────────────────────────
   const grad = dark ? [colors.primaryMuted, colors.surface] as const : [colors.primaryMuted, colors.background] as const;
@@ -381,7 +392,7 @@ export default function TodayTab() {
 
   // ════════════════════════════════════════════════════════════════════
   return (
-    <ScreenContainer padded={false}>
+    <ScreenContainer padded={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       {/* ── 1. HEADER ─────────────────────────────────────────────────── */}
       <LinearGradient colors={grad} style={S.heroGrad}>
         <View style={[S.heroInner, { paddingHorizontal: spacing.base }]}>
@@ -394,6 +405,8 @@ export default function TodayTab() {
             <TouchableOpacity
               onPress={() => router.push('/settings')}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
             >
               <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -868,7 +881,7 @@ export default function TodayTab() {
                 </View>
                 {todayWorkout.focusArea && (
                   <View style={[S.pill, { backgroundColor: colors.primaryMuted, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm }]}>
-                    <Text style={[typography.caption, { color: colors.primary, textTransform: 'capitalize' }]}>{todayWorkout.focusArea.replace('_', ' ')}</Text>
+                    <Text style={[typography.caption, { color: colors.primary, textTransform: 'capitalize' }]}>{todayWorkout.focusArea.replace(/_/g, ' ')}</Text>
                   </View>
                 )}
               </View>
@@ -1005,7 +1018,7 @@ const S = StyleSheet.create({
   strip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderWidth: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 1 },
   // Quick Actions
   quickActions: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  quickBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
+  quickBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 4, minHeight: 48, minWidth: 48 },
   // Nutrition
   ringsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
   ringItem: { alignItems: 'center', flex: 1, minHeight: 100 },

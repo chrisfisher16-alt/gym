@@ -86,8 +86,16 @@ export function ExpandableCard({
 
   const handleContentLayout = useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;
-    if (h > 0) setContentHeight(h);
-  }, []);
+    if (h > 0) {
+      setContentHeight(h);
+
+      // If already expanded and this is the first measurement, animate now
+      if (expanded && h > 0) {
+        heightProgress.value = withSpring(1, EXPAND_SPRING);
+        contentOpacity.value = withTiming(1, { duration: 200 });
+      }
+    }
+  }, [expanded, heightProgress, contentOpacity]);
 
   // ── Toggle ─────────────────────────────────────────────────────
 
@@ -100,6 +108,7 @@ export function ExpandableCard({
       // Content not measured yet — expand without animation, animation will happen on next toggle
       if (!hasExpanded) setHasExpanded(true);
       setExpanded(true);
+      onExpand?.();
       return;
     }
 

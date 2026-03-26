@@ -11,6 +11,9 @@ import { useWorkoutHistory } from '../../hooks/useWorkoutHistory';
 import { checkAIMessageLimit, type UsageCheck } from '../../lib/usage-limits';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { getDateString } from '../../lib/nutrition-utils';
+import type { NutritionTargets, MacroTotals } from '../../types/nutrition';
+import type { CompletedSession, ActiveWorkoutSession } from '../../types/workout';
+import type { CoachMessage } from '../../stores/coach-store';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -35,12 +38,12 @@ const fmt = (n: number) => Math.round(n).toLocaleString();
 
 // ── Per-Tab Context Hooks ──────────────────────────────────────────
 
-function useTodayContext(displayName?: string) {
-  const todayWorkoutStatus = useWorkoutStore((s) => s.todayWorkoutStatus);
-  const activeSession = useWorkoutStore((s) => s.activeSession);
-  const history = useWorkoutStore((s) => s.history);
-  const targets = useNutritionStore((s) => s.targets);
-  const todayConsumed = useNutritionStore((s) => s.todayConsumed);
+function useTodayContext(displayName?: string, active = true) {
+  const todayWorkoutStatus = useWorkoutStore(active ? (s) => s.todayWorkoutStatus : NOOP_TODAY_STATUS);
+  const activeSession = useWorkoutStore(active ? (s) => s.activeSession : NOOP_SESSION);
+  const history = useWorkoutStore(active ? (s) => s.history : () => NOOP_HISTORY);
+  const targets = useNutritionStore(active ? (s) => s.targets : NOOP_TARGETS);
+  const todayConsumed = useNutritionStore(active ? (s) => s.todayConsumed : NOOP_CONSUMED);
   const { activeProgram, getTodayWorkout } = useWorkoutPrograms();
 
   return useMemo(() => {
@@ -121,9 +124,9 @@ function useTodayContext(displayName?: string) {
   }, [todayWorkoutStatus, activeSession, history, targets, todayConsumed, activeProgram, getTodayWorkout, displayName]);
 }
 
-function useWorkoutContext() {
-  const activeSession = useWorkoutStore((s) => s.activeSession);
-  const history = useWorkoutStore((s) => s.history);
+function useWorkoutContext(active = true) {
+  const activeSession = useWorkoutStore(active ? (s) => s.activeSession : NOOP_SESSION);
+  const history = useWorkoutStore(active ? (s) => s.history : () => NOOP_HISTORY);
   const { activeProgram, getTodayWorkout } = useWorkoutPrograms();
   const [elapsed, setElapsed] = useState(0);
 
@@ -177,9 +180,9 @@ function useWorkoutContext() {
   }, [activeSession, elapsed, history, activeProgram, getTodayWorkout]);
 }
 
-function useNutritionContext() {
-  const targets = useNutritionStore((s) => s.targets);
-  const todayConsumed = useNutritionStore((s) => s.todayConsumed);
+function useNutritionContext(active = true) {
+  const targets = useNutritionStore(active ? (s) => s.targets : NOOP_TARGETS);
+  const todayConsumed = useNutritionStore(active ? (s) => s.todayConsumed : NOOP_CONSUMED);
 
   return useMemo(() => {
     const consumed = todayConsumed();
@@ -203,7 +206,7 @@ function useNutritionContext() {
   }, [targets, todayConsumed]);
 }
 
-function useProgressContext() {
+function useProgressContext(active = true) {
   const { history, totalPRs } = useWorkoutHistory();
 
   return useMemo(() => {
@@ -242,26 +245,28 @@ function useProgressContext() {
     else if (thisMonthVol < lastMonthVol * 0.95) trend = '↓';
     else trend = '→';
 
-    if (history.length === 0) {
+    if (!active || history.length === 0) {
       return null;
     }
 
     return { weekNumber, prsThisMonth, trend, type: 'progress' as const };
-  }, [history, totalPRs]);
+  }, [active, history, totalPRs]);
 }
 
-function useCoachContext() {
-  const messages = useCoachStore((s) => s.messages);
+function useCoachContext(active = true) {
+  const messages = useCoachStore(active ? (s) => s.messages : NOOP_MESSAGES);
   const { tier } = useEntitlement();
   const [aiUsage, setAIUsage] = useState<UsageCheck | null>(null);
 
   useEffect(() => {
-    if (tier === 'free') {
+    if (active && tier === 'free') {
       checkAIMessageLimit().then(setAIUsage);
     }
-  }, [tier, messages.length]);
+  }, [active, tier, messages.length]);
 
   return useMemo(() => {
+    if (!active) return null;
+
     // For free tier, show remaining messages
     if (tier === 'free' && aiUsage) {
       if (aiUsage.remaining <= 0) {
@@ -286,14 +291,22 @@ function useCoachContext() {
 
 // ── Main Component ─────────────────────────────────────────────────
 
+// Stable no-op selectors — return the correct store type but a constant value
+const NOOP_TODAY_STATUS = (): (() => 'pending' | 'active' | 'completed') => () => 'pending';
+const NOOP_SESSION = (): ActiveWorkoutSession | null => null;
+const NOOP_HISTORY: CompletedSession[] = [];
+const NOOP_TARGETS = (): NutritionTargets => ({ calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, water_oz: 0 });
+const NOOP_CONSUMED = (): (() => MacroTotals) => () => ({ calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 });
+const NOOP_MESSAGES = (): CoachMessage[] => [];
+
 export function SmartHeader({ tab, displayName }: SmartHeaderProps) {
   const { colors, typography, spacing } = useTheme();
 
-  const todayCtx = useTodayContext(tab === 'today' ? displayName : undefined);
-  const workoutCtx = useWorkoutContext();
-  const nutritionCtx = useNutritionContext();
-  const progressCtx = useProgressContext();
-  const coachCtx = useCoachContext();
+  const todayCtx = useTodayContext(tab === 'today' ? displayName : undefined, tab === 'today');
+  const workoutCtx = useWorkoutContext(tab === 'workout' || tab === 'today');
+  const nutritionCtx = useNutritionContext(tab === 'nutrition' || tab === 'today');
+  const progressCtx = useProgressContext(tab === 'progress');
+  const coachCtx = useCoachContext(tab === 'coach');
 
   const subtitleStyle: TextStyle = {
     ...typography.bodySmall,
