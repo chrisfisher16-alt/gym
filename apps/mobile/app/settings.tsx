@@ -4,7 +4,7 @@ import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
-import { Card, ScreenContainer, Badge, Divider, ExpandableCard, SyncStatusBadge } from '../src/components/ui';
+import { Card, ScreenContainer, Badge, Divider, ExpandableCard } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/auth-store';
 import { useProfileStore } from '../src/stores/profile-store';
 import { useNotificationStore } from '../src/stores/notification-store';
@@ -234,16 +234,7 @@ export default function SettingsScreen() {
         More
       </Text>
       <Card style={{ marginBottom: spacing.base }}>
-        <View style={[styles.settingRow, { paddingVertical: spacing.md }]}>
-          <View style={styles.settingLeft}>
-            <Ionicons name="cloud-outline" size={20} color={colors.textSecondary} />
-            <Text style={[typography.body, { color: colors.text, marginLeft: spacing.md }]}>
-              Sync
-            </Text>
-          </View>
-          <SyncStatusBadge />
-        </View>
-        <Divider />
+
         <SettingRow
           icon="notifications-outline"
           label="Notifications"
