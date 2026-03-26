@@ -742,66 +742,14 @@ export function DrillDownView({
         {/* ── Exercise Header ─────────────────────────────────────── */}
         <View style={[styles.headerSection, { paddingHorizontal: spacing.base }]}>
           <Text
-            style={[typography.displayMedium, { color: colors.text, textAlign: 'center' }]}
+            style={[typography.h2, { color: colors.text, textAlign: 'left', alignSelf: 'flex-start' }]}
             numberOfLines={2}
           >
             {exercise.exerciseName}
           </Text>
-
-          {/* ── Tappable Set Progress Dots ─────────────────────── */}
-          <View style={[styles.progressRow, { marginTop: spacing.md }]}>
-            {exercise.sets.map((s, i) => {
-              const isCurrent = i === currentSetIndex;
-              const isCompleted = s.isCompleted;
-              return (
-                <TouchableOpacity
-                  key={s.id}
-                  onPress={() => handleDotPress(i)}
-                  activeOpacity={0.6}
-                  style={[
-                    styles.progressDot,
-                    {
-                      backgroundColor: isCompleted
-                        ? colors.success
-                        : isCurrent
-                          ? 'transparent'
-                          : colors.surfaceSecondary,
-                      borderColor: isCurrent ? GOLD_DARK : 'transparent',
-                      borderWidth: isCurrent ? 2.5 : 0,
-                      width: isCurrent ? 32 : 28,
-                      height: isCurrent ? 32 : 28,
-                      borderRadius: radius.full,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      typography.labelSmall,
-                      {
-                        color: isCompleted
-                          ? colors.textInverse
-                          : isCurrent
-                            ? GOLD_DARK
-                            : colors.textTertiary,
-                        fontWeight: isCurrent ? '700' : '500',
-                      },
-                    ]}
-                  >
-                    {isCompleted ? '✓' : s.setNumber}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }]}>
-            {allComplete
-              ? 'All sets complete!'
-              : `Set ${currentSetIndex + 1} of ${totalSets} · ${setTypeLabel}`}
-          </Text>
         </View>
 
-        {/* ── Input Section ───────────────────────────────────────── */}
+        {/* ── Compact Set Rows (Fitbod-style) ──────────────────── */}
         {currentSet ? (
           <View style={[styles.inputSection, { paddingHorizontal: spacing.base }]}>
             {/* Green flash overlay */}
@@ -815,98 +763,128 @@ export function DrillDownView({
                 },
               ]}
             />
-            {/* Prediction-apply highlight flash */}
-            <Reanimated.View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: '#4CAF50' },
-                highlightAnimStyle,
-              ]}
-            />
 
-            {/* Prediction / Suggestion banner */}
-            {!currentSet.isCompleted && (prediction || suggestion) && (
-              <View style={[styles.suggestionCard, {
-                backgroundColor: prediction
-                  ? prediction.confidence === 'high' ? colors.successLight : prediction.confidence === 'medium' ? colors.warningLight ?? colors.primaryMuted : colors.primaryMuted
-                  : suggestion?.confidence === 'high' ? colors.successLight : colors.primaryMuted,
-                borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md,
-              }]}>
-                {prediction ? (
-                  /* ── Predictive suggestion ── */
-                  <>
-                    <View style={styles.predictionHeader}>
-                      <View style={[
-                        styles.confidenceDot,
-                        { backgroundColor: prediction.confidence === 'high' ? '#4CAF50' : prediction.confidence === 'medium' ? '#FFC107' : '#9E9E9E' },
-                      ]} />
-                      <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: 6, flex: 1 }]}>
-                        {prediction.reasoning}
+            {/* Column headers */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingLeft: 36 }}>
+              <Text style={[typography.caption, { color: colors.textTertiary, flex: 1, textAlign: 'center' }]}>
+                Reps
+              </Text>
+              <Text style={[typography.caption, { color: colors.textTertiary, flex: 1, textAlign: 'center' }]}>
+                {isBodyweight ? 'Added Weight' : `Weight (${unit})`}
+              </Text>
+            </View>
+
+            {/* Set rows */}
+            {exercise.sets.map((s, i) => {
+              const isCurrent = i === currentSetIndex;
+              const isCompleted = s.isCompleted;
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  onPress={() => handleDotPress(i)}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                    paddingVertical: 6,
+                    paddingHorizontal: 4,
+                    borderRadius: radius.md,
+                    backgroundColor: isCurrent ? colors.surfaceSecondary : 'transparent',
+                    borderWidth: isCurrent ? 1.5 : 0,
+                    borderColor: isCurrent ? GOLD_DARK : 'transparent',
+                  }}
+                >
+                  {/* Set number circle */}
+                  <View style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: isCompleted ? colors.success : isCurrent ? GOLD_DARK : colors.surfaceSecondary,
+                    marginRight: 8,
+                  }}>
+                    <Text style={[typography.labelSmall, {
+                      color: isCompleted || isCurrent ? '#FFFFFF' : colors.textTertiary,
+                      fontWeight: '700',
+                    }]}>
+                      {isCompleted ? '✓' : s.setNumber}
+                    </Text>
+                  </View>
+
+                  {/* Reps input */}
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <TextInput
+                      style={{
+                        borderWidth: 1,
+                        borderColor: isCurrent ? (ghostState === 'exceeding' ? GOLD_DARK : colors.border) : colors.borderLight ?? colors.border,
+                        borderRadius: radius.md,
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        fontSize: 18,
+                        fontWeight: '600',
+                        color: isCurrent && ghostState === 'exceeding' ? GOLD_DARK : colors.text,
+                        backgroundColor: isCurrent ? colors.surface : 'transparent',
+                        textAlign: 'center',
+                        fontVariant: ['tabular-nums'] as any,
+                      }}
+                      value={isCurrent ? localReps : (s.reps?.toString() ?? '')}
+                      onChangeText={isCurrent ? setLocalReps : undefined}
+                      onFocus={() => { handleDotPress(i); handleInputFocus('reps'); }}
+                      onBlur={handleInputBlur}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor={colors.textTertiary}
+                      selectTextOnFocus
+                      editable={isCurrent && !isCompleted}
+                    />
+                  </View>
+
+                  {/* Weight input */}
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      style={{
+                        borderWidth: 1,
+                        borderColor: isCurrent ? (ghostState === 'exceeding' ? GOLD_DARK : colors.border) : colors.borderLight ?? colors.border,
+                        borderRadius: radius.md,
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        fontSize: 18,
+                        fontWeight: '600',
+                        color: isCurrent && ghostState === 'exceeding' ? GOLD_DARK : colors.text,
+                        backgroundColor: isCurrent ? colors.surface : 'transparent',
+                        textAlign: 'center',
+                        fontVariant: ['tabular-nums'] as any,
+                      }}
+                      value={isCurrent ? localWeight : (s.weight?.toString() ?? '')}
+                      onChangeText={isCurrent ? setLocalWeight : undefined}
+                      onFocus={() => { handleDotPress(i); handleInputFocus('weight'); }}
+                      onBlur={handleInputBlur}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor={colors.textTertiary}
+                      selectTextOnFocus
+                      editable={isCurrent && !isCompleted}
+                    />
+                    {isBodyweight && isCurrent && !isCompleted && (
+                      <Text style={[typography.caption, { color: colors.textTertiary, textAlign: 'center', marginTop: 2, fontSize: 10 }]}>
+                        Added Weight
                       </Text>
-                    </View>
-                    {predictionApplied ? (
-                      <Text style={[typography.h2, { color: colors.success, textAlign: 'center', marginTop: spacing.xs }]}>
-                        Applied ✓
-                      </Text>
-                    ) : (
-                      <>
-                        <Text style={[typography.h2, {
-                          color: prediction.confidence === 'high' ? '#4CAF50' : prediction.confidence === 'medium' ? '#FFC107' : colors.textSecondary,
-                          textAlign: 'center',
-                          marginTop: spacing.xs,
-                        }]}>
-                          {prediction.weight > 0
-                            ? `${prediction.weight} ${unit} × ${prediction.reps}`
-                            : `${prediction.reps} reps`}
-                        </Text>
-                        {prediction.delta !== 0 && (
-                          <Text style={[typography.labelSmall, { color: '#4CAF50', textAlign: 'center', marginTop: 2 }]}>
-                            ↑{prediction.delta} from last
-                          </Text>
-                        )}
-                        <TouchableOpacity
-                          onPress={handleApplyPrediction}
-                          style={[styles.useSuggestionBtn, {
-                            backgroundColor: prediction.confidence === 'high' ? '#4CAF50' : prediction.confidence === 'medium' ? '#FFC107' : colors.primary,
-                            borderRadius: radius.md, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.base,
-                          }]}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="flash" size={16} color={prediction.confidence === 'medium' ? '#000' : colors.textInverse} />
-                          <Text style={[typography.labelSmall, {
-                            color: prediction.confidence === 'medium' ? '#000' : colors.textInverse,
-                            marginLeft: spacing.xs,
-                          }]}>Use Prediction</Text>
-                        </TouchableOpacity>
-                      </>
                     )}
-                  </>
-                ) : suggestion ? (
-                  /* ── Fallback: existing suggestion engine ── */
-                  <>
-                    <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
-                      Based on your last workout, try:
-                    </Text>
-                    <Text style={[typography.h2, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, textAlign: 'center' }]}>
-                      {suggestion.suggestedWeight} {unit} × {suggestion.suggestedReps} reps
-                    </Text>
-                    <TouchableOpacity
-                      onPress={handleUseSuggestion}
-                      style={[styles.useSuggestionBtn, { backgroundColor: suggestion.confidence === 'high' ? colors.success : colors.primary, borderRadius: radius.md, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.base }]}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="flash" size={16} color={colors.textInverse} />
-                      <Text style={[typography.labelSmall, { color: colors.textInverse, marginLeft: spacing.xs }]}>Use Suggestion</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : null}
-              </View>
-            )}
+                  </View>
+
+                  {/* PR badge */}
+                  {isCompleted && s.isPR && (
+                    <Text style={{ marginLeft: 4, fontSize: 14 }}>🏆</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
 
             {/* Ghost overlay — previous session hint */}
-            {ghost && !currentSet.isCompleted && (
-              <Reanimated.View pointerEvents="none" style={[styles.ghostRow, ghostTextStyle]}>
+            {ghost && currentSet && !currentSet.isCompleted && (
+              <Reanimated.View pointerEvents="none" style={[styles.ghostRow, ghostTextStyle, { marginTop: 4 }]}>
                 <Text style={[styles.ghostLabel, { color: colors.textTertiary }]}>Last time</Text>
                 <Text style={[styles.ghostNumbers, { color: colors.textTertiary }]}>
                   {ghost.weight != null && ghost.weight > 0
@@ -920,161 +898,6 @@ export function DrillDownView({
                   <Reanimated.Text style={[styles.ghostIndicator, { color: GOLD_DARK }]}>↑</Reanimated.Text>
                 )}
               </Reanimated.View>
-            )}
-
-            {/* Weight - Scoreboard style */}
-            <View style={styles.inputBlock}>
-              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
-                WEIGHT ({unit})
-              </Text>
-              <View style={styles.inputRow}>
-                <TouchableOpacity
-                  onPress={() => incrementWeight(-weightStep)}
-                  style={[
-                    styles.bigIncBtn,
-                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                  ]}
-                >
-                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1, marginHorizontal: 14 }}>
-                  <TextInput
-                    style={[
-                      styles.bigInput,
-                      {
-                        color: ghostState === 'exceeding' ? GOLD_DARK : colors.text,
-                        backgroundColor: colors.surface,
-                        borderColor: ghostState === 'exceeding' ? GOLD_DARK : colors.border,
-                        borderRadius: radius.lg,
-                        fontSize: 48,
-                        fontWeight: '700',
-                        letterSpacing: -1,
-                        marginHorizontal: 0,
-                      },
-                    ]}
-                    value={localWeight}
-                    onChangeText={setLocalWeight}
-                    onFocus={() => handleInputFocus('weight')}
-                    onBlur={handleInputBlur}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.textTertiary}
-                    selectTextOnFocus
-                  />
-                  {/* Gold glow shadow overlay */}
-                  {ghostState === 'exceeding' && (
-                    <Reanimated.View
-                      pointerEvents="none"
-                      style={[
-                        StyleSheet.absoluteFill,
-                        styles.goldGlowOverlay,
-                        { borderRadius: radius.lg, borderColor: GOLD_DARK },
-                        goldGlowOverlayStyle,
-                      ]}
-                    />
-                  )}
-                </View>
-                <TouchableOpacity
-                  onPress={() => incrementWeight(weightStep)}
-                  style={[
-                    styles.bigIncBtn,
-                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                  ]}
-                >
-                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Reps - Scoreboard style */}
-            <View style={[styles.inputBlock, { marginTop: spacing.xl }]}>
-              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
-                REPS
-              </Text>
-              <View style={styles.inputRow}>
-                <TouchableOpacity
-                  onPress={() => incrementReps(-1)}
-                  style={[
-                    styles.bigIncBtn,
-                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                  ]}
-                >
-                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1, marginHorizontal: 14 }}>
-                  <TextInput
-                    style={[
-                      styles.bigInput,
-                      {
-                        color: ghostState === 'exceeding' ? GOLD_DARK : colors.text,
-                        backgroundColor: colors.surface,
-                        borderColor: ghostState === 'exceeding' ? GOLD_DARK : colors.border,
-                        borderRadius: radius.lg,
-                        fontSize: 48,
-                        fontWeight: '700',
-                        letterSpacing: -1,
-                        marginHorizontal: 0,
-                      },
-                    ]}
-                    value={localReps}
-                    onChangeText={setLocalReps}
-                    onFocus={() => handleInputFocus('reps')}
-                    onBlur={handleInputBlur}
-                    keyboardType="number-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.textTertiary}
-                    selectTextOnFocus
-                  />
-                  {/* Gold glow shadow overlay */}
-                  {ghostState === 'exceeding' && (
-                    <Reanimated.View
-                      pointerEvents="none"
-                      style={[
-                        StyleSheet.absoluteFill,
-                        styles.goldGlowOverlay,
-                        { borderRadius: radius.lg, borderColor: GOLD_DARK },
-                        goldGlowOverlayStyle,
-                      ]}
-                    />
-                  )}
-                </View>
-                <TouchableOpacity
-                  onPress={() => incrementReps(1)}
-                  style={[
-                    styles.bigIncBtn,
-                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                  ]}
-                >
-                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Completed sets summary chips */}
-            {completedCount > 0 && (
-              <View style={[styles.completedSummary, { marginTop: spacing.lg }]}>
-                {exercise.sets
-                  .filter((s) => s.isCompleted)
-                  .map((s) => (
-                    <View
-                      key={s.id}
-                      style={[
-                        styles.completedSetChip,
-                        {
-                          backgroundColor: s.isPR ? colors.warningLight : colors.successLight,
-                          borderRadius: radius.sm,
-                          paddingHorizontal: spacing.sm,
-                          paddingVertical: spacing.xs,
-                        },
-                      ]}
-                    >
-                      <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
-                        {s.weight ?? 0} × {s.reps ?? 0}
-                        {s.isPR ? ' 🏆' : ''}
-                      </Text>
-                    </View>
-                  ))}
-              </View>
             )}
           </View>
         ) : (
