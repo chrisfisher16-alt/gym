@@ -18,7 +18,8 @@ import {
   activeToCompleted,
 } from '../lib/workout-utils';
 import { preloadExerciseImages } from '../lib/exercise-image-preloader';
-import { getPreviousSetData } from '../lib/suggested-load';
+import { getPreviousSetData, getBeginnerSuggestion, type UserBodyMetrics } from '../lib/suggested-load';
+import { useProfileStore } from './profile-store';
 import { getDateString } from '../lib/nutrition-utils';
 
 // ── Persist Debounce ─────────────────────────────────────────────────
@@ -359,6 +360,13 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   startWorkout: ({ name, programId, dayId, exercises }) => {
     const history = get().history;
+    const profile = useProfileStore.getState().profile;
+    const isMetric = profile.unitPreference === 'metric';
+    const userMetrics: UserBodyMetrics | undefined =
+      profile.weightKg || profile.gender || profile.trainingExperience
+        ? { weightKg: profile.weightKg, gender: profile.gender, trainingExperience: profile.trainingExperience as UserBodyMetrics['trainingExperience'] }
+        : undefined;
+
     const session: ActiveWorkoutSession = {
       id: generateId('ws'),
       programId,
@@ -367,6 +375,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       startedAt: new Date().toISOString(),
       exercises: exercises.map((e, index) => {
         const libExercise = get().exercises.find((ex) => ex.id === e.exerciseId);
+        const isBodyweight = libExercise?.isBodyweight || libExercise?.equipment === 'bodyweight';
+        // Beginner suggestion fallback (computed once per exercise, not per set)
+        const beginnerFallback = userMetrics
+          ? getBeginnerSuggestion(e.exerciseId, e.targetReps, userMetrics, !!isBodyweight, isMetric)
+          : null;
+
         return {
           id: generateId('ae'),
           exerciseId: e.exerciseId,
@@ -374,13 +388,16 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           targetReps: e.targetReps,
           sets: Array.from({ length: e.targetSets }, (_, i) => {
             const prev = getPreviousSetData(e.exerciseId, i + 1, history);
+            const fallback = !prev && beginnerFallback
+              ? { weight: beginnerFallback.suggestedWeight, reps: beginnerFallback.suggestedReps }
+              : null;
             return {
               id: generateId('set'),
               setNumber: i + 1,
               setType: 'working' as const,
               isCompleted: false,
               isPR: false,
-              ...(prev ? { weight: prev.weight, reps: prev.reps } : {}),
+              ...(prev ? { weight: prev.weight, reps: prev.reps } : fallback ? { weight: fallback.weight, reps: fallback.reps } : {}),
             };
           }),
           supersetGroupId: e.supersetGroupId,
@@ -676,6 +693,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   addExerciseToSession: (exercise, targetSets = 3, setType = 'working') => {
     const history = get().history;
+    const profile = useProfileStore.getState().profile;
+    const isMetric = profile.unitPreference === 'metric';
+    const userMetrics: UserBodyMetrics | undefined =
+      profile.weightKg || profile.gender || profile.trainingExperience
+        ? { weightKg: profile.weightKg, gender: profile.gender, trainingExperience: profile.trainingExperience as UserBodyMetrics['trainingExperience'] }
+        : undefined;
+    const isBodyweight = exercise.isBodyweight || exercise.equipment === 'bodyweight';
+    const beginnerFallback = userMetrics
+      ? getBeginnerSuggestion(exercise.id, '8-12', userMetrics, !!isBodyweight, isMetric)
+      : null;
+
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -685,13 +713,16 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         exerciseName: exercise.name,
         sets: Array.from({ length: targetSets }, (_, i) => {
           const prev = getPreviousSetData(exercise.id, i + 1, history);
+          const fallback = !prev && beginnerFallback
+            ? { weight: beginnerFallback.suggestedWeight, reps: beginnerFallback.suggestedReps }
+            : null;
           return {
             id: generateId('set'),
             setNumber: i + 1,
             setType: setType as import('@health-coach/shared').SetType,
             isCompleted: false,
             isPR: false,
-            ...(prev ? { weight: prev.weight, reps: prev.reps } : {}),
+            ...(prev ? { weight: prev.weight, reps: prev.reps } : fallback ? { weight: fallback.weight, reps: fallback.reps } : {}),
           };
         }),
         restSeconds: exercise.defaultRestSeconds,
