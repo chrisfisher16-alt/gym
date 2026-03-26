@@ -385,6 +385,8 @@ function executeUpdateTargets(action: UpdateTargetsAction): { success: boolean; 
   if (action.protein != null) changes.push(`${action.protein}g protein`);
   if (action.carbs != null) changes.push(`${action.carbs}g carbs`);
   if (action.fat != null) changes.push(`${action.fat}g fat`);
+  if (action.water_oz != null) changes.push(`Water: ${action.water_oz}oz`);
+  if (action.fiber != null) changes.push(`Fiber: ${action.fiber}g`);
 
   return { success: true, message: `Updated targets: ${changes.join(', ')}` };
 }

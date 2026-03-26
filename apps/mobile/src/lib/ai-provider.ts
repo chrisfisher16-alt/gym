@@ -57,6 +57,7 @@ export interface AICallOptions {
   cacheableSystem?: CacheableSystemBlock[];
   onToken?: (token: string) => void;
   signal?: AbortSignal;  // For cancellation/timeout
+  max_tokens?: number;   // Override the default max_tokens per call
 }
 
 // ── Timeout / Abort Support ─────────────────────────────────────────
@@ -183,6 +184,18 @@ export async function setAIConfig(config: AIConfig): Promise<void> {
   await SecureStore.setItemAsync(SECURE_AI_CONFIG_KEY, JSON.stringify(config));
 }
 
+/**
+ * Invalidate the in-memory cache only — forces the next getAIConfig() call
+ * to re-read from SecureStore. Safe to call on every tab mount.
+ */
+export function invalidateConfigCache(): void {
+  cachedConfig = null;
+}
+
+/**
+ * Fully clear both the in-memory cache AND the persisted SecureStore entry.
+ * Use only for explicit user-initiated resets (e.g. "Reset AI Settings").
+ */
 export function clearConfigCache(): void {
   cachedConfig = null;
   SecureStore.deleteItemAsync(SECURE_AI_CONFIG_KEY).catch(() => {});
@@ -312,7 +325,7 @@ export async function callOpenAICompatible(
             ),
       })),
       temperature: 0.7,
-      max_tokens: 2048,
+      max_tokens: options?.max_tokens ?? 2048,
     };
 
     const response = await fetch(baseUrl, {
@@ -331,7 +344,7 @@ export async function callOpenAICompatible(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
       }
       if (response.status === 529 || response.status === 503) {
         throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
@@ -406,7 +419,7 @@ export async function callClaudeAPI(
   const body: Record<string, unknown> = {
     model,
     messages: nonSystemMessages,
-    max_tokens: 2048,
+    max_tokens: options?.max_tokens ?? 2048,
   };
 
   if (useCaching) {
@@ -438,7 +451,7 @@ export async function callClaudeAPI(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
       }
       if (response.status === 529 || response.status === 503) {
         throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
@@ -531,7 +544,7 @@ async function callClaudeAPIStreaming(
   const body: Record<string, unknown> = {
     model,
     messages: nonSystemMessages,
-    max_tokens: 2048,
+    max_tokens: options.max_tokens ?? 2048,
     stream: true,
   };
   if (systemField) body.system = systemField;
@@ -555,7 +568,7 @@ async function callClaudeAPIStreaming(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
       }
       if (response.status === 529 || response.status === 503) {
         throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
@@ -686,7 +699,7 @@ async function callOpenAICompatibleStreaming(
     model,
     messages: allMessages,
     temperature: 0.7,
-    max_tokens: 2048,
+    max_tokens: options.max_tokens ?? 2048,
     stream: true,
   };
 
@@ -709,7 +722,7 @@ async function callOpenAICompatibleStreaming(
         throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`Model "" not found. Please check your model name in AI Settings.`);
+        throw new Error(`Model "${model}" not found. Please check your model name in AI Settings.`);
       }
       if (response.status === 529 || response.status === 503) {
         throw new Error('AI service is temporarily overloaded. Please try again in a moment.');
@@ -809,10 +822,29 @@ export async function callAI(
   // Streaming calls are NOT retried — a retry after partial token delivery
   // would send duplicate tokens to the UI.
   if (options?.onToken) {
-    if (config.provider === 'claude') {
-      return callClaudeAPIStreaming(messages, config, options);
+    try {
+      if (config.provider === 'claude') {
+        return await callClaudeAPIStreaming(messages, config, options);
+      }
+      return await callOpenAICompatibleStreaming(messages, config, options);
+    } catch (streamErr: unknown) {
+      // If streaming failed because response.body is null (common in React
+      // Native), fall back to a non-streaming call and deliver the full
+      // response as a single token so the caller still gets content.
+      const msg = streamErr instanceof Error ? streamErr.message : '';
+      if (msg.includes('Streaming not supported') || msg.includes('response body is null')) {
+        console.warn('[AI] Streaming unavailable, falling back to non-streaming call');
+        const result = config.provider === 'claude'
+          ? await callClaudeAPI(messages, config, options)
+          : await callOpenAICompatible(messages, config, options);
+        // Deliver the full response as a single token
+        if (result.content && options.onToken) {
+          options.onToken(result.content);
+        }
+        return result;
+      }
+      throw streamErr;
     }
-    return callOpenAICompatibleStreaming(messages, config, options);
   }
 
   // Non-streaming calls can safely retry on transient errors.

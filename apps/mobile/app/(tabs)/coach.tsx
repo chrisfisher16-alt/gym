@@ -11,7 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { clearConfigCache } from '../../src/lib/ai-provider';
+import { invalidateConfigCache } from '../../src/lib/ai-provider';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,6 +33,8 @@ export default function CoachTab() {
   const { colors, spacing, typography, radius } = useTheme();
   const [inputText, setInputText] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [lastFailedContext, setLastFailedContext] = useState<CoachContext | undefined>(undefined);
+  const [lastFailedImage, setLastFailedImage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pendingContextRef = useRef<CoachContext | null>(null);
 
@@ -60,7 +62,7 @@ export default function CoachTab() {
   } = useCoachStore();
 
   useEffect(() => {
-    clearConfigCache();
+    invalidateConfigCache();
   }, []);
 
   useEffect(() => {
@@ -123,10 +125,18 @@ export default function CoachTab() {
         const usage = await checkAIMessageLimit();
         setAIUsage(usage);
         if (usage.allowed) {
-          incrementUsage('ai_messages');
           setInputText('');
           setAttachedImage(null);
-          sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+          setLastFailedContext(contextToSend);
+          setLastFailedImage(imageToSend);
+          try {
+            await sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+            incrementUsage('ai_messages');
+            setLastFailedContext(undefined);
+            setLastFailedImage(null);
+          } catch {
+            // Store sets error state; UI already shows error banner
+          }
         } else {
           crossPlatformAlert(
             'Daily Message Limit Reached',
@@ -142,44 +152,55 @@ export default function CoachTab() {
 
       setInputText('');
       setAttachedImage(null);
-      sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+      setLastFailedContext(contextToSend);
+      setLastFailedImage(imageToSend);
+      try {
+        await sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
+        setLastFailedContext(undefined);
+        setLastFailedImage(null);
+      } catch {
+        // Store sets error state; UI already shows error banner
+      }
     } finally {
       isSending.current = false;
     }
   }, [inputText, attachedImage, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
 
   const handlePromptSelect = useCallback(
-    (prompt: string) => {
+    async (prompt: string) => {
       if (isLoading) return;
 
       // Check AI message limit for free users
       if (!canAccess('unlimited_ai') && tier === 'free') {
-        checkAIMessageLimit().then((usage) => {
-          setAIUsage(usage);
-          if (usage.allowed) {
+        const usage = await checkAIMessageLimit();
+        setAIUsage(usage);
+        if (usage.allowed) {
+          try {
+            await sendMessage(prompt);
             incrementUsage('ai_messages');
-            sendMessage(prompt);
-          } else {
-            crossPlatformAlert(
-              'Daily Message Limit Reached',
-              'You\'ve used all 5 free AI messages today. Upgrade for unlimited coaching.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_ai', source: 'coach_tab' }) },
-              ],
-            );
+          } catch {
+            // Store sets error state; UI already shows error banner
           }
-        });
+        } else {
+          crossPlatformAlert(
+            'Daily Message Limit Reached',
+            'You\'ve used all 5 free AI messages today. Upgrade for unlimited coaching.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_ai', source: 'coach_tab' }) },
+            ],
+          );
+        }
         return;
       }
 
-      sendMessage(prompt);
+      await sendMessage(prompt);
     },
     [isLoading, sendMessage, tier, canAccess, showPaywall],
   );
 
-  const handleNewConversation = useCallback(() => {
-    startConversation();
+  const handleNewConversation = useCallback(async () => {
+    await startConversation();
   }, [startConversation]);
 
   // Scroll to bottom when messages change or streaming content updates

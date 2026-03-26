@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { CoachContext } from '@health-coach/shared';
 import * as coachApi from '../lib/coach-api';
 import type { AIMessage, AIContentBlock } from '../lib/ai-provider';
@@ -94,6 +95,38 @@ function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const COACH_IMAGES_DIR = `${FileSystem.documentDirectory}coach-images/`;
+
+/**
+ * Copy an image from a volatile cache URI to a persistent directory
+ * so it survives app restarts.
+ */
+async function persistImage(cacheUri: string): Promise<string> {
+  const filename = cacheUri.split('/').pop() || `coach-${Date.now()}.jpg`;
+  const dirInfo = await FileSystem.getInfoAsync(COACH_IMAGES_DIR);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(COACH_IMAGES_DIR, { intermediates: true });
+  }
+  const persistentUri = `${COACH_IMAGES_DIR}${filename}`;
+  await FileSystem.copyAsync({ from: cacheUri, to: persistentUri });
+  return persistentUri;
+}
+
+/**
+ * Delete orphaned image files for messages that are about to be truncated.
+ */
+async function cleanupOrphanedImages(droppedMessages: CoachMessage[]): Promise<void> {
+  for (const msg of droppedMessages) {
+    if (msg.imageUri && msg.imageUri.startsWith(COACH_IMAGES_DIR)) {
+      try {
+        await FileSystem.deleteAsync(msg.imageUri, { idempotent: true });
+      } catch {
+        // Best-effort cleanup — ignore failures
+      }
+    }
+  }
+}
+
 /**
  * Convert coach messages to AIMessage format for the provider.
  * For messages with images, we only include the text content in history
@@ -156,8 +189,8 @@ async function cleanupOldCaches(): Promise<void> {
     if (keysToDelete.length > 0) {
       await Promise.all(keysToDelete.map((k) => AsyncStorage.removeItem(k)));
     }
-  } catch {
-    // Never disrupt app startup
+  } catch (error) {
+    console.warn('[CoachStore] Cache cleanup failed:', error);
   }
 }
 
@@ -202,7 +235,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
 
       // Fire-and-forget: clean up stale cache entries
       void cleanupOldCaches();
-    } catch {
+    } catch (error) {
+      console.error('[CoachStore] Failed to initialize from storage — conversation history may be lost:', error);
       set({ isInitialized: true });
     }
   },
@@ -248,13 +282,23 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       }));
     }
 
+    // Persist image from cache to permanent storage before attaching to message
+    let persistedImageUri = imageUri;
+    if (imageUri) {
+      try {
+        persistedImageUri = await persistImage(imageUri);
+      } catch (err) {
+        console.warn('[CoachStore] Failed to persist image, using original URI:', err);
+      }
+    }
+
     // Add user message to local state immediately
     const userMessage: CoachMessage = {
       id: generateId('msg'),
       conversation_id: conversation.id,
       role: 'user',
       content: text,
-      imageUri,
+      imageUri: persistedImageUri,
       created_at: new Date().toISOString(),
     };
 
@@ -266,21 +310,22 @@ export const useCoachStore = create<CoachState>((set, get) => ({
 
     // If there's an image, read it as base64 and build multipart content
     let messageContent: string | AIContentBlock[] = text;
-    if (imageUri) {
+    if (persistedImageUri) {
       try {
-        const FileSystem = await import('expo-file-system');
+        // Use the persisted URI for reading — it's in stable storage
+        const uriToRead = persistedImageUri;
 
         // Validate image size before encoding (max 4MB)
         const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
-        const fileInfo = await FileSystem.getInfoAsync(imageUri);
+        const fileInfo = await FileSystem.getInfoAsync(uriToRead);
         if (fileInfo.exists && 'size' in fileInfo && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
           throw new Error('Image too large. Please select a smaller image (under 4MB).');
         }
 
-        const base64data = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' as any });
+        const base64data = await FileSystem.readAsStringAsync(uriToRead, { encoding: 'base64' as any });
 
         // Detect mime type from file extension
-        const ext = imageUri.split('.').pop()?.toLowerCase();
+        const ext = uriToRead.split('.').pop()?.toLowerCase();
         let mediaType: string;
         switch (ext) {
           case 'png':  mediaType = 'image/png';  break;
@@ -377,9 +422,21 @@ export const useCoachStore = create<CoachState>((set, get) => ({
 
       // Persist
       const updatedState = get();
+      const allMessages = updatedState.messages;
+      const messagesToKeep = allMessages.slice(-500);
+
+      // Clean up image files for messages being truncated
+      if (allMessages.length > 500) {
+        const droppedMessages = allMessages.slice(0, allMessages.length - 500);
+        void cleanupOrphanedImages(droppedMessages);
+      }
+
+      // Sync in-memory state to match the truncated list
+      set({ messages: messagesToKeep });
+
       await Promise.all([
         // Keep last 500 messages in storage — older messages are not persisted
-        AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(updatedState.messages.slice(-500))),
+        AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messagesToKeep)),
         AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(updatedState.conversations)),
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(updatedConversation)),
       ]);
@@ -439,8 +496,11 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       error: null,
     }));
 
-    await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(conversation));
-    await AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify([conversation, ...get().conversations.filter(c => c.id !== conversation.id)]));
+    const updatedConversations = get().conversations;
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(conversation)),
+      AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(updatedConversations)),
+    ]);
   },
 
   loadConversation: async (conversationId: string) => {
@@ -464,7 +524,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
           error: null,
         };
       });
-    } catch {
+    } catch (error) {
+      console.error('[CoachStore] Failed to load conversation:', error);
       // Fall back to whatever is in state
       set({
         activeConversation: conversation,
@@ -480,8 +541,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       if (stored) {
         set({ conversations: JSON.parse(stored) });
       }
-    } catch {
-      // Ignore
+    } catch (error) {
+      console.error('[CoachStore] Failed to load history:', error);
     }
   },
 
@@ -540,6 +601,10 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       updatedMessages[msgIdx] = { ...message, actions: updatedActions };
 
       set({ messages: updatedMessages });
+
+      // Persist failed action state (matches success path)
+      const messagesToKeep = updatedMessages.slice(-500);
+      await AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messagesToKeep)).catch(console.warn);
     }
   },
 }));
