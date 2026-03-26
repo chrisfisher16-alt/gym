@@ -21,6 +21,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { formatDuration } from '../../lib/workout-utils';
 import { workoutFinished } from '../../lib/haptics';
@@ -275,7 +276,17 @@ export function SessionReplay({ session, onComplete, onSkip }: SessionReplayProp
   const [visibleCardCount, setVisibleCardCount] = useState(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const exerciseCount = session.exercises.length;
+  const completedExercises = useMemo(() =>
+    session.exercises.filter(e => e.sets.length > 0),
+    [session.exercises]
+  );
+  const skippedExercises = useMemo(() =>
+    session.exercises.filter(e => e.sets.length === 0),
+    [session.exercises]
+  );
+  const [skippedExpanded, setSkippedExpanded] = useState(false);
+
+  const exerciseCount = completedExercises.length;
   const hasPRs = session.prCount > 0;
 
   // Clean up all timers
@@ -337,10 +348,10 @@ export function SessionReplay({ session, onComplete, onSkip }: SessionReplayProp
   const handleSkip = useCallback(() => {
     clearTimers();
     setSkipped(true);
-    setVisibleCardCount(Math.min(exerciseCount, 8));
+    setVisibleCardCount(Math.min(completedExercises.length, 8));
     setPhase('done');
     onSkip();
-  }, [exerciseCount, clearTimers, onSkip]);
+  }, [completedExercises.length, clearTimers, onSkip]);
 
   // Tap anywhere to fast-forward
   const handleTapToSkip = useCallback(() => {
@@ -369,14 +380,14 @@ export function SessionReplay({ session, onComplete, onSkip }: SessionReplayProp
   const showCelebration = phase === 'celebration' || phase === 'done';
   const showDoneButton = phase === 'done';
 
-  // Only render visible cards for performance
+  // Only render visible cards for performance (completed exercises only)
   const visibleExercises = useMemo(() => {
-    if (skipped) return session.exercises.slice(0, 8);
-    return session.exercises.slice(0, visibleCardCount);
-  }, [session.exercises, visibleCardCount, skipped]);
+    if (skipped) return completedExercises.slice(0, 8);
+    return completedExercises.slice(0, visibleCardCount);
+  }, [completedExercises, visibleCardCount, skipped]);
 
-  // Overflow indicator
-  const hiddenCount = session.exercises.length > 8 ? session.exercises.length - 8 : 0;
+  // Overflow indicator (only from completed exercises)
+  const hiddenCount = completedExercises.length > 8 ? completedExercises.length - 8 : 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -435,6 +446,60 @@ export function SessionReplay({ session, onComplete, onSkip }: SessionReplayProp
                 >
                   +{hiddenCount} more exercise{hiddenCount !== 1 ? 's' : ''}
                 </Text>
+              </Animated.View>
+            )}
+
+            {/* Skipped exercises collapsible row */}
+            {skippedExercises.length > 0 && (phase === 'done' || skipped || phase === 'stats' || phase === 'celebration') && (
+              <Animated.View entering={skipped ? FadeIn.duration(100) : FadeIn.delay(Math.min(visibleCardCount, 8) * CARD_STAGGER_MS + 200)}>
+                <TouchableOpacity
+                  onPress={() => setSkippedExpanded(prev => !prev)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.skippedRow,
+                    {
+                      backgroundColor: colors.surfaceSecondary,
+                      borderRadius: radius.md,
+                      marginTop: spacing.sm,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.caption, { color: colors.textTertiary, flex: 1 }]}>
+                    {skippedExercises.length} exercise{skippedExercises.length !== 1 ? 's' : ''} skipped
+                  </Text>
+                  <Ionicons
+                    name={skippedExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.textTertiary}
+                  />
+                </TouchableOpacity>
+
+                {skippedExpanded && (
+                  <Animated.View entering={FadeIn.duration(200)} style={{ marginTop: spacing.xs }}>
+                    {skippedExercises.map((exercise, idx) => (
+                      <View
+                        key={exercise.exerciseId + '-skipped-' + idx}
+                        style={[
+                          styles.skippedItem,
+                          { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
+                        ]}
+                      >
+                        <Ionicons
+                          name="remove-circle-outline"
+                          size={16}
+                          color={colors.textTertiary}
+                          style={{ marginRight: spacing.xs }}
+                        />
+                        <Text
+                          style={[typography.caption, { color: colors.textTertiary }]}
+                          numberOfLines={1}
+                        >
+                          {exercise.exerciseName}
+                        </Text>
+                      </View>
+                    ))}
+                  </Animated.View>
+                )}
               </Animated.View>
             )}
           </ScrollView>
@@ -606,6 +671,16 @@ const styles = StyleSheet.create({
     // outside tapArea so it doesn't trigger skip
   },
   doneButton: {
+    alignItems: 'center',
+  },
+  skippedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  skippedItem: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
 });

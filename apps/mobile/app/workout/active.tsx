@@ -1150,8 +1150,6 @@ export default function ActiveWorkoutScreen() {
           animationType="fade"
           onRequestClose={() => {
             setShowCooldownSuggestion(false);
-            setCooldownDismissed(true);
-            proceedToFinish();
           }}
         >
           <View style={[styles.cooldownOverlay]}>
@@ -1190,6 +1188,18 @@ export default function ActiveWorkoutScreen() {
                   <Ionicons name="add-circle-outline" size={20} color={colors.textInverse} />
                   <Text style={[typography.label, { color: colors.textInverse, marginLeft: 8 }]}>
                     Add Cooldown Exercises
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowCooldownSuggestion(false)}
+                  style={[
+                    styles.cooldownBtn,
+                    { backgroundColor: 'transparent', borderRadius: radius.md },
+                  ]}
+                >
+                  <Ionicons name="arrow-back-outline" size={18} color={colors.textSecondary} />
+                  <Text style={[typography.label, { color: colors.textSecondary, marginLeft: 8 }]}>
+                    Return to Workout
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
