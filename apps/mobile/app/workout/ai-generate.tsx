@@ -16,6 +16,7 @@ import { Card } from '../../src/components/ui';
 import { sendAIMessage, type AIClientResponse } from '../../src/lib/ai-client';
 import type { AIMessage } from '../../src/lib/ai-provider';
 import { useWorkoutStore } from '../../src/stores/workout-store';
+import { fuzzyMatch } from '../../src/lib/fuzzy-search';
 import { useProfileStore } from '../../src/stores/profile-store';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
@@ -156,6 +157,24 @@ When proposing a workout, wrap the JSON in ~~~workout fences:
 You can include natural language before and/or after the workout block. Always include the ~~~workout block whenever you are proposing or updating a workout.`;
 }
 
+// ── Exercise matching ──────────────────────────────────────────────
+
+function findExerciseMatch(name: string, exercises: { id: string; name: string }[]) {
+  // 1. Exact match (case-insensitive)
+  const exact = exercises.find(
+    (e) => e.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (exact) return exact;
+
+  // 2. Fuzzy match — take highest scoring above threshold
+  const scored = exercises
+    .map((e) => ({ exercise: e, score: fuzzyMatch(name, e.name) }))
+    .filter(({ score }) => score > 0.4)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.exercise;
+}
+
 // ── Parsing ────────────────────────────────────────────────────────
 
 function parseWorkoutFromResponse(content: string): ParsedWorkout | null {
@@ -167,12 +186,7 @@ function parseWorkoutFromResponse(content: string): ParsedWorkout | null {
     return {
       name: data.name,
       exercises: data.exercises.map((e: any) => {
-        const libMatch = library.find(
-          (lib) =>
-            lib.name.toLowerCase() === e.name.toLowerCase() ||
-            lib.name.toLowerCase().includes(e.name.toLowerCase()) ||
-            e.name.toLowerCase().includes(lib.name.toLowerCase()),
-        );
+        const libMatch = findExerciseMatch(e.name, library);
         return {
           exerciseId: libMatch?.id ?? `custom_${e.name.toLowerCase().replace(/\s+/g, '_')}`,
           exerciseName: libMatch?.name ?? e.name,

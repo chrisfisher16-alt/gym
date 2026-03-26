@@ -10,7 +10,7 @@ import { useActiveWorkout } from '../../../src/hooks/useActiveWorkout';
 import { Card, Badge, Button } from '../../../src/components/ui';
 import { useEntitlement } from '../../../src/hooks/useEntitlement';
 import { usePaywall } from '../../../src/hooks/usePaywall';
-import { checkWorkoutLogLimit } from '../../../src/lib/usage-limits';
+import { checkWorkoutLogLimit, incrementUsage } from '../../../src/lib/usage-limits';
 import {
   DayType,
   DAY_TYPE_LABELS,
@@ -78,6 +78,7 @@ export default function ProgramDetailScreen() {
     // Free tier — check usage
     checkWorkoutLogLimit().then((usage) => {
       if (usage.allowed) {
+        incrementUsage('workout_logs');
         doStart();
       } else {
         crossPlatformAlert(

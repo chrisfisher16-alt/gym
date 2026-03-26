@@ -45,6 +45,7 @@ export function ExerciseInfoSheet({ visible, exercise, onClose }: ExerciseInfoSh
       .map((s) => {
         const ex = s.exercises.find((e) => e.exerciseId === exercise.id)!;
         const workingSets = ex.sets.filter((set) => set.setType === 'working');
+        if (workingSets.length === 0) return null;
         const topSet = workingSets.reduce(
           (best, set) => ((set.weight ?? 0) > (best.weight ?? 0) ? set : best),
           workingSets[0],
@@ -55,7 +56,8 @@ export function ExerciseInfoSheet({ visible, exercise, onClose }: ExerciseInfoSh
           topWeight: topSet?.weight,
           topReps: topSet?.reps,
         };
-      });
+      })
+      .filter(Boolean);
   }, [exercise?.id, history]);
 
   const handleWatchVideo = () => {

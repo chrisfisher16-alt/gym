@@ -39,6 +39,7 @@ export interface SetRowProps {
   onRemove: (setId: string) => void;
   onRPE: (setId: string, rpe: number) => void;
   onWeightCascade?: (setIndex: number, weight: number, reps: number) => void;
+  equipmentType?: string;
 }
 
 export const SetRow = React.memo(function SetRow({
@@ -51,10 +52,16 @@ export const SetRow = React.memo(function SetRow({
   onRemove,
   onRPE,
   onWeightCascade,
+  equipmentType,
 }: SetRowProps) {
   const { colors, spacing, radius, typography } = useTheme();
   const unitPreference = useProfileStore((s) => s.profile.unitPreference);
   const unitLabel = unitPreference === 'metric' ? 'kg' : 'lbs';
+  const weightPlaceholder = useMemo(() => {
+    if (equipmentType === 'dumbbell') return `${unitLabel} each`;
+    if (equipmentType === 'barbell') return `${unitLabel} (bar)`;
+    return unitLabel;
+  }, [equipmentType, unitLabel]);
   const snapUnit = unitPreference === 'metric' ? 'kg' : 'lb' as const;
   const [localWeight, setLocalWeight] = useState(set.weight?.toString() ?? '');
   const [localReps, setLocalReps] = useState(set.reps?.toString() ?? '');
@@ -125,7 +132,6 @@ export const SetRow = React.memo(function SetRow({
       const r = parseInt(localReps, 10);
       if (!isNaN(r)) {
         onLog(set.id, newVal, r);
-        onWeightCascade?.(setIndex, newVal, r);
       }
     },
     accelerationStages: weightStages,
@@ -210,7 +216,6 @@ export const SetRow = React.memo(function SetRow({
       const r = parseInt(localReps, 10);
       if (!isNaN(r)) {
         onLog(set.id, prevWeight, r);
-        onWeightCascade?.(setIndex, prevWeight, r);
       }
     }
   }, [parsePreviousWeight, localWeight, localReps, set.id, setIndex, onLog, onWeightCascade, weightHighlightAnim]);
@@ -235,7 +240,6 @@ export const SetRow = React.memo(function SetRow({
     const r = parseInt(localReps, 10);
     if (!isNaN(w) && !isNaN(r)) {
       onLog(set.id, w, r);
-      onWeightCascade?.(setIndex, w, r);
     }
   };
 
@@ -356,7 +360,7 @@ export const SetRow = React.memo(function SetRow({
                   value={localWeight}
                   onChangeText={handleWeightChange}
                   keyboardType="decimal-pad"
-                  placeholder={unitLabel}
+                  placeholder={weightPlaceholder}
                   placeholderTextColor={colors.textTertiary}
                   selectTextOnFocus
                 />
@@ -594,8 +598,8 @@ const styles = StyleSheet.create({
   },
   prBadge: {
     position: 'absolute',
-    right: 2,
-    top: 2,
+    right: -8,
+    top: -8,
   },
   incrementOverlay: {
     ...StyleSheet.absoluteFillObject,

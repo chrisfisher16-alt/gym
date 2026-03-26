@@ -34,6 +34,7 @@ export function RestTimerOverlay() {
     isRestTimerActive,
     restSecondsLeft,
     restTimerDuration,
+    restTimerOriginalDuration,
     clearRestTimer,
     startRestTimer,
     extendRestTimer,
@@ -57,8 +58,9 @@ export function RestTimerOverlay() {
     if (restSecondsLeft === 0 && isRestTimerActive) {
       warningNotification();
       playTimerComplete();
+      setTimeout(clearRestTimer, 200); // Delay clear to let async audio start playing
     }
-  }, [restSecondsLeft, isRestTimerActive]);
+  }, [restSecondsLeft, isRestTimerActive, clearRestTimer]);
 
   // ── Callbacks for runOnJS (must be before early return) ────────
   const onExtend = useCallback(() => {
@@ -124,7 +126,8 @@ export function RestTimerOverlay() {
 
   if (!isRestTimerActive) return null;
 
-  const progress = restTimerDuration > 0 ? restSecondsLeft / restTimerDuration : 0;
+  const progressDenom = restTimerOriginalDuration > 0 ? restTimerOriginalDuration : restTimerDuration;
+  const progress = Math.min(1, progressDenom > 0 ? restSecondsLeft / progressDenom : 0);
   const nextExercise = activeSession?.exercises[(activeSession.currentExerciseIndex ?? 0) + 1];
   const formatPreset = (s: number) => (s >= 120 ? `${s / 60}m` : `${s}s`);
 

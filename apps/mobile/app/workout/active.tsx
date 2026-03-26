@@ -101,6 +101,7 @@ export default function ActiveWorkoutScreen() {
     setCurrentExerciseIndex,
     defaultRestSeconds,
     setDefaultRestSeconds,
+    cascadeWeight,
   } = useActiveWorkout();
 
   // viewMode kept for potential future use but drill-down replaces focus
@@ -891,6 +892,7 @@ export default function ActiveWorkoutScreen() {
                 }
               }}
               onFinishWorkout={handleFinish}
+              onCascadeWeight={cascadeWeight}
               onReplaceExercise={(ex) => setSwapModalExercise(ex)}
               supersetInfo={(() => {
                 const ex = activeSession.exercises[drilledExerciseIndex];

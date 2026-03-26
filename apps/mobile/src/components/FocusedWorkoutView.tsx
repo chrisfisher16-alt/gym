@@ -90,7 +90,7 @@ export function FocusedWorkoutView({
 
   // ── Exercise library entry for illustration ───────────────────────
   const allExercises = useWorkoutStore((s) => s.exercises);
-  const storeDefaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
+  const getExerciseRestTime = useWorkoutStore((s) => s.getExerciseRestTime);
   const exerciseLib = useMemo(
     () => allExercises.find((e) => e.id === exercise.exerciseId),
     [allExercises, exercise.exerciseId],
@@ -199,8 +199,8 @@ export function FocusedWorkoutView({
   // ── Log Set handler ────────────────────────────────────────────────
   const handleLogSet = useCallback(() => {
     if (isLoggingRef.current) return;
-    isLoggingRef.current = true;
     if (!currentSet) return;
+    isLoggingRef.current = true;
 
     // Validate inputs based on exercise type
     if (isTimeBased) {
@@ -260,9 +260,9 @@ export function FocusedWorkoutView({
       const nextMember = supersetMembers[nextMemberIdx];
 
       // Check if we just completed a full round (cycled back to first member)
-      if (nextMemberIdx === 0) {
-        // Full round done - start rest timer: exercise-specific → store default → 90s
-        const restTime = exercise.restSeconds ?? storeDefaultRestSeconds ?? 90;
+      if (nextMemberIdx === 0 && exercise.restTimerMode !== 'off' && exercise.restTimerMode !== 'disabled') {
+        // Full round done - start rest timer via 3-tier lookup
+        const restTime = getExerciseRestTime(exercise.exerciseId);
         startRestTimer(restTime);
       }
 
@@ -272,9 +272,11 @@ export function FocusedWorkoutView({
         setCurrentExerciseIndex(globalIdx);
       }
     } else {
-      // Not in a superset - start rest timer: exercise-specific → store default → 90s
-      const restTime = exercise.restSeconds ?? storeDefaultRestSeconds ?? 90;
-      startRestTimer(restTime);
+      // Not in a superset - start rest timer via 3-tier lookup
+      if (exercise.restTimerMode !== 'off' && exercise.restTimerMode !== 'disabled') {
+        const restTime = getExerciseRestTime(exercise.exerciseId);
+        startRestTimer(restTime);
+      }
     }
     setTimeout(() => { isLoggingRef.current = false; }, 300);
   }, [
@@ -289,7 +291,7 @@ export function FocusedWorkoutView({
     logTimedSet,
     completeSet,
     startRestTimer,
-    storeDefaultRestSeconds,
+    getExerciseRestTime,
     isInSuperset,
     supersetMembers,
     activeSession.exercises,
@@ -316,7 +318,7 @@ export function FocusedWorkoutView({
       {/* ── Exercise Image Viewer ──────────────────────────────────── */}
       {formCheckMode && exerciseImages ? (
         <View style={{ paddingHorizontal: spacing.base }}>
-          <View style={{ flexDirection: 'row', height: 200, borderRadius: radius.lg, overflow: 'hidden' }}>
+          <View style={{ flexDirection: 'row', height: 140, borderRadius: radius.lg, overflow: 'hidden' }}>
             <View style={{ flex: 1, position: 'relative', backgroundColor: colors.surface }}>
               <Image source={{ uri: exerciseImages.startPosition }} style={{ flex: 1 }} contentFit="contain" cachePolicy="disk" />
               <View style={styles.formCheckLabel}>
@@ -643,36 +645,8 @@ export function FocusedWorkoutView({
             </>
           )}
 
-          {/* Log Set button - MASSIVE */}
-          <Animated.View style={{ transform: [{ scale: logBtnScale }], marginTop: spacing['2xl'] }}>
-            <TouchableOpacity
-              onPress={handleLogSet}
-              style={[
-                styles.logSetBtn,
-                {
-                  backgroundColor: colors.success,
-                  borderRadius: radius.xl,
-                  paddingVertical: 22,
-                  shadowColor: colors.success,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.4,
-                  shadowRadius: 12,
-                  elevation: 8,
-                },
-              ]}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="checkmark-circle" size={32} color={colors.textInverse} />
-              <Text
-                style={[
-                  typography.h1,
-                  { color: colors.textInverse, marginLeft: spacing.md, fontSize: 22 },
-                ]}
-              >
-                LOG SET
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
+          {/* Spacer so content isn't hidden behind fixed button */}
+          <View style={{ height: 100 }} />
 
           {/* Completed sets summary */}
           {completedCount > 0 && (
@@ -740,6 +714,41 @@ export function FocusedWorkoutView({
                 </View>
               ))}
           </View>
+        </View>
+      )}
+
+      {/* ── Fixed LOG SET button ────────────────────────────────── */}
+      {currentSet && (
+        <View style={[styles.bottomButtonContainer, { backgroundColor: colors.background, paddingHorizontal: spacing.base, paddingBottom: spacing.lg, paddingTop: spacing.sm }]}>
+          <Animated.View style={{ transform: [{ scale: logBtnScale }] }}>
+            <TouchableOpacity
+              onPress={handleLogSet}
+              style={[
+                styles.logSetBtn,
+                {
+                  backgroundColor: colors.success,
+                  borderRadius: radius.xl,
+                  paddingVertical: 22,
+                  shadowColor: colors.success,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 12,
+                  elevation: 8,
+                },
+              ]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark-circle" size={32} color={colors.textInverse} />
+              <Text
+                style={[
+                  typography.h1,
+                  { color: colors.textInverse, marginLeft: spacing.md, fontSize: 22 },
+                ]}
+              >
+                LOG SET
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       )}
     </View>
@@ -813,6 +822,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   completedSetChip: {},
+  bottomButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
   suggestionCard: {
     alignItems: 'center',
   },

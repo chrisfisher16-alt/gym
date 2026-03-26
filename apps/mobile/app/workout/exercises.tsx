@@ -8,6 +8,8 @@ import {
   TextInput,
   ScrollView,
   LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +25,10 @@ import { getExerciseImages } from '../../src/lib/exercise-image-map';
 import { getExerciseIllustration, CATEGORY_COLORS, CATEGORY_COLORS_DARK } from '../../src/lib/exercise-illustrations';
 
 import type { MuscleGroup, Equipment } from '../../src/types/workout';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const CATEGORIES: MuscleGroup[] = ['chest', 'back', 'shoulders', 'legs', 'arms', 'core', 'cardio', 'full_body'];
 const EQUIPMENT_LIST: Equipment[] = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band'];

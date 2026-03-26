@@ -20,6 +20,10 @@ import {
 import { preloadExerciseImages } from '../lib/exercise-image-preloader';
 import { getDateString } from '../lib/nutrition-utils';
 
+// ── Persist Debounce ─────────────────────────────────────────────────
+
+let _persistTimeout: ReturnType<typeof setTimeout> | null = null;
+
 // ── Validation Constants ────────────────────────────────────────────
 
 const MAX_WEIGHT = 2000; // lbs (~907 kg)
@@ -302,7 +306,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   addProgram: (program) => {
     set((state) => {
       const programs = [...state.programs, program];
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
   },
@@ -313,7 +317,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const programs = state.programs.map((p) =>
         p.id === updated.id ? updated : p,
       );
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
   },
@@ -326,7 +330,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     }
     set((state) => {
       const programs = state.programs.filter((p) => p.id !== programId);
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
   },
@@ -337,7 +341,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ...p,
         isActive: p.id === programId,
       }));
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
     // Re-sync workout reminder days to match the new active program.
@@ -451,7 +455,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
             // Skip sets that were manually edited (isAutoFilled explicitly false)
             if (s.isAutoFilled === false) return s;
             // Apply cascade to empty or previously auto-filled sets
-            if (s.weight === undefined || s.isAutoFilled === true || s.isAutoFilled === undefined) {
+            if (s.weight === undefined || s.isAutoFilled === true) {
               return { ...s, weight: clampedWeight, reps: clampedReps, isAutoFilled: true };
             }
             return s;
@@ -526,7 +530,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(
         STORAGE_KEYS.PERSONAL_RECORDS,
         JSON.stringify(updatedRecords),
-      );
+      ).catch((e) => console.error('[WorkoutStore] Failed to persist PR records:', e));
 
       return {
         activeSession: { ...state.activeSession, exercises },
@@ -1029,7 +1033,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   setDefaultRestSeconds: (seconds) => {
     const clamped = Math.max(5, Math.min(600, seconds));
     set({ defaultRestSeconds: clamped });
-    AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_REST_SECONDS, clamped.toString());
+    AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_REST_SECONDS, clamped.toString()).catch(console.error);
   },
 
   // ── Today Workout Status ──────────────────────────────────────
@@ -1039,7 +1043,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     if (activeSession) return 'active';
     const todayStr = getDateString();
     const completedToday = history.some(
-      (s) => getDateString(new Date(s.completedAt)) === todayStr,
+      (s) =>
+        getDateString(new Date(s.completedAt)) === todayStr ||
+        getDateString(new Date(s.startedAt)) === todayStr,
     );
     return completedToday ? 'completed' : 'pending';
   },
@@ -1091,7 +1097,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   cancelWorkout: () => {
     // #48: Clear rest timer state along with the active session
     set({ activeSession: null, restTimerDuration: 0 });
-    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION).catch((e) => console.warn('[WorkoutStore] Persist failed:', e));
   },
 
   // ── Delete Session from History ────────────────────────────────
@@ -1277,12 +1283,23 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   // ── Persistence ─────────────────────────────────────────────────
 
   persistActiveSession: async () => {
-    const { activeSession } = get();
-    if (activeSession) {
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.ACTIVE_SESSION,
-        JSON.stringify(activeSession),
-      );
-    }
+    if (_persistTimeout) clearTimeout(_persistTimeout);
+    return new Promise<void>((resolve) => {
+      _persistTimeout = setTimeout(async () => {
+        _persistTimeout = null;
+        try {
+          const { activeSession } = get();
+          if (activeSession) {
+            await AsyncStorage.setItem(
+              STORAGE_KEYS.ACTIVE_SESSION,
+              JSON.stringify(activeSession),
+            );
+          }
+        } catch (error) {
+          console.error('[WorkoutStore] Failed to persist active session:', error);
+        }
+        resolve();
+      }, 100);
+    });
   },
 }));

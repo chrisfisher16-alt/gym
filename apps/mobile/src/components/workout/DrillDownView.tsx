@@ -51,6 +51,7 @@ export interface DrillDownViewProps {
   onSetCurrentExerciseIndex: (index: number) => void;
   onNextExercise: () => void;
   onFinishWorkout: () => void;
+  onCascadeWeight?: (exerciseInstanceId: string, fromSetIndex: number, weight: number, reps: number) => void;
   onReplaceExercise: (exercise: ActiveExercise) => void;
   supersetInfo?: {
     groupId: string;
@@ -92,6 +93,7 @@ export function DrillDownView({
   onSetCurrentExerciseIndex,
   onNextExercise,
   onFinishWorkout,
+  onCascadeWeight,
   onReplaceExercise,
   supersetInfo,
 }: DrillDownViewProps) {
@@ -301,6 +303,8 @@ export function DrillDownView({
 
   // ── Input handlers ────────────────────────────────────────────────
 
+  const weightStep = isMetric ? 2.5 : 5;
+
   const incrementWeight = useCallback(
     (delta: number) => {
       setLocalWeight((prev) => {
@@ -352,10 +356,13 @@ export function DrillDownView({
   // ── Animations ─────────────────────────────────────────────────────
   const logBtnScale = useRef(new Animated.Value(1)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
+  const isLoggingRef = useRef(false);
 
   // ── Log Set handler ────────────────────────────────────────────────
   const handleLogSet = useCallback(() => {
-    if (!currentSet) return;
+    if (isLoggingRef.current) return;
+    isLoggingRef.current = true;
+    if (!currentSet) { isLoggingRef.current = false; return; }
 
     const w = parseFloat(localWeight);
     const r = parseInt(localReps, 10);
@@ -374,6 +381,7 @@ export function DrillDownView({
     // 1. Log weight/reps then complete the set
     onLogSet(exercise.id, currentSet.id, w, r);
     onCompleteSet(exercise.id, currentSet.id);
+    onCascadeWeight?.(exercise.id, currentSetIndex, w, r);
     mediumImpact();
 
     // 2. Auto-fill: if the next incomplete set has empty weight/reps, pre-populate it
@@ -392,7 +400,7 @@ export function DrillDownView({
       const nextMember = supersetMembers[nextMemberIdx];
 
       // Check if we just completed a full round (cycled back to first member)
-      if (nextMemberIdx === 0) {
+      if (nextMemberIdx === 0 && exercise.restTimerMode !== 'off' && exercise.restTimerMode !== 'disabled') {
         onStartRestTimer(restTime, exercise.exerciseId);
       }
 
@@ -403,13 +411,16 @@ export function DrillDownView({
       }
     } else {
       // Not in a superset - start rest timer
-      onStartRestTimer(restTime, exercise.exerciseId);
+      if (exercise.restTimerMode !== 'off' && exercise.restTimerMode !== 'disabled') {
+        onStartRestTimer(restTime, exercise.exerciseId);
+      }
 
       // If this was the last set and last exercise, finish workout
       if (isLastSet && isLastExercise && !nextIncomplete) {
         // Don't auto-finish, let user tap the CTA
       }
     }
+    setTimeout(() => { isLoggingRef.current = false; }, 300);
   }, [
     currentSet,
     localWeight,
@@ -426,6 +437,8 @@ export function DrillDownView({
     onSetCurrentExerciseIndex,
     isLastSet,
     isLastExercise,
+    onCascadeWeight,
+    currentSetIndex,
   ]);
 
   // ── CTA button logic ───────────────────────────────────────────────
@@ -833,7 +846,7 @@ export function DrillDownView({
               </Text>
               <View style={styles.inputRow}>
                 <TouchableOpacity
-                  onPress={() => incrementWeight(-5)}
+                  onPress={() => incrementWeight(-weightStep)}
                   style={[
                     styles.bigIncBtn,
                     { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
@@ -879,7 +892,7 @@ export function DrillDownView({
                   )}
                 </View>
                 <TouchableOpacity
-                  onPress={() => incrementWeight(5)}
+                  onPress={() => incrementWeight(weightStep)}
                   style={[
                     styles.bigIncBtn,
                     { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
@@ -1152,7 +1165,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingBottom: 120,
   },
   supersetBanner: {
     flexDirection: 'row',

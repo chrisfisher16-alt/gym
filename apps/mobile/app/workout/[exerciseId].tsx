@@ -17,7 +17,7 @@ import { ExerciseIllustration } from '../../src/components/ExerciseIllustration'
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
-import { checkWorkoutLogLimit } from '../../src/lib/usage-limits';
+import { checkWorkoutLogLimit, incrementUsage } from '../../src/lib/usage-limits';
 
 export default function ExerciseDetailScreen() {
   const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
@@ -79,6 +79,7 @@ export default function ExerciseDetailScreen() {
     // Free tier — check usage
     checkWorkoutLogLimit().then((usage) => {
       if (usage.allowed) {
+        incrementUsage('workout_logs');
         doStart();
       } else {
         crossPlatformAlert(
