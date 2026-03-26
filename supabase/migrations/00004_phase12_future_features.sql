@@ -105,15 +105,19 @@ create table if not exists subscriptions (
 
 alter table subscriptions enable row level security;
 
-create policy "Users can view own subscription"
-  on subscriptions for select
-  using (user_id = auth.uid());
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname = 'Users can view own subscription' and tablename = 'subscriptions') then
+    create policy "Users can view own subscription" on subscriptions for select using (user_id = auth.uid());
+  end if;
+end $$;
 
--- Only service role can modify subscriptions (webhook-driven)
-create policy "Service role manages subscriptions"
-  on subscriptions for all
-  using (auth.role() = 'service_role');
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname = 'Service role manages subscriptions' and tablename = 'subscriptions') then
+    create policy "Service role manages subscriptions" on subscriptions for all using (auth.role() = 'service_role');
+  end if;
+end $$;
 
+drop trigger if exists subscriptions_updated_at on subscriptions;
 create trigger subscriptions_updated_at
   before update on subscriptions
   for each row execute function update_updated_at();

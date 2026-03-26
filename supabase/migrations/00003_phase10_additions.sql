@@ -67,7 +67,7 @@ create table if not exists hydration_logs (
 );
 
 create index idx_hydration_logs_user_date
-  on hydration_logs (user_id, (logged_at::date));
+  on hydration_logs (user_id, logged_at);
 create index idx_hydration_logs_user_logged
   on hydration_logs (user_id, logged_at desc);
 

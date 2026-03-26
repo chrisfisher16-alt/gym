@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS promo_codes (
 );
 
 -- Seed the existing promo code
-INSERT INTO promo_codes (code, tier) VALUES ('FISHER25', 'full_health_coach');
+INSERT INTO promo_codes (code, tier) VALUES ('FISHER25', 'full_health_coach') ON CONFLICT (code) DO NOTHING;
 
 -- Enable RLS — no public policies means only service_role can access
 ALTER TABLE promo_codes ENABLE ROW LEVEL SECURITY;
