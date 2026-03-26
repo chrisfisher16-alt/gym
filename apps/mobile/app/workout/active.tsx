@@ -593,26 +593,72 @@ export default function ActiveWorkoutScreen() {
   const handleExerciseLongPress = useCallback(
     (exercise: ActiveExercise) => {
       Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const options: Array<{text: string; style?: 'destructive' | 'cancel'; onPress?: () => void}> = [];
+
+      // Superset option
       if (exercise.supersetGroupId) {
-        crossPlatformAlert('Superset Options', undefined, [
-          {
-            text: 'Remove from Superset',
-            style: 'destructive',
-            onPress: () => handleRemoveSupersetGroup(exercise.supersetGroupId!),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
+        options.push({
+          text: 'Remove from Superset',
+          style: 'destructive',
+          onPress: () => handleRemoveSupersetGroup(exercise.supersetGroupId!),
+        });
       } else {
-        crossPlatformAlert('Superset Options', undefined, [
-          {
-            text: 'Create Superset',
-            onPress: () => setSupersetSourceId(exercise.id),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
+        options.push({
+          text: 'Create Superset',
+          onPress: () => setSupersetSourceId(exercise.id),
+        });
       }
+
+      // Replace option
+      options.push({
+        text: 'Replace Exercise',
+        onPress: () => setSwapModalExercise(exercise),
+      });
+
+      // Remove option
+      options.push({
+        text: 'Remove Exercise',
+        style: 'destructive',
+        onPress: () => {
+          crossPlatformAlert(
+            'Remove Exercise',
+            `Remove "${exercise.exerciseName}" from this workout?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () => removeExerciseFromSession(exercise.id),
+              },
+            ],
+          );
+        },
+      });
+
+      // Cancel
+      options.push({ text: 'Cancel', style: 'cancel' });
+
+      crossPlatformAlert('Exercise Options', exercise.exerciseName, options);
     },
-    [handleRemoveSupersetGroup],
+    [handleRemoveSupersetGroup, removeExerciseFromSession],
+  );
+
+  const handleRemoveExercise = useCallback(
+    (exercise: ActiveExercise) => {
+      crossPlatformAlert(
+        'Remove Exercise',
+        `Remove "${exercise.exerciseName}" from this workout?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => removeExerciseFromSession(exercise.id),
+          },
+        ],
+      );
+    },
+    [removeExerciseFromSession],
   );
 
   const handleMoveExercise = useCallback(
@@ -914,6 +960,7 @@ export default function ActiveWorkoutScreen() {
                           setCurrentExerciseIndex(g.index);
                           setDrilledExerciseIndex(g.index);
                         }}
+                        onRemoveExercise={() => handleRemoveExercise(g.exercise)}
                       />
                     ))}
                   </SupersetGroup>
@@ -938,6 +985,8 @@ export default function ActiveWorkoutScreen() {
                     setCurrentExerciseIndex(g.index);
                     setDrilledExerciseIndex(g.index);
                   }}
+                  onRemoveExercise={() => handleRemoveExercise(g.exercise)}
+                  onCreateSuperset={() => setSupersetSourceId(g.exercise.id)}
                 />
               ));
             });

@@ -43,6 +43,8 @@ export interface CommandCenterCardProps {
   onSetPress?: (setIndex: number) => void;
   onQuickComplete?: () => void;
   onSwapExercise?: () => void;
+  onRemoveExercise?: () => void;
+  onCreateSuperset?: () => void;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -118,6 +120,8 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   onSetPress,
   onQuickComplete,
   onSwapExercise,
+  onRemoveExercise,
+  onCreateSuperset,
 }: CommandCenterCardProps) {
   const { colors, spacing, radius, typography, dark } = useTheme();
   const unitPref = useProfileStore((s) => s.profile.unitPreference);
@@ -176,28 +180,18 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   // ── Swipe actions ─────────────────────────────────────────────
   const leftSwipeAction = useMemo<SwipeAction | undefined>(
     () =>
-      onQuickComplete
-        ? {
-            label: 'Complete',
-            icon: 'checkmark-circle',
-            color: colors.success,
-            onTrigger: onQuickComplete,
-          }
+      onCreateSuperset
+        ? { label: 'Superset', icon: 'link-outline', color: '#B8944F', onTrigger: onCreateSuperset }
         : undefined,
-    [onQuickComplete, colors.success],
+    [onCreateSuperset],
   );
 
   const rightSwipeAction = useMemo<SwipeAction | undefined>(
     () =>
-      onSwapExercise
-        ? {
-            label: 'Swap',
-            icon: 'swap-horizontal',
-            color: colors.info,
-            onTrigger: onSwapExercise,
-          }
+      onRemoveExercise
+        ? { label: 'Remove', icon: 'trash-outline', color: '#E53E3E', onTrigger: onRemoveExercise }
         : undefined,
-    [onSwapExercise, colors.info],
+    [onRemoveExercise],
   );
 
   if (exercise.isSkipped) return null;
@@ -206,7 +200,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
     <SwipeableRow
       leftAction={leftSwipeAction}
       rightAction={rightSwipeAction}
-      enabled={!allCompleted}
+      enabled={true}
     >
     <View
       style={[
