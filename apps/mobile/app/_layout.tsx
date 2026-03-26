@@ -4,7 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ErrorBoundary } from '../src/components/ErrorBoundary';
+import * as Sentry from '@sentry/react-native';
+import { ErrorBoundary, setErrorReporter } from '../src/components/ErrorBoundary';
 import { ToastProvider } from '../src/components/Toast';
 import { NetworkBanner } from '../src/components/NetworkBanner';
 import { CommandPaletteProvider, useCommandPalette } from '../src/providers/CommandPaletteProvider';
@@ -15,6 +16,13 @@ import { migrateAIConfig } from '../src/lib/ai-provider';
 import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
 import { useThemeStore } from '../src/stores/theme-store';
 import { initializeStoreBridge } from '../src/lib/store-bridge';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  enabled: !__DEV__,
+  tracesSampleRate: 0.2,
+  enableAutoPerformanceTracing: true,
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,7 +39,7 @@ function CommandPaletteSheet() {
   return <CommandPalette visible={isOpen} onClose={close} />;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const colorScheme = useColorScheme();
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const [ready, setReady] = useState(false);
@@ -40,6 +48,13 @@ export default function RootLayout() {
   useEffect(() => {
     const cleanup = initializeStoreBridge();
     return cleanup;
+  }, []);
+
+  // Wire up Sentry as the error reporter for ErrorBoundary
+  useEffect(() => {
+    setErrorReporter((error, extra) => {
+      Sentry.captureException(error, { extra });
+    });
   }, []);
 
   useEffect(() => {
@@ -143,3 +158,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);

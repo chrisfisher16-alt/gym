@@ -55,6 +55,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "@sentry/react-native/expo",
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
@@ -66,7 +67,8 @@
           "icon": "./assets/icon.png",
           "color": "#C4A265"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ]
   }
 }
