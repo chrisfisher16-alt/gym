@@ -93,8 +93,8 @@ export async function saveSummary(conversationId: string, summary: string): Prom
     // Keep only the most recent summaries
     const trimmed = summaries.slice(-MAX_SUMMARIES);
     await AsyncStorage.setItem(key, JSON.stringify(trimmed));
-  } catch {
-    // Ignore storage errors
+  } catch (error) {
+    console.error('[ConversationSummarizer] Failed to save summary:', error);
   }
 }
 
@@ -103,7 +103,8 @@ export async function loadSummaries(conversationId: string): Promise<string[]> {
     const key = `${SUMMARY_KEY_PREFIX}${conversationId}`;
     const stored = await AsyncStorage.getItem(key);
     return stored ? JSON.parse(stored) : [];
-  } catch {
+  } catch (error) {
+    console.error('[ConversationSummarizer] Failed to load summaries:', error);
     return [];
   }
 }

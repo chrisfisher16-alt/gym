@@ -124,7 +124,7 @@ export async function analyzePhotoMeal(imageUri: string): Promise<MealItemEntry[
     const response = await callAI(messages, config);
     return parseAIResponse(response.content);
   } catch (error) {
-    console.warn('AI photo analysis failed, falling back to mock data:', error);
-    return generateMockPhotoItems();
+    console.error('AI photo analysis failed:', error);
+    throw new Error('Failed to analyze photo. Please try again or enter items manually.');
   }
 }

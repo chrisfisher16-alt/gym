@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { enqueue } from './supabase-sync';
+import { enqueue, clearQueue } from './supabase-sync';
 import { generateId } from './workout-utils';
 
 // React Native compatible UUID generation (crypto.randomUUID not available in Hermes/JSC)
@@ -15,9 +15,9 @@ function uuid(): string {
 
 // Helper to get authenticated user ID; throws if not authed
 async function requireUserId(): Promise<string> {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) throw new Error('Not authenticated');
-  return data.user.id;
+  const { data } = await supabase.auth.getSession();
+  if (!data.session?.user) throw new Error('Not authenticated');
+  return data.session.user.id;
 }
 
 // ─── Workout API ───────────────────────────────────────────────────────────────
@@ -469,16 +469,17 @@ export async function checkAchievements(context: AchCtx): Promise<string[]> {
 export async function updateProfile(updates: Record<string, unknown>): Promise<void> {
   const userId = await requireUserId();
 
-  const { error } = await supabase
-    .from('profiles')
-    .update(updates)
-    .eq('id', userId);
-
-  if (error) throw error;
+  await enqueue('profile_update', 'profiles', 'update', {
+    id: userId,
+    ...updates,
+  });
 }
 
 export async function deleteAccount(): Promise<void> {
   if (!isSupabaseConfigured) return;
+
+  // Clear pending sync queue before deletion so items don't fail
+  await clearQueue();
 
   // Call the server-side function that cascades user deletion
   const { error } = await supabase.rpc('delete_user_account');

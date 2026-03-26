@@ -109,8 +109,33 @@ async function fetchSupabaseData() {
   };
 }
 
+const SAFE_KEY_PREFIXES = [
+  '@profile/',
+  '@workout/',
+  '@nutrition/',
+  '@measurements/',
+  '@achievements/',
+  '@coach/',
+  '@health/',
+  '@grocery/',
+  '@notification/',
+  '@theme/',
+  '@space/',
+];
+
+const SENSITIVE_KEY_PATTERNS = [
+  'token', 'key', 'secret', 'session', 'auth', 'password', 'api_key', 'supabase',
+];
+
+function isSafeKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  if (SENSITIVE_KEY_PATTERNS.some((p) => lower.includes(p))) return false;
+  return SAFE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
 async function fetchLocalData() {
-  const keys = await AsyncStorage.getAllKeys();
+  const allKeys = await AsyncStorage.getAllKeys();
+  const keys = allKeys.filter(isSafeKey);
   const stores: Record<string, unknown> = {};
 
   for (const key of keys) {

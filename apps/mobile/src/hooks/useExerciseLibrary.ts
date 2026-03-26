@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useWorkoutStore } from '../stores/workout-store';
 import type { ExerciseLibraryEntry, MuscleGroup, Equipment } from '../types/workout';
 import { generateId } from '../lib/workout-utils';
+import { fuzzyMatch } from '../lib/fuzzy-search';
 
 export type ForceFilter = 'push' | 'pull' | 'static';
 export type MechanicFilter = 'compound' | 'isolation';
@@ -23,12 +24,17 @@ export function useExerciseLibrary() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (e) =>
-          e.name.toLowerCase().includes(query) ||
-          e.primaryMuscles.some((m) => m.toLowerCase().includes(query)) ||
-          e.category.toLowerCase().includes(query),
-      );
+      result = result
+        .map((e) => {
+          const nameScore = fuzzyMatch(query, e.name);
+          const muscleScore = Math.max(0, ...e.primaryMuscles.map((m) => fuzzyMatch(query, m)));
+          const categoryScore = fuzzyMatch(query, e.category);
+          const score = Math.max(nameScore, muscleScore, categoryScore);
+          return { exercise: e, score };
+        })
+        .filter(({ score }) => score > 0.3)
+        .sort((a, b) => b.score - a.score)
+        .map(({ exercise }) => exercise);
     }
 
     if (selectedCategory) {
@@ -40,15 +46,15 @@ export function useExerciseLibrary() {
     }
 
     if (selectedForce) {
-      result = result.filter((e) => !e.force || e.force === selectedForce);
+      result = result.filter((e) => e.force === selectedForce);
     }
 
     if (selectedMechanic) {
-      result = result.filter((e) => !e.mechanic || e.mechanic === selectedMechanic);
+      result = result.filter((e) => e.mechanic === selectedMechanic);
     }
 
     if (selectedLevel) {
-      result = result.filter((e) => !e.level || e.level === selectedLevel);
+      result = result.filter((e) => e.level === selectedLevel);
     }
 
     return result;
