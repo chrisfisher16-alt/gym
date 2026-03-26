@@ -577,9 +577,10 @@ export default function TodayTab() {
               <EmptyState
                 icon="nutrition-outline"
                 title="Track Your Nutrition"
-                description="Log your meals to see your daily nutrition breakdown here."
+                description="Log meals to see your daily breakdown."
                 actionLabel="Log a Meal"
                 onAction={() => router.push('/nutrition/log')}
+                compact
               />
             ) : (
               <>
