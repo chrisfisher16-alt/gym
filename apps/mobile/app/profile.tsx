@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
@@ -14,12 +14,19 @@ import {
   type Weekday,
 } from '../src/stores/profile-store';
 import { useAuthStore } from '../src/stores/auth-store';
+import { KG_TO_LBS, LBS_TO_KG } from '../src/lib/constants';
 import type { Profile } from '@health-coach/shared';
 import { useToast } from '../src/components/Toast';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 
 // ── Constants ────────────────────────────────────────────────────────
 
-const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+const GENDER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'non_binary', label: 'Non-binary' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
 
 const HEALTH_GOAL_OPTIONS: { id: HealthGoal; label: string; icon: string }[] = [
   { id: 'lose_weight', label: 'Lose Weight', icon: 'trending-down-outline' },
@@ -90,13 +97,13 @@ const DIETARY_PREFERENCE_OPTIONS: { id: DietaryPreference; label: string }[] = [
 ];
 
 const WEEKDAY_OPTIONS: { id: Weekday; short: string; label: string }[] = [
-  { id: 'monday', short: 'M', label: 'Monday' },
-  { id: 'tuesday', short: 'T', label: 'Tuesday' },
-  { id: 'wednesday', short: 'W', label: 'Wednesday' },
-  { id: 'thursday', short: 'T', label: 'Thursday' },
-  { id: 'friday', short: 'F', label: 'Friday' },
-  { id: 'saturday', short: 'S', label: 'Saturday' },
-  { id: 'sunday', short: 'S', label: 'Sunday' },
+  { id: 'monday', short: 'Mo', label: 'Monday' },
+  { id: 'tuesday', short: 'Tu', label: 'Tuesday' },
+  { id: 'wednesday', short: 'We', label: 'Wednesday' },
+  { id: 'thursday', short: 'Th', label: 'Thursday' },
+  { id: 'friday', short: 'Fr', label: 'Friday' },
+  { id: 'saturday', short: 'Sa', label: 'Saturday' },
+  { id: 'sunday', short: 'Su', label: 'Sunday' },
 ];
 
 const COMMON_ALLERGIES = [
@@ -118,8 +125,12 @@ const TIME_OPTIONS = ['Morning', 'Afternoon', 'Evening', 'Varies'];
 
 function cmToFeetInches(cm: number): { feet: number; inches: number } {
   const totalInches = cm / 2.54;
-  const feet = Math.floor(totalInches / 12);
-  const inches = Math.round(totalInches % 12);
+  let feet = Math.floor(totalInches / 12);
+  let inches = Math.round(totalInches % 12);
+  if (inches === 12) {
+    feet += 1;
+    inches = 0;
+  }
   return { feet, inches };
 }
 
@@ -128,11 +139,11 @@ function feetInchesToCm(feet: number, inches: number): number {
 }
 
 function kgToLbs(kg: number): number {
-  return Math.round(kg * 2.20462 * 10) / 10;
+  return Math.round(kg * KG_TO_LBS * 10) / 10;
 }
 
 function lbsToKg(lbs: number): number {
-  return Math.round(lbs * 0.453592 * 10) / 10;
+  return Math.round(lbs * LBS_TO_KG * 10) / 10;
 }
 
 // ── Component ────────────────────────────────────────────────────────
@@ -209,13 +220,13 @@ export default function ProfileScreen() {
       const parsed = new Date(dateOfBirth + 'T00:00:00');
       if (isNaN(parsed.getTime())) {
         setDobError('Invalid date format. Use YYYY-MM-DD.');
-        Alert.alert('Invalid Date', 'Please enter a valid date of birth in YYYY-MM-DD format.');
+        crossPlatformAlert('Invalid Date', 'Please enter a valid date of birth in YYYY-MM-DD format.');
         return;
       }
       const age = Math.floor((Date.now() - parsed.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
       if (age < 13 || age > 120) {
         setDobError('Age must be between 13 and 120.');
-        Alert.alert('Invalid Age', 'Age must be between 13 and 120 years old.');
+        crossPlatformAlert('Invalid Age', 'Age must be between 13 and 120 years old.');
         return;
       }
       setDobError('');
@@ -441,10 +452,10 @@ export default function ProfileScreen() {
             <View style={styles.chipRow}>
               {GENDER_OPTIONS.map((g) => (
                 <OptionChip
-                  key={g}
-                  label={g}
-                  selected={gender === g}
-                  onPress={() => setGender(gender === g ? '' : g)}
+                  key={g.value}
+                  label={g.label}
+                  selected={gender === g.value}
+                  onPress={() => setGender(gender === g.value ? '' : g.value)}
                 />
               ))}
             </View>

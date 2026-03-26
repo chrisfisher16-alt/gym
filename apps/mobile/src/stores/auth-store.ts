@@ -25,7 +25,7 @@ interface AuthState {
   syncProfileFromSupabase: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation?: boolean }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -113,26 +113,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               .select('*')
               .eq('id', userId)
               .single();
+            if (get().session?.user?.id !== userId) return; // User changed, abort
+
             const { data: coachPrefs } = await supabase
               .from('coach_preferences')
               .select('*')
               .eq('user_id', userId)
               .single();
-            // If profile has no display_name, try to extract from user metadata (Google sign-in)
-            if (!profile?.display_name && session?.user?.user_metadata) {
-              const meta = session.user.user_metadata;
-              const fullName = meta?.full_name || meta?.name || meta?.given_name || '';
-              if (fullName) {
-                try {
-                  const { useProfileStore } = require('./profile-store');
-                  useProfileStore.getState().updateProfile({ displayName: fullName });
-                } catch {}
-                supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(() => {});
-                if (profile) {
-                  profile.display_name = fullName;
-                }
-              }
-            }
+            if (get().session?.user?.id !== userId) return; // User changed, abort
 
             set({
               profile: profile ?? null,
@@ -146,6 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       _authSubscription = subscription;
     })();
+    _initPromise.catch(() => { _initPromise = null; });
     return _initPromise;
   },
 
@@ -334,11 +323,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               const { useProfileStore } = require('./profile-store');
               useProfileStore.getState().updateProfile({ displayName: fullName });
             } catch {}
-            supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(() => {});
+            supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(({ error }) => { if (error) console.error('[AuthStore] Profile upsert failed:', error); });
           }
 
-          // Await initialize so profile/onboarding state is loaded before returning
-          await get().initialize();
+          // Sync profile so isOnboarded is set before we return
+          // (initialize() is a no-op here due to cached _initPromise)
+          await get().syncProfileFromSupabase();
         } else {
           return { error: new Error('No tokens received from Google sign-in. Check Supabase redirect URL configuration.') };
         }
@@ -354,8 +344,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signUp: async (email, password) => {
     try {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) return { error };
+      // If Supabase returns no session, email confirmation is required
+      if (!data.session) {
+        return { error: null, needsConfirmation: true };
+      }
       await get().syncProfileFromSupabase();
       return { error: null };
     } catch (error) {
@@ -374,6 +368,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    // Reset the initialization promise so a subsequent sign-in re-runs initialize()
+    _initPromise = null;
+
     // Fire-and-forget Supabase sign-out — local cleanup happens regardless
     try { await supabase.auth.signOut(); } catch {}
 
@@ -391,8 +388,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try { const { useGroceryStore } = require('./grocery-store'); useGroceryStore.getState().clearList(); } catch {}
     try { const { useSmartWorkoutStore } = require('./smart-workout-store'); await useSmartWorkoutStore.getState().reset(); } catch {}
     try { const { useFeedStore } = require('./feed-store'); useFeedStore.getState().reset(); } catch {}
+    try { const { useFeedbackStore } = require('./feedback-store'); useFeedbackStore.getState().reset(); } catch {}
     try { const { useFriendsStore } = require('./friends-store'); useFriendsStore.getState().reset(); } catch {}
     try { const { useSubscriptionStore } = require('./subscription-store'); await useSubscriptionStore.getState().logout(); } catch {}
+    // theme-store is intentionally NOT reset on sign-out — theme preference persists across logins
 
     // Clear all user-specific AsyncStorage keys that may not have been
     // covered by individual store resets (belt-and-suspenders)
@@ -448,7 +447,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isOnboarded: false,
     });
 
-    // Force navigation to auth screen to prevent deep-link re-access
-    try { router.replace('/(auth)/welcome'); } catch {}
+    // Force navigation — root index.tsx evaluates auth state and redirects appropriately
+    try { router.replace('/'); } catch {}
   },
 }));

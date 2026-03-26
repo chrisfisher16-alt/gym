@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -55,14 +56,16 @@ export default function WelcomeScreen() {
     setEmailLoading(true);
     try {
       // Try sign-up first; if user exists, fall back to sign-in
-      const { error: signUpErr } = await signUp(email.trim(), password);
+      const { error: signUpErr, needsConfirmation } = await signUp(email.trim(), password);
+      if (!signUpErr && needsConfirmation) {
+        crossPlatformAlert('Check Your Email', 'Please verify your email address before signing in.');
+        return;
+      }
       if (signUpErr) {
         if (signUpErr.message?.includes('already registered') || signUpErr.message?.includes('already exists')) {
           const { error: signInErr } = await signIn(email.trim(), password);
           if (signInErr) {
-            setError(signInErr.message?.includes('Invalid login')
-              ? 'Incorrect password for this email'
-              : signInErr.message || 'Sign-in failed');
+            setError('Unable to sign in. Please check your email and password.');
             return;
           }
         } else {

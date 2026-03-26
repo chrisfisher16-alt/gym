@@ -12,6 +12,17 @@ import { useState } from 'react';
 import { isHealthPlatform } from '../../src/lib/health';
 import { EQUIPMENT_CATALOG } from '../../src/types/onboarding';
 
+function mapFitnessToHealthGoal(fitness: string | null): HealthGoal | undefined {
+  const map: Record<string, HealthGoal> = {
+    build_muscle: 'gain_muscle',
+    lose_fat: 'lose_weight',
+    get_stronger: 'gain_muscle',
+    stay_active: 'maintain_weight',
+    athletic_performance: 'improve_endurance',
+  };
+  return fitness ? map[fitness] : undefined;
+}
+
 export default function CompleteScreen() {
   const { colors, spacing, typography } = useTheme();
   const onboarding = useOnboardingStore();
@@ -43,12 +54,24 @@ export default function CompleteScreen() {
     // Resolve effective training days
     const effectiveTrainingDays = onboarding.getEffectiveTrainingDays();
 
+    // Auto-populate displayName from auth metadata if not set (V2 flow skips profile screen)
+    const effectiveDisplayName = onboarding.displayName
+      || user?.user_metadata?.full_name
+      || user?.user_metadata?.name
+      || user?.email?.split('@')[0]
+      || null;
+
+    // Map FitnessGoal enum to HealthGoal enum
+    const mapped = mapFitnessToHealthGoal(onboarding.fitnessGoal);
+
     try {
-      // Update profile (row already exists from handle_new_user trigger)
+      // Upsert profile (row may not exist if DB was reset)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .update({
-          display_name: onboarding.displayName || null,
+        .upsert({
+          id: user.id,
+          email: user.email || '',
+          display_name: effectiveDisplayName,
           date_of_birth: onboarding.dateOfBirth || null,
           gender: onboarding.gender,
           height_cm: onboarding.heightCm,
@@ -73,7 +96,6 @@ export default function CompleteScreen() {
           notifications_enabled: onboarding.notificationsEnabled,
           health_sync_enabled: onboarding.healthSyncEnabled,
         })
-        .eq('id', user.id)
         .select()
         .single();
 
@@ -82,14 +104,14 @@ export default function CompleteScreen() {
         throw profileError;
       }
 
-      // Update coach preferences (row already exists from handle_new_user trigger)
+      // Upsert coach preferences (row may not exist if DB was reset)
       const { data: coachPrefs, error: coachError } = await supabase
         .from('coach_preferences')
-        .update({
+        .upsert({
+          user_id: user.id,
           tone: onboarding.coachTone || 'balanced',
-          focus_areas: onboarding.selectedGoals.length > 0 ? onboarding.selectedGoals : null,
+          focus_areas: onboarding.fitnessGoal ? [onboarding.fitnessGoal] : null,
         })
-        .eq('user_id', user.id)
         .select()
         .single();
 
@@ -103,14 +125,14 @@ export default function CompleteScreen() {
 
       // Sync into local profile store for Coach and recipe generator
       updateProfileStore({
-        displayName: onboarding.displayName,
+        displayName: effectiveDisplayName,
         dateOfBirth: onboarding.dateOfBirth || undefined,
         gender: onboarding.gender || undefined,
         heightCm: onboarding.heightCm || undefined,
         weightKg: onboarding.weightKg || undefined,
         unitPreference: onboarding.unitPreference,
-        healthGoals: onboarding.selectedGoals as HealthGoal[],
-        primaryGoal: onboarding.selectedGoals[0] || undefined,
+        healthGoals: mapped ? [mapped] : [],
+        primaryGoal: mapped,
         fitnessGoal: onboarding.fitnessGoal || undefined,
         trainingDaysPerWeek: onboarding.trainingDaysPerWeek ?? undefined,
         preferredWorkoutDays: effectiveTrainingDays,
@@ -128,14 +150,16 @@ export default function CompleteScreen() {
       });
 
       setIsOnboarded(true);
-      onboarding.reset();
 
       // Offer health connection on mobile before going to tabs
+      setSaving(false);
       if (isHealthPlatform()) {
         router.replace('/health-connect');
       } else {
         router.replace('/(tabs)');
       }
+      // Reset after navigation has started
+      setTimeout(() => onboarding.reset(), 500);
     } catch (err) {
       console.error('Onboarding save failed:', err);
       setError('Failed to save your profile. Please try again.');

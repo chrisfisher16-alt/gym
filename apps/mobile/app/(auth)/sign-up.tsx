@@ -9,22 +9,15 @@ import { useTheme } from '../../src/theme';
 import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { isSupabaseConfigured } from '../../src/lib/supabase';
-
-function friendlyAuthError(error: { code?: string; message?: string } | string): string {
-  const code = typeof error === 'string' ? undefined : error.code;
-  const msg = typeof error === 'string' ? error : error.message ?? '';
-  if (code === 'invalid_credentials' || msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
-  if (code === 'email_not_confirmed' || msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
-  if (code === 'user_not_found' || msg.includes('User not found')) return 'No account found with this email.';
-  if (msg.includes('User already registered')) return 'An account with this email already exists.';
-  if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.';
-  return 'Something went wrong. Please try again.';
-}
+import { friendlyAuthError } from '../../src/lib/auth-utils';
 
 const signUpSchema = z
   .object({
     email: z.string().email('Please enter a valid email'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: z.string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Must contain an uppercase letter')
+      .regex(/[0-9]/, 'Must contain a number'),
     confirmPassword: z.string(),
     acceptTerms: z.boolean(),
   })
@@ -44,6 +37,7 @@ export default function SignUpScreen() {
   const signUp = useAuthStore((s) => s.signUp);
   const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
   const [formError, setFormError] = useState('');
+  const [confirmationEmail, setConfirmationEmail] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
@@ -77,13 +71,45 @@ export default function SignUpScreen() {
 
   const onSubmit = async (data: SignUpForm) => {
     setFormError('');
-    const { error } = await signUp(data.email, data.password);
+    const { error, needsConfirmation } = await signUp(data.email, data.password);
     if (error) {
       setFormError(friendlyAuthError(error));
+    } else if (needsConfirmation) {
+      setConfirmationEmail(data.email);
     } else {
       router.replace('/');
     }
   };
+
+  if (confirmationEmail) {
+    return (
+      <ScreenContainer>
+        <View style={[styles.content, { paddingTop: spacing['2xl'] }]}>
+          <View style={styles.header}>
+            <Ionicons name="mail-outline" size={64} color={colors.primary} style={{ marginBottom: spacing.lg }} />
+            <Text style={[typography.displayLarge, { color: colors.primary }]}>
+              Check Your Email
+            </Text>
+            <Text
+              style={[
+                typography.bodyLarge,
+                { color: colors.textSecondary, marginTop: spacing.md, textAlign: 'center' },
+              ]}
+            >
+              We sent a verification link to{' '}
+              <Text style={{ fontWeight: '600', color: colors.text }}>{confirmationEmail}</Text>.
+              Please check your inbox to confirm your account.
+            </Text>
+          </View>
+          <Button
+            title="Back to Sign In"
+            onPress={() => router.replace('/(auth)/sign-in')}
+            style={{ marginTop: spacing.xl }}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>

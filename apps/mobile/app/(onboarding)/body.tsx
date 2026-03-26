@@ -29,8 +29,12 @@ export default function BodyScreen() {
   } = useForm<BodyForm>({
     resolver: zodResolver(bodyFormSchema),
     defaultValues: {
-      height: store.heightCm ? String(store.heightCm) : '',
-      weight: store.weightKg ? String(store.weightKg) : '',
+      height: store.heightCm
+        ? String(store.unitPreference === 'imperial' ? Math.round(store.heightCm / 2.54) : store.heightCm)
+        : '',
+      weight: store.weightKg
+        ? String(store.unitPreference === 'imperial' ? Math.round(store.weightKg * 2.20462) : store.weightKg)
+        : '',
       unitPreference: store.unitPreference,
     },
   });

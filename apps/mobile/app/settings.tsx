@@ -8,11 +8,11 @@ import { Card, ScreenContainer, Badge, Divider, ExpandableCard, SyncStatusBadge 
 import { useAuthStore } from '../src/stores/auth-store';
 import { useProfileStore } from '../src/stores/profile-store';
 import { useNotificationStore } from '../src/stores/notification-store';
-import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useEntitlement } from '../src/hooks/useEntitlement';
 import { APP_CONFIG } from '@health-coach/shared';
 import Constants from 'expo-constants';
 import { useThemeStore, type ColorMode } from '../src/stores/theme-store';
+import { KG_TO_LBS } from '../src/lib/constants';
 import { useSpaceStore, type TrainingSpace } from '../src/stores/space-store';
 import { SpaceSwitcher, SpaceEditor } from '../src/components/ui';
 import { checkAIMessageLimit, checkWorkoutLogLimit, checkMealLogLimit, type UsageCheck } from '../src/lib/usage-limits';
@@ -24,7 +24,6 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const coachPreferences = useAuthStore((s) => s.coachPreferences);
   const signOut = useAuthStore((s) => s.signOut);
-  const logoutSubscription = useSubscriptionStore((s) => s.logout);
   const notificationStatus = useNotificationStore((s) => s.preferences.permissionStatus);
   const { tier, tierName, isSubscribed, isTrial } = useEntitlement();
   const profileData = useProfileStore((s) => s.profile);
@@ -49,9 +48,7 @@ export default function SettingsScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await logoutSubscription();
           await signOut();
-          router.replace('/');
         },
       },
     ]);
@@ -61,13 +58,13 @@ export default function SettingsScreen() {
 
   const heightDisplay = profileData.heightCm
     ? profileData.unitPreference === 'imperial'
-      ? `${Math.floor(profileData.heightCm / 2.54 / 12)}' ${Math.round(profileData.heightCm / 2.54 % 12)}"`
+      ? (() => { let ft = Math.floor(profileData.heightCm / 2.54 / 12); let inc = Math.round(profileData.heightCm / 2.54 % 12); if (inc === 12) { ft += 1; inc = 0; } return `${ft}' ${inc}"`; })()
       : `${profileData.heightCm} cm`
     : null;
 
   const weightDisplay = profileData.weightKg
     ? profileData.unitPreference === 'imperial'
-      ? `${Math.round(profileData.weightKg * 2.205)} lbs`
+      ? `${Math.round(profileData.weightKg * KG_TO_LBS)} lbs`
       : `${profileData.weightKg} kg`
     : null;
 

@@ -9,21 +9,11 @@ import { useTheme } from '../../src/theme';
 import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { isSupabaseConfigured } from '../../src/lib/supabase';
-
-function friendlyAuthError(error: { code?: string; message?: string } | string): string {
-  const code = typeof error === 'string' ? undefined : error.code;
-  const msg = typeof error === 'string' ? error : error.message ?? '';
-  if (code === 'invalid_credentials' || msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
-  if (code === 'email_not_confirmed' || msg.includes('Email not confirmed')) return 'Please check your email to confirm your account.';
-  if (code === 'user_not_found' || msg.includes('User not found')) return 'No account found with this email.';
-  if (msg.includes('User already registered')) return 'An account with this email already exists.';
-  if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.';
-  return 'Something went wrong. Please try again.';
-}
+import { friendlyAuthError } from '../../src/lib/auth-utils';
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 type SignInForm = z.infer<typeof signInSchema>;

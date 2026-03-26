@@ -102,11 +102,13 @@ export default function HealthSyncScreen() {
     selectionFeedback();
     try {
       const { useHealthStore } = require('../../src/stores/health-store');
-      await useHealthStore.getState().requestPermissions();
+      const granted = await useHealthStore.getState().requestPermissions();
+      if (granted && granted.length > 0) {
+        setHealthSyncEnabled(true);
+      }
     } catch {
       // Health connect failed — continue anyway
     }
-    setHealthSyncEnabled(true);
     router.push('/(onboarding)/goals');
     setTimeout(() => { isNavigating.current = false; }, 1000);
   };
@@ -171,6 +173,13 @@ export default function HealthSyncScreen() {
       setDateOfBirth(ageToDOBString(age));
     } else {
       setDateOfBirth('');
+    }
+  };
+
+  const handleAgeBlur = () => {
+    if (!ageText) return;
+    const age = parseInt(ageText, 10);
+    if (age < 13 || age > 120) {
       Alert.alert('Invalid Age', 'Age must be between 13 and 120.');
     }
   };
@@ -300,6 +309,7 @@ export default function HealthSyncScreen() {
             placeholder="e.g. 25"
             value={ageText}
             onChangeText={handleAgeChange}
+            onBlur={handleAgeBlur}
             keyboardType="number-pad"
             maxLength={3}
             hint={ageText && (parseInt(ageText, 10) < 13 || parseInt(ageText, 10) > 120) ? 'Must be between 13 and 120' : undefined}
