@@ -166,7 +166,22 @@ export const SwipeableRow = React.memo(function SwipeableRow({
   }
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[styles.container, style]}
+      accessibilityRole="button"
+      accessibilityActions={[
+        ...(leftAction ? [{ name: leftAction.label.toLowerCase(), label: leftAction.label }] : []),
+        ...(rightAction ? [{ name: rightAction.label.toLowerCase(), label: rightAction.label }] : []),
+      ]}
+      onAccessibilityAction={(event) => {
+        const actionName = event.nativeEvent.actionName;
+        if (leftAction && actionName === leftAction.label.toLowerCase()) {
+          leftAction.onTrigger();
+        } else if (rightAction && actionName === rightAction.label.toLowerCase()) {
+          rightAction.onTrigger();
+        }
+      }}
+    >
       {/* Left action background (swipe right reveals) */}
       {leftAction && (
         <Animated.View

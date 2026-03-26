@@ -790,6 +790,7 @@ export const ExerciseCard = React.memo(function ExerciseCard({
                 onRemove={handleRemoveSet}
                 onRPE={handleRPE}
                 onWeightCascade={handleWeightCascade}
+                equipmentType={exerciseLib?.equipment}
               />
             );
           })}

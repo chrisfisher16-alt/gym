@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Animated, ViewStyle } from 'react-native';
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../../theme';
@@ -153,7 +153,7 @@ export function Sparkline({
   // Overestimate slightly to account for curves
   pathLength *= 1.5;
 
-  const gradientId = 'sparkline-fill-grad';
+  const gradientId = useMemo(() => `sparkline-${Math.random().toString(36).slice(2, 8)}`, []);
 
   return (
     <View style={style}>

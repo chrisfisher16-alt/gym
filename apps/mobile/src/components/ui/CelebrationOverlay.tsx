@@ -4,7 +4,7 @@ import {
   Text,
   View,
   Pressable,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -22,6 +22,7 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { milestoneEarned } from '../../lib/haptics';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -35,7 +36,6 @@ export interface CelebrationOverlayProps {
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CONFETTI_COUNT = 25;
 
 const GOLD_PALETTE = [
@@ -53,11 +53,13 @@ const GOLD_PALETTE = [
 interface ConfettiParticleProps {
   index: number;
   colors: typeof GOLD_PALETTE;
+  screenWidth: number;
+  screenHeight: number;
 }
 
-function ConfettiParticle({ index, colors }: ConfettiParticleProps) {
+function ConfettiParticle({ index, colors, screenWidth, screenHeight }: ConfettiParticleProps) {
   const config = useMemo(() => ({
-    x: Math.random() * SCREEN_WIDTH,
+    x: Math.random() * screenWidth,
     size: 6 + Math.random() * 6,
     color: colors[index % colors.length],
     fallDuration: 2000 + Math.random() * 2000,
@@ -65,7 +67,7 @@ function ConfettiParticle({ index, colors }: ConfettiParticleProps) {
     rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * (1 + Math.random() * 2),
     isCircle: Math.random() > 0.5,
     swayAmount: 20 + Math.random() * 30,
-  }), [index, colors]);
+  }), [index, colors, screenWidth]);
 
   const translateY = useSharedValue(-20);
   const rotation = useSharedValue(0);
@@ -74,7 +76,7 @@ function ConfettiParticle({ index, colors }: ConfettiParticleProps) {
   useEffect(() => {
     translateY.value = withDelay(
       config.startDelay,
-      withTiming(SCREEN_HEIGHT + 40, {
+      withTiming(screenHeight + 40, {
         duration: config.fallDuration,
         easing: Easing.in(Easing.quad),
       }),
@@ -121,10 +123,37 @@ function ConfettiParticle({ index, colors }: ConfettiParticleProps) {
   );
 }
 
+// ── Static Content (reduced motion) ───────────────────────────────
+
+function StaticContent({ type, title, subtitle }: { type: CelebrationOverlayProps['type']; title: string; subtitle?: string }) {
+  const { colors, typography } = useTheme();
+
+  const icon: keyof typeof Ionicons.glyphMap =
+    type === 'pr' ? 'trophy' :
+    type === 'levelup' ? 'arrow-up-circle' :
+    type === 'streak' ? 'flame' :
+    'ribbon';
+
+  return (
+    <View style={styles.contentCenter}>
+      <Ionicons name={icon} size={56} color={colors.gold} />
+      <Text style={[typography.displayLarge, styles.title, { color: colors.gold }]}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text style={[typography.bodyLarge, styles.subtitle, { color: colors.textInverse }]}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 // ── PR Celebration ─────────────────────────────────────────────────
 
 function PRContent({ title, subtitle }: { title: string; subtitle?: string }) {
   const { colors, typography } = useTheme();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const titleScale = useSharedValue(0);
   const subtitleOpacity = useSharedValue(0);
 
@@ -144,7 +173,7 @@ function PRContent({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <>
       {Array.from({ length: CONFETTI_COUNT }).map((_, i) => (
-        <ConfettiParticle key={i} index={i} colors={GOLD_PALETTE} />
+        <ConfettiParticle key={i} index={i} colors={GOLD_PALETTE} screenWidth={screenWidth} screenHeight={screenHeight} />
       ))}
       <View style={styles.contentCenter}>
         <Animated.View style={titleStyle}>
@@ -394,6 +423,8 @@ export function CelebrationOverlay({
   onDismiss,
   autoDismissMs = 3000,
 }: CelebrationOverlayProps) {
+  const reduceMotion = useReducedMotion();
+
   useEffect(() => {
     milestoneEarned();
   }, []);
@@ -404,6 +435,10 @@ export function CelebrationOverlay({
   }, [autoDismissMs, onDismiss]);
 
   const renderContent = () => {
+    if (reduceMotion) {
+      return <StaticContent type={type} title={title} subtitle={subtitle} />;
+    }
+
     switch (type) {
       case 'pr':
         return <PRContent title={title} subtitle={subtitle} />;
@@ -418,9 +453,9 @@ export function CelebrationOverlay({
 
   return (
     <Animated.View
-      entering={FadeIn.duration(200)}
-      exiting={FadeOut.duration(200)}
-      style={styles.overlay}
+      entering={reduceMotion ? undefined : FadeIn.duration(200)}
+      exiting={reduceMotion ? undefined : FadeOut.duration(200)}
+      style={[styles.overlay, reduceMotion && { opacity: 1 }]}
     >
       <Pressable style={styles.pressable} onPress={onDismiss}>
         {renderContent()}

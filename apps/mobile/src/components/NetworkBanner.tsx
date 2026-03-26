@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
@@ -23,6 +24,7 @@ export function NetworkBanner() {
   const insets = useSafeAreaInsets();
 
   const [message, setMessage] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
   const translateY = useRef(new Animated.Value(-80)).current;
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -44,9 +46,8 @@ export function NetworkBanner() {
         tension: 80,
         friction: 12,
       }).start();
-      dismissTimer.current = setTimeout(hide, AUTO_DISMISS_MS);
     },
-    [translateY, hide],
+    [translateY],
   );
 
   // Register the imperative handle
@@ -56,6 +57,22 @@ export function NetworkBanner() {
       showBannerFn = null;
     };
   }, [show]);
+
+  // Track network state
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOnline(!!state.isConnected);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Auto-dismiss only when back online
+  useEffect(() => {
+    if (message && isOnline) {
+      const timer = setTimeout(hide, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message, isOnline, hide]);
 
   // Cleanup timer on unmount
   useEffect(() => {

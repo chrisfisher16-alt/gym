@@ -5,7 +5,7 @@ import {
   Pressable,
   Modal,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -47,7 +47,6 @@ export interface QuickActionSheetProps {
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DISMISS_THRESHOLD = 0.3;
 const SPRING_CONFIG = { damping: 20, stiffness: 150 };
 
@@ -63,6 +62,7 @@ export function QuickActionSheet({
 }: QuickActionSheetProps) {
   const { colors, typography, spacing, radius } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: SCREEN_HEIGHT } = useWindowDimensions();
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);

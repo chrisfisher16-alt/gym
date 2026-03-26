@@ -77,9 +77,10 @@ export function swipeAction() {
 }
 
 /** Heavy impact + success notification when achievement/milestone unlocked */
-export function milestoneEarned() {
-  Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-  Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Success);
+export async function milestoneEarned() {
+  await Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  await new Promise(resolve => setTimeout(resolve, 120));
+  await Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Success);
 }
 
 /** Triple light impact (3× with 50ms gaps) when water is logged */

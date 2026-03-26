@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { formatDuration } from '../../lib/workout-utils';
 import { workoutFinished } from '../../lib/haptics';
+import { useProfileStore } from '../../stores/profile-store';
 import type { CompletedSession, CompletedExercise } from '../../types/workout';
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -148,6 +149,8 @@ interface ReplayExerciseCardProps {
 
 function ReplayExerciseCard({ exercise, index, skipped }: ReplayExerciseCardProps) {
   const { colors, spacing, radius, typography } = useTheme();
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
   const completedSets = exercise.sets.length;
   const hasPR = exercise.sets.some((s) => s.isPR);
@@ -194,7 +197,7 @@ function ReplayExerciseCard({ exercise, index, skipped }: ReplayExerciseCardProp
   const bestSetLabel = bestSet
     ? bestSet.durationSeconds
       ? `${bestSet.durationSeconds}s`
-      : `${bestSet.weight ?? 0}lb × ${bestSet.reps ?? 0}`
+      : `${bestSet.weight ?? 0}${unit} × ${bestSet.reps ?? 0}`
     : '';
 
   const enterAnimation = skipped
@@ -265,6 +268,8 @@ function ReplayExerciseCard({ exercise, index, skipped }: ReplayExerciseCardProp
 
 export function SessionReplay({ session, onComplete, onSkip }: SessionReplayProps) {
   const { colors, spacing, radius, typography } = useTheme();
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
   const [phase, setPhase] = useState<'title' | 'cards' | 'stats' | 'celebration' | 'done'>('title');
   const [skipped, setSkipped] = useState(false);
   const [visibleCardCount, setVisibleCardCount] = useState(0);
@@ -453,7 +458,7 @@ export function SessionReplay({ session, onComplete, onSkip }: SessionReplayProp
               <Text style={[typography.statValue, { color: colors.text }]}>
                 {(skipped ? session.totalVolume : volumeDisplay).toLocaleString()}
               </Text>
-              <Text style={[typography.caption, { color: colors.textTertiary }]}>lbs</Text>
+              <Text style={[typography.caption, { color: colors.textTertiary }]}>{unit}</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.borderLight }]} />
             <View style={styles.statItem}>
