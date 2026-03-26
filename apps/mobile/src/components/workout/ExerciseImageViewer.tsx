@@ -27,8 +27,8 @@ export interface ExerciseImageViewerProps {
 // ── Constants ────────────────────────────────────────────────────────
 
 const SIZE_HEIGHTS: Record<ExerciseImageViewerProps['size'], number> = {
-  compact: 140,
-  focused: 140,
+  compact: 120,
+  focused: 120,
   detail: 280,
 };
 

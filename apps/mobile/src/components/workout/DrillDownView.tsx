@@ -533,7 +533,7 @@ export function DrillDownView({
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* ── Back Navigation Bar ─────────────────────────────────────── */}
       <View style={[styles.backBar, { paddingHorizontal: spacing.base }]}>
         <TouchableOpacity
@@ -597,7 +597,7 @@ export function DrillDownView({
         )}
 
         {/* ── Action Bar (Rest Timer, Replace, Form Check) ──── */}
-        <View style={[styles.actionBar, { marginTop: spacing.sm, gap: spacing.sm, paddingHorizontal: spacing.base, flexWrap: 'wrap' }]}>
+        <View style={[styles.actionBar, { marginTop: spacing.xs, gap: 6, paddingHorizontal: spacing.sm, flexWrap: 'wrap' }]}>
           {/* Rest Time Badge */}
           {editingRest ? (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -1040,8 +1040,8 @@ const styles = StyleSheet.create({
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   progressRow: {
     flexDirection: 'row',
