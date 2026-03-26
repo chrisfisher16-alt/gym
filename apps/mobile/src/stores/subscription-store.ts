@@ -238,13 +238,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   applyPromoCode: async (code) => {
     try {
-      const userId = useAuthStore.getState().session?.user?.id;
-      const { data, error } = await supabase.functions.invoke('validate-promo', {
-        body: { code },
+      const { data, error } = await supabase.rpc('validate_promo_code', {
+        promo_code: code.trim().toUpperCase(),
       });
 
       if (error || !data?.success) {
-        return { success: false, error: data?.error || 'Invalid promo code' };
+        return { success: false, error: data?.error_message || 'Invalid promo code' };
       }
 
       const plan = mapPricingConfig(data.tier as Exclude<EntitlementTier, 'free'>);
