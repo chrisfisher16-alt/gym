@@ -229,9 +229,9 @@ export function ExpandableCard({
       {/* Expanded content – lazy mounted */}
       {hasExpanded && (
         <Animated.View style={expandStyle}>
-          <View onLayout={handleContentLayout} style={{ paddingHorizontal: spacing.base, paddingBottom: spacing.base }}>
+          <Pressable onPress={toggle} onLayout={handleContentLayout} style={{ paddingHorizontal: spacing.base, paddingBottom: spacing.base }}>
             {expandedContent}
-          </View>
+          </Pressable>
         </Animated.View>
       )}
     </Animated.View>
