@@ -497,7 +497,7 @@ export function FocusedWorkoutView({
           {isTimeBased ? (
             /* ── Duration input for timed exercises ──────────────────── */
             <View style={styles.inputBlock}>
-              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
                 DURATION (seconds)
               </Text>
               <View style={styles.inputRow}>
@@ -508,7 +508,7 @@ export function FocusedWorkoutView({
                     { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                   ]}
                 >
-                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
                 </TouchableOpacity>
                 <TextInput
                   style={[
@@ -518,7 +518,7 @@ export function FocusedWorkoutView({
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
                       borderRadius: radius.lg,
-                      fontSize: 48,
+                      fontSize: 30,
                       fontWeight: '700',
                       letterSpacing: -1,
                     },
@@ -537,7 +537,7 @@ export function FocusedWorkoutView({
                     { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                   ]}
                 >
-                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
                 </TouchableOpacity>
               </View>
               <Text style={[typography.bodySmall, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.sm }]}>
@@ -550,7 +550,7 @@ export function FocusedWorkoutView({
               {/* Weight - Scoreboard style (hidden for bodyweight) */}
               {!isBodyweight && (
                 <View style={styles.inputBlock}>
-                  <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+                  <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
                     WEIGHT ({unit})
                   </Text>
                   <View style={styles.inputRow}>
@@ -561,7 +561,7 @@ export function FocusedWorkoutView({
                         { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                       ]}
                     >
-                      <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
+                      <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
                     </TouchableOpacity>
                     <TextInput
                       style={[
@@ -571,7 +571,7 @@ export function FocusedWorkoutView({
                           backgroundColor: colors.surface,
                           borderColor: colors.border,
                           borderRadius: radius.lg,
-                          fontSize: 48,
+                          fontSize: 30,
                           fontWeight: '700',
                           letterSpacing: -1,
                         },
@@ -590,15 +590,15 @@ export function FocusedWorkoutView({
                         { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                       ]}
                     >
-                      <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
+                      <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               )}
 
               {/* Reps - Scoreboard style */}
-              <View style={[styles.inputBlock, { marginTop: isBodyweight ? 0 : spacing.xl }]}>
-                <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm, textAlign: 'center', letterSpacing: 2 }]}>
+              <View style={[styles.inputBlock, { marginTop: isBodyweight ? 0 : spacing.sm }]}>
+                <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
                   REPS
                 </Text>
                 <View style={styles.inputRow}>
@@ -609,7 +609,7 @@ export function FocusedWorkoutView({
                       { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                     ]}
                   >
-                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>−</Text>
+                    <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
                   </TouchableOpacity>
                   <TextInput
                     style={[
@@ -619,7 +619,7 @@ export function FocusedWorkoutView({
                         backgroundColor: colors.surface,
                         borderColor: colors.border,
                         borderRadius: radius.lg,
-                        fontSize: 48,
+                        fontSize: 30,
                         fontWeight: '700',
                         letterSpacing: -1,
                       },
@@ -638,7 +638,7 @@ export function FocusedWorkoutView({
                       { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
                     ]}
                   >
-                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>+</Text>
+                    <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -646,7 +646,7 @@ export function FocusedWorkoutView({
           )}
 
           {/* Spacer so content isn't hidden behind fixed button */}
-          <View style={{ height: 100 }} />
+          <View style={{ height: 80 }} />
 
           {/* Completed sets summary */}
           {completedCount > 0 && (
@@ -764,8 +764,8 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   supersetRow: {
     flexDirection: 'row',
@@ -792,8 +792,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigIncBtn: {
-    width: 64,
-    height: 64,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -801,9 +801,9 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     borderWidth: 2,
-    minHeight: 80,
-    marginHorizontal: 14,
-    paddingHorizontal: 8,
+    minHeight: 48,
+    marginHorizontal: 8,
+    paddingHorizontal: 4,
   },
   logSetBtn: {
     flexDirection: 'row',

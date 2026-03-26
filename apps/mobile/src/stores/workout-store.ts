@@ -18,6 +18,7 @@ import {
   activeToCompleted,
 } from '../lib/workout-utils';
 import { preloadExerciseImages } from '../lib/exercise-image-preloader';
+import { getPreviousSetData } from '../lib/suggested-load';
 import { getDateString } from '../lib/nutrition-utils';
 
 // ── Persist Debounce ─────────────────────────────────────────────────
@@ -357,6 +358,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   // ── Workout Session ─────────────────────────────────────────────
 
   startWorkout: ({ name, programId, dayId, exercises }) => {
+    const history = get().history;
     const session: ActiveWorkoutSession = {
       id: generateId('ws'),
       programId,
@@ -369,13 +371,18 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           id: generateId('ae'),
           exerciseId: e.exerciseId,
           exerciseName: e.exerciseName,
-          sets: Array.from({ length: e.targetSets }, (_, i) => ({
-            id: generateId('set'),
-            setNumber: i + 1,
-            setType: 'working' as const,
-            isCompleted: false,
-            isPR: false,
-          })),
+          targetReps: e.targetReps,
+          sets: Array.from({ length: e.targetSets }, (_, i) => {
+            const prev = getPreviousSetData(e.exerciseId, i + 1, history);
+            return {
+              id: generateId('set'),
+              setNumber: i + 1,
+              setType: 'working' as const,
+              isCompleted: false,
+              isPR: false,
+              ...(prev ? { weight: prev.weight, reps: prev.reps } : {}),
+            };
+          }),
           supersetGroupId: e.supersetGroupId,
           isTimeBased: libExercise?.isTimeBased,
           isBodyweight: libExercise?.isBodyweight,
@@ -668,6 +675,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   // ── Exercise Management ─────────────────────────────────────────
 
   addExerciseToSession: (exercise, targetSets = 3, setType = 'working') => {
+    const history = get().history;
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -675,13 +683,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         id: generateId('ae'),
         exerciseId: exercise.id,
         exerciseName: exercise.name,
-        sets: Array.from({ length: targetSets }, (_, i) => ({
-          id: generateId('set'),
-          setNumber: i + 1,
-          setType: setType as import('@health-coach/shared').SetType,
-          isCompleted: false,
-          isPR: false,
-        })),
+        sets: Array.from({ length: targetSets }, (_, i) => {
+          const prev = getPreviousSetData(exercise.id, i + 1, history);
+          return {
+            id: generateId('set'),
+            setNumber: i + 1,
+            setType: setType as import('@health-coach/shared').SetType,
+            isCompleted: false,
+            isPR: false,
+            ...(prev ? { weight: prev.weight, reps: prev.reps } : {}),
+          };
+        }),
         restSeconds: exercise.defaultRestSeconds,
         isTimeBased: exercise.isTimeBased,
         isBodyweight: exercise.isBodyweight,

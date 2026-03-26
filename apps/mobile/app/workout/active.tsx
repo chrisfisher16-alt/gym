@@ -495,6 +495,31 @@ export default function ActiveWorkoutScreen() {
     [removeSupersetGroup],
   );
 
+  const handleExerciseLongPress = useCallback(
+    (exercise: ActiveExercise) => {
+      Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (exercise.supersetGroupId) {
+        crossPlatformAlert('Superset Options', undefined, [
+          {
+            text: 'Remove from Superset',
+            style: 'destructive',
+            onPress: () => handleRemoveSupersetGroup(exercise.supersetGroupId!),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      } else {
+        crossPlatformAlert('Superset Options', undefined, [
+          {
+            text: 'Create Superset',
+            onPress: () => setSupersetSourceId(exercise.id),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+    },
+    [handleRemoveSupersetGroup],
+  );
+
   const handleMoveExercise = useCallback(
     (index: number, direction: 'up' | 'down') => {
       if (!activeSession) return;
@@ -797,6 +822,7 @@ export default function ActiveWorkoutScreen() {
                           setDrilledExerciseIndex(g.index);
                         }}
                         onToggleExpand={() => handleToggleExpand(g.exercise.id)}
+                        onLongPress={() => handleExerciseLongPress(g.exercise)}
                         onSetPress={() => {
                           setCurrentExerciseIndex(g.index);
                           setDrilledExerciseIndex(g.index);
@@ -820,6 +846,7 @@ export default function ActiveWorkoutScreen() {
                     setDrilledExerciseIndex(g.index);
                   }}
                   onToggleExpand={() => handleToggleExpand(g.exercise.id)}
+                  onLongPress={() => handleExerciseLongPress(g.exercise)}
                   onSetPress={() => {
                     setCurrentExerciseIndex(g.index);
                     setDrilledExerciseIndex(g.index);
