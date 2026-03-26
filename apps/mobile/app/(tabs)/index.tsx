@@ -167,6 +167,7 @@ export default function TodayTab() {
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
   const [briefingExpanded, setBriefingExpanded] = useState(false);
+  const [nutritionExpanded, setNutritionExpanded] = useState(true);
 
   const loadBriefing = useCallback(async (force = false) => {
     setBriefingLoading(true);
@@ -503,6 +504,9 @@ export default function TodayTab() {
         {showNutrition && (
           <ExpandableCard
             style={{ marginTop: spacing.base }}
+            initiallyExpanded
+            onExpand={() => setNutritionExpanded(true)}
+            onCollapse={() => setNutritionExpanded(false)}
             expandedContent={
               <View>
                 {/* Per-meal breakdown */}
@@ -554,7 +558,7 @@ export default function TodayTab() {
               </View>
             }
           >
-            {/* Collapsed: header + rings */}
+            {/* Collapsed: header + preview */}
             <TouchableOpacity
               activeOpacity={1}
               onLongPress={() => showQuickActions({
@@ -573,45 +577,56 @@ export default function TodayTab() {
                 <Text style={[typography.labelSmall, { color: colors.primary }]}>See All</Text>
               </TouchableOpacity>
             </View>
-            {dC.calories === 0 && dC.protein_g === 0 ? (
-              <EmptyState
-                icon="nutrition-outline"
-                title="Track Your Nutrition"
-                description="Log meals to see your daily breakdown."
-                actionLabel="Log a Meal"
-                onAction={() => router.push('/nutrition/log')}
-                compact
-              />
-            ) : (
-              <>
-                <View style={[S.ringsRow, { marginTop: spacing.base }]}>
-                  {[
-                    { p: calP, c: colors.calories, l: calLbl, sl: calSub, t: 'Calories', sd: sparklineData.calories },
-                    { p: proP, c: colors.protein, l: proLbl, sl: proSub, t: 'Protein', sd: sparklineData.protein },
-                    { p: watP, c: colors.info, l: watLbl, sl: watSub, t: 'Water', sd: sparklineData.water },
-                  ].map((r) => (
-                    <View key={r.t} style={S.ringItem}>
-                      <ProgressRing progress={Math.min(r.p, 1)} size={64} strokeWidth={5} color={r.c} label={r.l} sublabel={r.sl} />
-                      <View style={[S.row, { marginTop: spacing.xs, justifyContent: 'center' }]}>
-                        <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center' }]}>{r.t}</Text>
-                        <Sparkline variant="inline" data={r.sd} color={r.c} style={{ marginLeft: 4 }} />
+            {!nutritionExpanded && (
+              dC.calories === 0 && dC.protein_g === 0 ? (
+                <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>No meals logged today</Text>
+              ) : (
+                <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                  {fmt(dC.calories)} / {fmt(dT.calories)} cal · {fmt(dC.protein_g)}g protein
+                </Text>
+              )
+            )}
+            {nutritionExpanded && (
+              dC.calories === 0 && dC.protein_g === 0 ? (
+                <EmptyState
+                  icon="nutrition-outline"
+                  title="Track Your Nutrition"
+                  description="Log meals to see your daily breakdown."
+                  actionLabel="Log a Meal"
+                  onAction={() => router.push('/nutrition/log')}
+                  compact
+                />
+              ) : (
+                <>
+                  <View style={[S.ringsRow, { marginTop: spacing.base }]}>
+                    {[
+                      { p: calP, c: colors.calories, l: calLbl, sl: calSub, t: 'Calories', sd: sparklineData.calories },
+                      { p: proP, c: colors.protein, l: proLbl, sl: proSub, t: 'Protein', sd: sparklineData.protein },
+                      { p: watP, c: colors.info, l: watLbl, sl: watSub, t: 'Water', sd: sparklineData.water },
+                    ].map((r) => (
+                      <View key={r.t} style={S.ringItem}>
+                        <ProgressRing progress={Math.min(r.p, 1)} size={64} strokeWidth={5} color={r.c} label={r.l} sublabel={r.sl} />
+                        <View style={[S.row, { marginTop: spacing.xs, justifyContent: 'center' }]}>
+                          <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center' }]}>{r.t}</Text>
+                          <Sparkline variant="inline" data={r.sd} color={r.c} style={{ marginLeft: 4 }} />
+                        </View>
                       </View>
-                    </View>
-                  ))}
-                </View>
-                <View style={[S.row, { marginTop: spacing.md, gap: spacing.sm }]}>
-                  <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
-                    onPress={() => setMealSheetVisible(true)} activeOpacity={0.7}>
-                    <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-                    <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>Log Meal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
-                    onPress={() => setWaterSheetVisible(true)} activeOpacity={0.7}>
-                    <Ionicons name="water-outline" size={16} color={colors.info} />
-                    <Text style={[typography.labelSmall, { color: colors.info, marginLeft: spacing.xs }]}>Add Water</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
+                    ))}
+                  </View>
+                  <View style={[S.row, { marginTop: spacing.md, gap: spacing.sm }]}>
+                    <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
+                      onPress={() => setMealSheetVisible(true)} activeOpacity={0.7}>
+                      <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                      <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>Log Meal</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
+                      onPress={() => setWaterSheetVisible(true)} activeOpacity={0.7}>
+                      <Ionicons name="water-outline" size={16} color={colors.info} />
+                      <Text style={[typography.labelSmall, { color: colors.info, marginLeft: spacing.xs }]}>Add Water</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )
             )}
             {activeSupplements.length > 0 && (
               <View style={{ marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderLight }}>
