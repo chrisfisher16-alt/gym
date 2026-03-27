@@ -135,7 +135,7 @@ function WarmupExerciseRow({
               borderRadius: radius.full,
               borderWidth: isComplete ? 0 : 1.5,
               borderColor: colors.border,
-              backgroundColor: isComplete ? colors.success : 'transparent',
+              backgroundColor: isComplete ? colors.completed : 'transparent',
             },
           ]}
         >

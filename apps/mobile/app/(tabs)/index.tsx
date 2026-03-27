@@ -30,6 +30,7 @@ import { generateInsights, type InsightContext as InsightCtx } from '../../src/l
 import { InsightBadge } from '../../src/components/ui';
 import { useCoachStore } from '../../src/stores/coach-store';
 import { useCoachPeekTrigger } from '../../src/hooks/useCoachPeekTrigger';
+import { TodayTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
 
 // ── Types & Constants ─────────────────────────────────────────────────
 interface AIInsight {
@@ -350,13 +351,10 @@ export default function TodayTab() {
   const grad = dark ? [colors.primaryMuted, colors.surface] as const : [colors.primaryMuted, colors.background] as const;
 
   // ── Loading ───────────────────────────────────────────────────────
-  if (isLoading) {
+  if (isLoading || !isWorkoutInitialized) {
     return (
       <ScreenContainer>
-        <View style={S.loadWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>Loading your dashboard...</Text>
-        </View>
+        <TodayTabSkeleton />
       </ScreenContainer>
     );
   }

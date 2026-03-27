@@ -173,7 +173,7 @@ export function WeeklyVolumeTargets({ history, goal, style }: WeeklyVolumeTarget
         if (actual > maxTarget) {
           fillColor = colors.error; // Over-training (red)
         } else if (actual >= minTarget) {
-          fillColor = colors.success; // On track (green)
+          fillColor = colors.completed; // On track (green)
         } else if (actual > 0) {
           fillColor = colors.warning; // Under-training (yellow)
         } else {

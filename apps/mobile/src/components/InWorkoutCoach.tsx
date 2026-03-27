@@ -308,7 +308,7 @@ export function InWorkoutCoach({
           styles.adjustmentCard,
           {
             backgroundColor: isApplied
-              ? colors.successLight
+              ? colors.completedMuted
               : colors.surfaceSecondary,
             borderRadius: radius.lg,
             marginBottom: spacing.sm,
@@ -323,7 +323,7 @@ export function InWorkoutCoach({
           <Ionicons
             name={icon}
             size={18}
-            color={isApplied ? colors.success : colors.primary}
+            color={isApplied ? colors.completed : colors.primary}
           />
           <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
             {label}
@@ -366,7 +366,7 @@ export function InWorkoutCoach({
               style={[
                 styles.adjustmentBtn,
                 {
-                  backgroundColor: colors.success,
+                  backgroundColor: colors.completed,
                   borderRadius: radius.md,
                   paddingHorizontal: spacing.md,
                   paddingVertical: spacing.xs,
@@ -514,7 +514,7 @@ export function InWorkoutCoach({
                   style={[
                     styles.applyAllBtn,
                     {
-                      backgroundColor: colors.success,
+                      backgroundColor: colors.completed,
                       borderRadius: radius.md,
                       paddingVertical: spacing.sm,
                       marginBottom: spacing.sm,
@@ -531,15 +531,15 @@ export function InWorkoutCoach({
                   style={[
                     styles.successBanner,
                     {
-                      backgroundColor: colors.successLight,
+                      backgroundColor: colors.completedMuted,
                       borderRadius: radius.lg,
                       marginBottom: spacing.sm,
                       padding: spacing.md,
                     },
                   ]}
                 >
-                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                  <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.completed} />
+                  <Text style={[typography.label, { color: colors.completed, marginLeft: spacing.sm }]}>
                     All changes resolved!
                   </Text>
                 </View>

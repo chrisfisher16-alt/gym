@@ -129,7 +129,7 @@ export function WeeklyCalendarRow({ activeProgram }: WeeklyCalendarRowProps) {
                 {
                   borderRadius: radius.full ?? 16,
                   backgroundColor: isCompleted
-                    ? colors.success
+                    ? colors.completed
                     : isToday
                       ? colors.primary
                       : 'transparent',

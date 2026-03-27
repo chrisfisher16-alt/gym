@@ -13,6 +13,7 @@ import { InviteFriendsSheet } from '../../src/components/InviteFriendsSheet';
 import { useChallengeStore } from '../../src/stores/challenge-store';
 import { useFriendsStore } from '../../src/stores/friends-store';
 import { useFeedStore } from '../../src/stores/feed-store';
+import { CompeteTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
 import { supabase } from '../../src/lib/supabase';
 import type { ChallengeMetric } from '../../../../packages/shared/src/types/compete';
 
@@ -161,9 +162,7 @@ export default function CompeteTab() {
       </Animated.View>
 
       {isInitialLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={goldColor} />
-        </View>
+        <CompeteTabSkeleton />
       ) : (
         <View style={{ gap: spacing.md, paddingBottom: spacing.xl }}>
           {/* Section 1: Leaderboard */}

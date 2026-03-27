@@ -609,18 +609,18 @@ export const ExerciseCard = React.memo(function ExerciseCard({
               paddingVertical: 4,
               paddingHorizontal: spacing.sm,
               borderRadius: radius.sm,
-              backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted,
+              backgroundColor: suggestion.confidence === 'high' ? colors.completedMuted : colors.primaryMuted,
             }}>
               <Ionicons 
                 name="trending-up" 
                 size={12} 
-                color={suggestion.confidence === 'high' ? colors.success : colors.primary} 
+                color={suggestion.confidence === 'high' ? colors.completed : colors.primary} 
               />
               <Text 
                 style={[
                   typography.caption, 
                   { 
-                    color: suggestion.confidence === 'high' ? colors.success : colors.primary, 
+                    color: suggestion.confidence === 'high' ? colors.completed : colors.primary, 
                     marginLeft: 4, 
                     flex: 1,
                   }
@@ -638,7 +638,7 @@ export const ExerciseCard = React.memo(function ExerciseCard({
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={{ marginLeft: 4 }}
               >
-                <Ionicons name="checkmark-circle" size={16} color={suggestion.confidence === 'high' ? colors.success : colors.primary} />
+                <Ionicons name="checkmark-circle" size={16} color={suggestion.confidence === 'high' ? colors.completed : colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity 
                 onPress={() => { 
@@ -690,7 +690,7 @@ export const ExerciseCard = React.memo(function ExerciseCard({
           style={[
             styles.suggestionBanner,
             {
-              backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted,
+              backgroundColor: suggestion.confidence === 'high' ? colors.completedMuted : colors.primaryMuted,
               borderRadius: radius.md,
               padding: spacing.sm,
               marginTop: spacing.xs,
@@ -698,8 +698,8 @@ export const ExerciseCard = React.memo(function ExerciseCard({
           ]}
         >
           <View style={styles.suggestionRow}>
-            <Ionicons name="trending-up" size={14} color={suggestion.confidence === 'high' ? colors.success : colors.primary} />
-            <Text style={[typography.labelSmall, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, marginLeft: 4, flex: 1 }]}>
+            <Ionicons name="trending-up" size={14} color={suggestion.confidence === 'high' ? colors.completed : colors.primary} />
+            <Text style={[typography.labelSmall, { color: suggestion.confidence === 'high' ? colors.completed : colors.primary, marginLeft: 4, flex: 1 }]}>
               {isBodyweight ? `Suggested: ${suggestion.suggestedReps} reps` : `Suggested: ${suggestion.suggestedWeight} ${unit} × ${suggestion.suggestedReps} reps`}
             </Text>
             <TouchableOpacity

@@ -155,10 +155,10 @@ function ActionCard({ actionState, onApply }: ActionCardProps) {
           styles.actionCard,
           {
             backgroundColor: isApplied
-              ? colors.successLight ?? `${colors.success}15`
+              ? colors.completedMuted
               : colors.errorLight,
             borderRadius: radius.md,
-            borderColor: isApplied ? colors.success : colors.error,
+            borderColor: isApplied ? colors.completed : colors.error,
             padding: spacing.sm,
           },
         ]}
@@ -167,14 +167,14 @@ function ActionCard({ actionState, onApply }: ActionCardProps) {
           <Ionicons
             name={isApplied ? 'checkmark-circle' : 'alert-circle'}
             size={18}
-            color={isApplied ? colors.success : colors.error}
+            color={isApplied ? colors.completed : colors.error}
           />
           <View style={{ flex: 1, marginLeft: spacing.sm }}>
             <Text
               style={[
                 typography.bodySmall,
                 {
-                  color: isApplied ? colors.success : colors.error,
+                  color: isApplied ? colors.completed : colors.error,
                   fontWeight: '500',
                 },
               ]}
@@ -187,7 +187,7 @@ function ActionCard({ actionState, onApply }: ActionCardProps) {
                 style={[
                   typography.caption,
                   {
-                    color: isApplied ? colors.success : colors.error,
+                    color: isApplied ? colors.completed : colors.error,
                     marginTop: 2,
                   },
                 ]}
@@ -197,7 +197,7 @@ function ActionCard({ actionState, onApply }: ActionCardProps) {
             )}
           </View>
           {isApplied && (
-            <Ionicons name="checkmark-done" size={18} color={colors.success} />
+            <Ionicons name="checkmark-done" size={18} color={colors.completed} />
           )}
         </View>
       </View>

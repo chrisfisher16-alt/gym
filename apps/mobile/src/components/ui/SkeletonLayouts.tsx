@@ -481,6 +481,157 @@ export function ProgressTabSkeleton() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// COMPETE TAB SKELETON
+// ═══════════════════════════════════════════════════════════════════════
+
+export function CompeteTabSkeleton() {
+  const { spacing, radius } = useTheme();
+
+  return (
+    <View style={[styles.container, { paddingHorizontal: spacing.base }]}>
+      {/* Header */}
+      <View style={[styles.row, { justifyContent: 'space-between', paddingTop: spacing.sm, paddingBottom: spacing.md }]}>
+        <SkeletonBlock width={120} height={28} borderRadius={radius.sm} />
+        <SkeletonBlock width={80} height={32} borderRadius={radius.md} />
+      </View>
+
+      {/* Leaderboard card */}
+      <SkeletonCardWrap>
+        <View style={[styles.row, { justifyContent: 'space-between', marginBottom: spacing.md }]}>
+          <SkeletonBlock width={100} height={14} borderRadius={radius.sm} />
+          <SkeletonBlock width={80} height={24} borderRadius={radius.md} />
+        </View>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <View key={i} style={[styles.row, { gap: spacing.sm, marginTop: i > 0 ? spacing.sm : 0 }]}>
+            <SkeletonBlock width={24} height={24} borderRadius={12} />
+            <SkeletonBlock width={32} height={32} borderRadius={16} />
+            <SkeletonBlock width="40%" height={12} borderRadius={radius.sm} />
+            <View style={{ flex: 1 }} />
+            <SkeletonBlock width={50} height={12} borderRadius={radius.sm} />
+          </View>
+        ))}
+      </SkeletonCardWrap>
+
+      {/* Challenges card */}
+      <SkeletonCardWrap>
+        <SkeletonBlock width={130} height={14} borderRadius={radius.sm} />
+        <SkeletonBlock
+          width="100%"
+          height={60}
+          borderRadius={radius.md}
+          style={{ marginTop: spacing.md }}
+        />
+      </SkeletonCardWrap>
+
+      {/* Friends card */}
+      <SkeletonCardWrap>
+        <SkeletonBlock width={100} height={14} borderRadius={radius.sm} />
+        <View style={[styles.row, { gap: spacing.md, marginTop: spacing.md }]}>
+          {[0, 1, 2, 3].map((i) => (
+            <SkeletonBlock key={i} width={40} height={40} borderRadius={20} />
+          ))}
+        </View>
+      </SkeletonCardWrap>
+
+      {/* Activity feed card */}
+      <SkeletonCardWrap>
+        <SkeletonBlock width={120} height={14} borderRadius={radius.sm} />
+        {[0, 1].map((i) => (
+          <View key={i} style={[styles.row, { gap: spacing.sm, marginTop: spacing.md }]}>
+            <SkeletonBlock width={36} height={36} borderRadius={18} />
+            <View style={{ flex: 1 }}>
+              <SkeletonBlock width="70%" height={12} borderRadius={radius.sm} />
+              <SkeletonBlock
+                width="45%"
+                height={10}
+                borderRadius={radius.sm}
+                style={{ marginTop: spacing.xs }}
+              />
+            </View>
+          </View>
+        ))}
+      </SkeletonCardWrap>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COACH TAB SKELETON
+// ═══════════════════════════════════════════════════════════════════════
+
+export function CoachTabSkeleton() {
+  const { spacing, radius } = useTheme();
+
+  return (
+    <View style={styles.container}>
+      {/* Header bar */}
+      <View
+        style={[
+          styles.row,
+          {
+            justifyContent: 'space-between',
+            paddingHorizontal: spacing.base,
+            paddingTop: spacing.base,
+            paddingBottom: spacing.md,
+          },
+        ]}
+      >
+        <View style={[styles.row, { gap: spacing.sm }]}>
+          <SkeletonBlock width={36} height={36} borderRadius={18} />
+          <View>
+            <SkeletonBlock width={80} height={14} borderRadius={radius.sm} />
+            <SkeletonBlock
+              width={50}
+              height={10}
+              borderRadius={radius.sm}
+              style={{ marginTop: spacing.xs }}
+            />
+          </View>
+        </View>
+        <View style={[styles.row, { gap: spacing.sm }]}>
+          <SkeletonBlock width={22} height={22} borderRadius={11} />
+          <SkeletonBlock width={26} height={26} borderRadius={13} />
+        </View>
+      </View>
+
+      {/* Message bubbles */}
+      <View style={{ flex: 1, paddingHorizontal: spacing.base, paddingTop: spacing.lg, gap: spacing.lg }}>
+        {/* Assistant message (left-aligned) */}
+        <View style={{ alignSelf: 'flex-start', maxWidth: '80%' }}>
+          <SkeletonBlock width={220} height={60} borderRadius={radius.lg} />
+        </View>
+
+        {/* User message (right-aligned) */}
+        <View style={{ alignSelf: 'flex-end', maxWidth: '70%' }}>
+          <SkeletonBlock width={160} height={44} borderRadius={radius.lg} />
+        </View>
+
+        {/* Assistant message */}
+        <View style={{ alignSelf: 'flex-start', maxWidth: '80%' }}>
+          <SkeletonBlock width={260} height={80} borderRadius={radius.lg} />
+        </View>
+      </View>
+
+      {/* Input bar */}
+      <View
+        style={[
+          styles.row,
+          {
+            paddingHorizontal: spacing.base,
+            paddingVertical: spacing.md,
+            gap: spacing.sm,
+          },
+        ]}
+      >
+        <SkeletonBlock width={40} height={40} borderRadius={20} />
+        <SkeletonBlock width={0} height={40} borderRadius={radius.lg} style={{ flex: 1 }} />
+        <SkeletonBlock width={40} height={40} borderRadius={20} />
+      </View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
   container: {

@@ -15,6 +15,8 @@ import { SmartHeader } from '../../src/components/ui';
 import { CoachChatUI } from '../../src/components/CoachChatUI';
 import { UsageCounterExpandable } from '../../src/components/coach/UsageCounter';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { CoachTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
+import { ScreenContainer } from '../../src/components/ui';
 import { usePaywall } from '../../src/hooks/usePaywall';
 import { checkAIMessageLimit, type UsageCheck } from '../../src/lib/usage-limits';
 
@@ -23,6 +25,7 @@ export default function CoachTab() {
   const { colors, spacing, typography } = useTheme();
 
   const messages = useCoachStore((s) => s.messages);
+  const isInitialized = useCoachStore((s) => s.isInitialized);
   const startConversation = useCoachStore((s) => s.startConversation);
 
   const { tier } = useEntitlement();
@@ -79,6 +82,14 @@ export default function CoachTab() {
       </View>
     </View>
   );
+
+  if (!isInitialized) {
+    return (
+      <ScreenContainer>
+        <CoachTabSkeleton />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <CoachChatUI

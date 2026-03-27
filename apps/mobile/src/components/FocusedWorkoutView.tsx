@@ -583,18 +583,18 @@ export function FocusedWorkoutView({
 
           {/* Suggestion banner (only for weight_reps / bodyweight_reps modes) */}
           {suggestion && !fields.hasDuration && (
-            <View style={[styles.suggestionCard, { backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md }]}>
+            <View style={[styles.suggestionCard, { backgroundColor: suggestion.confidence === 'high' ? colors.completedMuted : colors.primaryMuted, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md }]}>
               <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
                 Based on your last workout, try:
               </Text>
-              <Text style={[typography.h2, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, textAlign: 'center' }]}>
+              <Text style={[typography.h2, { color: suggestion.confidence === 'high' ? colors.completed : colors.primary, textAlign: 'center' }]}>
                 {!fields.hasWeight
                   ? `${suggestion.suggestedReps} reps`
                   : `${suggestion.suggestedWeight} ${unit} × ${suggestion.suggestedReps} reps`}
               </Text>
               <TouchableOpacity
                 onPress={handleUseSuggestion}
-                style={[styles.useSuggestionBtn, { backgroundColor: suggestion.confidence === 'high' ? colors.success : colors.primary, borderRadius: radius.md, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.base }]}
+                style={[styles.useSuggestionBtn, { backgroundColor: suggestion.confidence === 'high' ? colors.completed : colors.primary, borderRadius: radius.md, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.base }]}
                 activeOpacity={0.8}
               >
                 <Ionicons name="flash" size={16} color={colors.textInverse} />

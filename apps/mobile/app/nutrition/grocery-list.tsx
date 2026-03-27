@@ -368,7 +368,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                 {progress.checked} / {progress.total} items
               </Text>
               {currentList.totalEstimatedCost != null && (
-                <Text style={[typography.label, { color: colors.success }]}>
+                <Text style={[typography.label, { color: colors.completed }]}>
                   ~${currentList.totalEstimatedCost.toFixed(2)}
                 </Text>
               )}
@@ -378,7 +378,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                 style={{
                   height: 6,
                   borderRadius: radius.sm,
-                  backgroundColor: colors.success,
+                  backgroundColor: colors.completed,
                   width: progress.total > 0 ? `${(progress.checked / progress.total) * 100}%` : '0%',
                 }}
               />
@@ -415,7 +415,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                     <Ionicons
                       name={item.checked ? 'checkbox' : 'square-outline'}
                       size={22}
-                      color={item.checked ? colors.success : colors.textTertiary}
+                      color={item.checked ? colors.completed : colors.textTertiary}
                     />
                     <View style={{ flex: 1, marginLeft: spacing.md }}>
                       <Text
