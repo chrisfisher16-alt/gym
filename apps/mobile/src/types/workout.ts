@@ -131,7 +131,7 @@ export const DAY_TYPE_COLORS: Record<DayType, string> = {
   lifting: '#3B82F6',      // blue
   rest: '#6B7280',         // gray
   mobility: '#8B5CF6',     // purple
-  cardio: '#10B981',       // green
+  cardio: '#7A9A65',       // green
   active_recovery: '#F59E0B', // amber
 };
 

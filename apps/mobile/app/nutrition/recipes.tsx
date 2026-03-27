@@ -25,7 +25,7 @@ import { generateRecipe } from '../../src/lib/ai-recipe-generator';
 import type { MealItemEntry, MealType, RecipeDifficulty, RecipeEntry } from '../../src/types/nutrition';
 
 const DIFFICULTY_COLORS: Record<RecipeDifficulty, string> = {
-  Easy: '#10B981',
+  Easy: '#7A9A65',
   Medium: '#F59E0B',
   Hard: '#EF4444',
 };
@@ -33,7 +33,7 @@ const DIFFICULTY_COLORS: Record<RecipeDifficulty, string> = {
 const SOURCE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
   seed: { label: 'Suggested', color: '#6366F1', icon: 'library-outline' },
   ai: { label: 'AI Generated', color: '#8B5CF6', icon: 'sparkles-outline' },
-  user: { label: 'Custom', color: '#10B981', icon: 'person-outline' },
+  user: { label: 'Custom', color: '#B8944F', icon: 'person-outline' },
 };
 
 const FILTER_OPTIONS = ['All', 'Easy', 'Medium', 'Hard', 'AI', 'My Recipes'] as const;

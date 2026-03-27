@@ -129,14 +129,13 @@ export async function redeemInviteCode(code: string): Promise<{ success: boolean
     .update({ redeemed_by: userId, redeemed_at: new Date().toISOString() })
     .eq('code', code);
 
-  // Send friend request (or auto-accept)
+  // Send friend request — RLS requires requester_id = auth.uid() and status = 'pending'
   const { error } = await supabase
     .from('friendships')
     .insert({
-      user_id: invite.inviterId,
-      friend_id: userId,
-      status: 'accepted', // Auto-accept since they came via invite
-      invited_by: invite.inviterId,
+      requester_id: userId,
+      addressee_id: invite.inviterId,
+      status: 'pending',
     });
 
   if (error) {

@@ -32,7 +32,7 @@ export interface TimelineEntry {
 
 const ENTRY_CONFIG: Record<TimelineEntryType, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
   workout_started:    { icon: 'barbell',          color: '#3B82F6' },  // blue
-  workout_completed:  { icon: 'checkmark-circle', color: '#10B981' },  // green
+  workout_completed:  { icon: 'checkmark-circle', color: '#7A9A65' },  // green
   meal_logged:        { icon: 'restaurant',       color: '#F59E0B' },  // orange
   water_logged:       { icon: 'water',            color: '#3B82F6' },  // blue
   supplement_taken:   { icon: 'medical',          color: '#14B8A6' },  // teal

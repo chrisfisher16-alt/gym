@@ -339,7 +339,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
                     backgroundColor: set.isPR
                       ? colors.warning
                       : set.isCompleted
-                        ? goldAccent
+                        ? colors.completed
                         : colors.border,
                   },
                 ]}

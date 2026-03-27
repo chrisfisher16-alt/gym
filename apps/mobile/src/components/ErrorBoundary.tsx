@@ -46,7 +46,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     // Report to crash reporting service
     try {
       reportError(error, errorInfo);
-    } catch {}
+    } catch (e) {
+      console.error('[ErrorBoundary] Failed to report error:', e);
+    }
 
     this.props.onError?.(error, errorInfo);
   }

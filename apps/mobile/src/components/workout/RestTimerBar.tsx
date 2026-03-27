@@ -187,14 +187,14 @@ export function RestTimerBar() {
           <Ionicons
             name="timer-outline"
             size={20}
-            color={isCompleted ? colors.success : colors.primary}
+            color={isCompleted ? colors.completed : colors.primary}
             style={{ marginRight: spacing.xs }}
           />
           <Animated.Text
             style={[
               typography.label,
               {
-                color: isCompleted ? colors.success : colors.text,
+                color: isCompleted ? colors.completed : colors.text,
                 fontVariant: ['tabular-nums'],
                 fontSize: 18,
                 opacity: isCompleted ? pulseAnim : 1,

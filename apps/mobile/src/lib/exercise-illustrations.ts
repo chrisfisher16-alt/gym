@@ -15,7 +15,7 @@ export interface ExerciseIllustration {
 
 export const CATEGORY_COLORS: Record<MuscleGroup, { bg: string; text: string }> = {
   chest: { bg: '#DBEAFE', text: '#2563EB' }, // blue
-  back: { bg: '#D1FAE5', text: '#059669' }, // green
+  back: { bg: 'rgba(122, 154, 101, 0.25)', text: '#7A9A65' }, // green
   shoulders: { bg: '#FFEDD5', text: '#EA580C' }, // orange
   legs: { bg: '#EDE9FE', text: '#7C3AED' }, // purple
   arms: { bg: '#FEE2E2', text: '#DC2626' }, // red
@@ -28,7 +28,7 @@ export const CATEGORY_COLORS: Record<MuscleGroup, { bg: string; text: string }> 
 
 export const CATEGORY_COLORS_DARK: Record<MuscleGroup, { bg: string; text: string }> = {
   chest: { bg: '#1E3A5F', text: '#60A5FA' },
-  back: { bg: '#064E3B', text: '#34D399' },
+  back: { bg: '#064E3B', text: '#A3BE8C' },
   shoulders: { bg: '#7C2D12', text: '#FB923C' },
   legs: { bg: '#4C1D95', text: '#A78BFA' },
   arms: { bg: '#7F1D1D', text: '#F87171' },
@@ -63,9 +63,9 @@ export const MUSCLE_INDICATOR_COLORS: Record<string, string> = {
   'Biceps': '#EF4444',
   'Brachialis': '#F87171',
   'Forearms': '#FB923C',
-  'Latissimus Dorsi': '#059669',
-  'Trapezius': '#10B981',
-  'Rhomboids': '#34D399',
+  'Latissimus Dorsi': '#7A9A65',
+  'Trapezius': '#7A9A65',
+  'Rhomboids': '#A3BE8C',
   'Erector Spinae': '#6EE7B7',
   'Rear Deltoids': '#D97706',
   'Quadriceps': '#7C3AED',

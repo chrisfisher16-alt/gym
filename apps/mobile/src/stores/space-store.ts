@@ -73,7 +73,7 @@ export const SPACE_TEMPLATES: Omit<TrainingSpace, 'id' | 'createdAt'>[] = [
   {
     name: 'Maintenance',
     icon: 'fitness-outline',
-    accentColor: '#10B981',
+    accentColor: '#B8944F',
     description: 'Maintenance calories, balanced approach',
     nutritionTargets: {
       calories: 2200,

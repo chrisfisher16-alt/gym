@@ -16,6 +16,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useCoachStore } from '../stores/coach-store';
@@ -30,6 +31,7 @@ const FAB_SIZE = 56;
 const EDGE_MARGIN = 16;
 const TAB_BAR_HEIGHT = 56;
 const DRAG_THRESHOLD = 8; // px moved before we consider it a drag (not a tap)
+const FAB_POSITION_KEY = '@coach_fab_position';
 
 const SPRING_CONFIG = { damping: 20, stiffness: 300, mass: 0.8 };
 
@@ -113,6 +115,32 @@ export function CoachFAB({
   const isDragging = useSharedValue(false);
   const scale = useSharedValue(1);
 
+  // Restore persisted position on mount
+  useEffect(() => {
+    AsyncStorage.getItem(FAB_POSITION_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const saved: { x: number; y: number } = JSON.parse(raw);
+        // Validate within current screen bounds
+        if (
+          typeof saved.x === 'number' &&
+          typeof saved.y === 'number' &&
+          saved.x >= EDGE_MARGIN &&
+          saved.x <= maxX &&
+          saved.y >= safeTop &&
+          saved.y <= maxY
+        ) {
+          posX.value = saved.x;
+          posY.value = saved.y;
+        }
+      })
+      .catch(() => {
+        // Ignore — use defaults
+      });
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Update default position when dimensions change (e.g. iPad multitasking)
   const prevW = useRef(screenW);
   const prevH = useRef(screenH);
@@ -150,6 +178,10 @@ export function CoachFAB({
     [context, setPrefilledContext, open],
   );
 
+  const savePosition = useCallback((x: number, y: number) => {
+    AsyncStorage.setItem(FAB_POSITION_KEY, JSON.stringify({ x, y })).catch(() => {});
+  }, []);
+
   // -----------------------------------------------------------------------
   // Pan gesture for dragging
   // -----------------------------------------------------------------------
@@ -177,10 +209,14 @@ export function CoachFAB({
         posX.value + FAB_SIZE / 2 < midpoint
           ? EDGE_MARGIN
           : maxX;
+      const finalY = posY.value;
 
       posX.value = withSpring(snapX, SPRING_CONFIG);
       scale.value = withSpring(1, SPRING_CONFIG);
       isDragging.value = false;
+
+      // Persist the snapped position
+      runOnJS(savePosition)(snapX, finalY);
     });
 
   // Tap gesture — only fires if drag distance was below threshold

@@ -53,9 +53,9 @@ function RootLayout() {
     return cleanup;
   }, []);
 
-  // Handle deep links (invite codes)
+  // Handle deep links (invite codes) — wait for auth to be ready
   useEffect(() => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web' || !ready) return;
 
     // Cold start: check if app was opened via a deep link
     getInitialURL().then((url) => {
@@ -72,7 +72,7 @@ function RootLayout() {
     });
 
     return unsubscribe;
-  }, []);
+  }, [ready]);
 
   // Wire up Sentry as the error reporter for ErrorBoundary
   useEffect(() => {
@@ -173,6 +173,7 @@ function RootLayout() {
         <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications', presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="paywall" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="progress" options={{ headerShown: false }} />
+        <Stack.Screen name="social" options={{ headerShown: false }} />
         <Stack.Screen name="health-connect" options={{ headerShown: true, title: 'Connect Health', presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="health-settings" options={{ headerShown: true, title: 'Health Integrations', presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI Settings', presentation: 'modal', animation: 'slide_from_bottom' }} />

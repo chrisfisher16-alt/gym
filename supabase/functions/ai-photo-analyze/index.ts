@@ -22,14 +22,13 @@ Deno.serve(async (req: Request) => {
 
     // Server-side photo analysis is not yet implemented.
     // The mobile app uses client-side AI vision (see ai-meal-analyzer.ts) instead.
-    const response: PhotoAnalyzeResponse = {
-      items: [],
-      analysis_method: 'not_implemented',
-      description:
-        'Server-side photo analysis is not yet available. The mobile app uses client-side AI vision instead.',
-    };
-
-    return jsonResponse(response);
+    return jsonResponse(
+      {
+        error: 'Not Implemented',
+        message: 'Server-side photo analysis is not yet available. Use client-side AI vision instead.',
+      },
+      501,
+    );
   } catch (error) {
     if (error instanceof AuthError) {
       return errorResponse(error.message, 401);

@@ -80,7 +80,7 @@ export function ChatBubble({ message, onExecuteAction, isStreaming }: ChatBubble
 
           {/* Render structured content */}
           {message.structured_content?.map((content, index) => (
-            <View key={index} style={{ marginTop: spacing.md }}>
+            <View key={`${message.id}-sc-${index}`} style={{ marginTop: spacing.md }}>
               {content.type === 'workout_plan' && (
                 <WorkoutPlanCard data={content.data} />
               )}
@@ -114,7 +114,7 @@ export function ChatBubble({ message, onExecuteAction, isStreaming }: ChatBubble
           <View style={{ marginTop: spacing.xs, gap: spacing.xs }}>
             {message.actions.map((actionState, index) => (
               <ActionCard
-                key={index}
+                key={`${message.id}-action-${index}`}
                 actionState={actionState}
                 onApply={() => onExecuteAction?.(message.id, index)}
               />

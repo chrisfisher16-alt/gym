@@ -377,7 +377,9 @@ export function WorkoutSummaryModal({
     }`;
     try {
       await Share.share({ message: summary });
-    } catch {}
+    } catch (e) {
+      console.error('[WorkoutSummary] Share failed:', e);
+    }
   };
 
   return (
@@ -587,7 +589,9 @@ export function WorkoutSummaryModal({
                     if (await StoreReview.hasAction()) {
                       await StoreReview.requestReview();
                     }
-                  } catch {}
+                  } catch (e) {
+                    console.error('[WorkoutSummary] Store review failed:', e);
+                  }
                 }}
                 style={{
                   flexDirection: 'row',

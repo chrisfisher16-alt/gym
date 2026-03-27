@@ -84,7 +84,7 @@ const MUSCLE_COLORS: Record<string, string> = {
   chest: '#EF4444',
   back: '#3B82F6',
   shoulders: '#F59E0B',
-  legs: '#10B981',
+  legs: '#7A9A65',
   arms: '#8B5CF6',
   core: '#EC4899',
   cardio: '#06B6D4',
