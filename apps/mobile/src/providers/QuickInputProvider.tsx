@@ -32,7 +32,7 @@ export function QuickInputProvider({ children }: { children: React.ReactNode }) 
   return (
     <QuickInputContext.Provider value={value}>
       {children}
-      {visible && Platform.OS !== 'web' && <QuickInputPill />}
+      {/* QuickInputPill removed — CoachFAB + per-tab FABs handle quick actions */}
     </QuickInputContext.Provider>
   );
 }
