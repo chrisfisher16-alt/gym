@@ -616,7 +616,7 @@ export default function NutritionTab() {
               progress={waterTarget > 0 ? Math.min(waterIntake / waterTarget, 1) : 0}
               size={scale(100)}
               strokeWidth={scale(8)}
-              color={(waterTarget > 0 && waterIntake >= waterTarget) ? colors.successVibrant : colors.info}
+              color={(waterTarget > 0 && waterIntake >= waterTarget) ? colors.active : colors.info}
               trackColor={colors.surfaceSecondary}
             >
               <Ionicons name="water" size={18} color={colors.info} />
@@ -965,7 +965,7 @@ export default function NutritionTab() {
                     <Ionicons
                       name={taken ? 'checkbox' : 'square-outline'}
                       size={24}
-                      color={taken ? colors.success : colors.textTertiary}
+                      color={taken ? colors.completed : colors.textTertiary}
                     />
                     <View style={{ flex: 1, marginLeft: spacing.md }}>
                       <Text style={[typography.label, { color: taken ? colors.textSecondary : colors.text, textDecorationLine: taken ? 'line-through' : 'none' }]}>

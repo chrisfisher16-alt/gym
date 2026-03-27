@@ -144,7 +144,7 @@ export const CardioSetRow = React.memo(function CardioSetRow({
         style={[
           styles.completedRow,
           {
-            backgroundColor: colors.successLight,
+            backgroundColor: colors.completedMuted,
             borderRadius: radius.md,
             paddingHorizontal: spacing.sm,
             paddingVertical: spacing.sm,
@@ -159,7 +159,7 @@ export const CardioSetRow = React.memo(function CardioSetRow({
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: colors.success,
+              backgroundColor: colors.completed,
               borderRadius: radius.md,
               opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.25] }),
             },
@@ -170,9 +170,9 @@ export const CardioSetRow = React.memo(function CardioSetRow({
             {setTypeLabel || set.setNumber}
           </Text>
         </View>
-        <Ionicons name="checkmark-circle" size={18} color={colors.success} style={{ marginRight: 6 }} />
+        <Ionicons name="checkmark-circle" size={18} color={colors.completed} style={{ marginRight: 6 }} />
         <View style={{ flex: 1 }}>
-          <Text style={[typography.label, { color: colors.success }]} numberOfLines={1}>
+          <Text style={[typography.label, { color: colors.completed }]} numberOfLines={1}>
             {summaryParts.join(' · ')}
           </Text>
         </View>
@@ -311,7 +311,7 @@ export const CardioSetRow = React.memo(function CardioSetRow({
         style={[
           styles.logButton,
           {
-            backgroundColor: timerCompleted ? colors.success : colors.surfaceSecondary,
+            backgroundColor: timerCompleted ? colors.completed : colors.surfaceSecondary,
             borderRadius: radius.md,
             marginTop: spacing.md,
             paddingVertical: spacing.md,
@@ -322,7 +322,7 @@ export const CardioSetRow = React.memo(function CardioSetRow({
         <Text
           style={[
             typography.label,
-            { color: timerCompleted ? '#FFFFFF' : colors.textTertiary },
+            { color: timerCompleted ? colors.textOnPrimary : colors.textTertiary },
           ]}
         >
           LOG SET

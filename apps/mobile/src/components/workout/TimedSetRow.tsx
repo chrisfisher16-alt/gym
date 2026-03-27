@@ -40,7 +40,7 @@ export const TimedSetRow = React.memo(function TimedSetRow({
         style={[
           styles.setRow,
           {
-            backgroundColor: colors.successLight,
+            backgroundColor: colors.completedMuted,
             borderRadius: radius.md,
             paddingHorizontal: spacing.sm,
             paddingVertical: spacing.sm,
@@ -54,11 +54,11 @@ export const TimedSetRow = React.memo(function TimedSetRow({
           </Text>
         </View>
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={[typography.label, { color: colors.success }]}>
+          <Text style={[typography.label, { color: colors.completed }]}>
             {set.durationSeconds ?? defaultDuration}s ✓
           </Text>
         </View>
-        <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+        <Ionicons name="checkmark-circle" size={20} color={colors.completed} />
       </View>
     );
   }

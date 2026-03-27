@@ -529,7 +529,7 @@ export function FocusedWorkoutView({
                 styles.progressDot,
                 {
                   backgroundColor: s.isCompleted
-                    ? colors.success
+                    ? colors.completed
                     : s.id === currentSet?.id
                       ? colors.primary
                       : colors.surfaceSecondary,
@@ -575,7 +575,7 @@ export function FocusedWorkoutView({
             style={[
               StyleSheet.absoluteFill,
               {
-                backgroundColor: colors.success,
+                backgroundColor: colors.completed,
                 opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.15] }),
               },
             ]}
@@ -865,14 +865,14 @@ export function FocusedWorkoutView({
                     style={[
                       styles.completedSetChip,
                       {
-                        backgroundColor: s.isPR ? colors.warningLight : colors.successLight,
+                        backgroundColor: s.isPR ? colors.warningLight : colors.completedMuted,
                         borderRadius: radius.sm,
                         paddingHorizontal: spacing.sm,
                         paddingVertical: spacing.xs,
                       },
                     ]}
                   >
-                    <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
+                    <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.completed }]}>
                       {formatSetChip(s, trackingMode)}
                       {s.isPR ? ' 🏆' : ''}
                     </Text>
@@ -884,8 +884,8 @@ export function FocusedWorkoutView({
       ) : (
         /* All sets done */
         <View style={[styles.allDoneSection, { paddingHorizontal: spacing.xl }]}>
-          <Ionicons name="checkmark-circle" size={64} color={colors.success} />
-          <Text style={[typography.h2, { color: colors.success, marginTop: spacing.md }]}>
+          <Ionicons name="checkmark-circle" size={64} color={colors.completed} />
+          <Text style={[typography.h2, { color: colors.completed, marginTop: spacing.md }]}>
             All Sets Complete!
           </Text>
           <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
@@ -902,14 +902,14 @@ export function FocusedWorkoutView({
                   style={[
                     styles.completedSetChip,
                     {
-                      backgroundColor: s.isPR ? colors.warningLight : colors.successLight,
+                      backgroundColor: s.isPR ? colors.warningLight : colors.completedMuted,
                       borderRadius: radius.sm,
                       paddingHorizontal: spacing.sm,
                       paddingVertical: spacing.xs,
                     },
                   ]}
                 >
-                  <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
+                  <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.completed }]}>
                     Set {s.setNumber}: {formatSetChip(s, trackingMode)}
                     {s.isPR ? ' 🏆' : ''}
                   </Text>
@@ -928,10 +928,10 @@ export function FocusedWorkoutView({
               style={[
                 styles.logSetBtn,
                 {
-                  backgroundColor: colors.success,
+                  backgroundColor: colors.completed,
                   borderRadius: radius.xl,
                   paddingVertical: 22,
-                  shadowColor: colors.success,
+                  shadowColor: colors.completed,
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.4,
                   shadowRadius: 12,

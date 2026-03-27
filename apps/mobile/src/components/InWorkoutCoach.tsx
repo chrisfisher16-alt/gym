@@ -374,8 +374,8 @@ export function InWorkoutCoach({
                 },
               ]}
             >
-              <Ionicons name="checkmark" size={14} color="#fff" style={{ marginRight: 3 }} />
-              <Text style={[typography.labelSmall, { color: '#fff' }]}>Apply</Text>
+              <Ionicons name="checkmark" size={14} color={colors.textOnPrimary} style={{ marginRight: 3 }} />
+              <Text style={[typography.labelSmall, { color: colors.textOnPrimary }]}>Apply</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -521,8 +521,8 @@ export function InWorkoutCoach({
                     },
                   ]}
                 >
-                  <Ionicons name="checkmark-done" size={18} color="#fff" style={{ marginRight: spacing.xs }} />
-                  <Text style={[typography.label, { color: '#fff' }]}>Apply All ({pendingCount})</Text>
+                  <Ionicons name="checkmark-done" size={18} color={colors.textOnPrimary} style={{ marginRight: spacing.xs }} />
+                  <Text style={[typography.label, { color: colors.textOnPrimary }]}>Apply All ({pendingCount})</Text>
                 </TouchableOpacity>
               )}
 

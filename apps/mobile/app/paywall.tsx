@@ -150,10 +150,10 @@ export default function PaywallScreen() {
           <View
             style={[
               styles.successIcon,
-              { backgroundColor: colors.successLight, borderRadius: radius.full },
+              { backgroundColor: colors.completedMuted, borderRadius: radius.full },
             ]}
           >
-            <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+            <Ionicons name="checkmark-circle" size={64} color={colors.completed} />
           </View>
           <Text
             style={[
@@ -342,7 +342,7 @@ export default function PaywallScreen() {
                     style={[
                       styles.savingsBadge,
                       {
-                        backgroundColor: colors.success + '20',
+                        backgroundColor: colors.completed + '20',
                         borderRadius: radius.sm,
                         paddingHorizontal: spacing.xs,
                         marginLeft: spacing.xs,
@@ -350,7 +350,7 @@ export default function PaywallScreen() {
                     ]}
                   >
                     <Text
-                      style={[typography.caption, { color: colors.success, fontWeight: '600' }]}
+                      style={[typography.caption, { color: colors.completed, fontWeight: '600' }]}
                     >
                       Save {(() => {
                         const plan = plans.find((p) => p.highlight) ?? plans[0];
@@ -472,7 +472,7 @@ export default function PaywallScreen() {
                   backgroundColor: colors.surface,
                   borderRadius: radius.md,
                   borderWidth: 1,
-                  borderColor: promoError ? colors.error : promoSuccess ? colors.success : colors.border,
+                  borderColor: promoError ? colors.error : promoSuccess ? colors.completed : colors.border,
                   paddingHorizontal: spacing.md,
                 }}
               >
@@ -532,8 +532,8 @@ export default function PaywallScreen() {
 
               {promoSuccess && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-                  <Text style={[typography.caption, { color: colors.success, marginLeft: 4 }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.completed} />
+                  <Text style={[typography.caption, { color: colors.completed, marginLeft: 4 }]}>
                     Promo code applied! Activating your plan...
                   </Text>
                 </View>
@@ -648,7 +648,7 @@ function PlanCard({
           style={[
             styles.currentBadge,
             {
-              backgroundColor: colors.successLight,
+              backgroundColor: colors.completedMuted,
               borderRadius: radius.sm,
               paddingHorizontal: spacing.sm,
               paddingVertical: 2,
@@ -657,7 +657,7 @@ function PlanCard({
             },
           ]}
         >
-          <Text style={[typography.caption, { color: colors.success, fontWeight: '600' }]}>
+          <Text style={[typography.caption, { color: colors.completed, fontWeight: '600' }]}>
             Current Plan
           </Text>
         </View>
@@ -720,7 +720,7 @@ function PlanCard({
             <Ionicons
               name="checkmark-circle"
               size={18}
-              color={colors.success}
+              color={colors.completed}
               style={{ marginRight: spacing.sm }}
             />
             <Text style={[typography.body, { color: colors.textSecondary, flex: 1 }]}>

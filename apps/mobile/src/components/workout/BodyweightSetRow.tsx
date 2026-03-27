@@ -110,7 +110,7 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
       style={[
         styles.setRowWrapper,
         {
-          backgroundColor: set.isCompleted ? (set.isPR ? colors.warningLight : colors.successLight) : 'transparent',
+          backgroundColor: set.isCompleted ? (set.isPR ? colors.warningLight : colors.completedMuted) : 'transparent',
           borderRadius: radius.md,
           paddingHorizontal: spacing.sm,
           paddingVertical: spacing.md,
@@ -124,7 +124,7 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: colors.success,
+            backgroundColor: colors.completed,
             borderRadius: radius.md,
             opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.25] }),
           },
@@ -191,7 +191,7 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
         style={[
           styles.checkBtnCompact,
           {
-            backgroundColor: set.isCompleted ? colors.success : colors.surfaceSecondary,
+            backgroundColor: set.isCompleted ? colors.completed : colors.surfaceSecondary,
             borderRadius: radius.sm,
           },
         ]}

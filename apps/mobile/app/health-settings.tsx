@@ -121,7 +121,7 @@ export default function HealthSettingsScreen() {
             </View>
           </View>
           {isConnected ? (
-            <Badge label="Active" variant="success" />
+            <Badge label="Active" variant="active" />
           ) : (
             <Button
               title="Connect"

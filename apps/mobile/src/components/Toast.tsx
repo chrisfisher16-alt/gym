@@ -57,7 +57,7 @@ function ToastView({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () =>
   const opacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   const variantColors: Record<ToastVariant, { bg: string; text: string; icon: string }> = {
-    success: { bg: colors.successLight, text: colors.success, icon: colors.success },
+    success: { bg: colors.completedMuted, text: colors.completed, icon: colors.completed },
     error: { bg: colors.errorLight, text: colors.error, icon: colors.error },
     info: { bg: colors.infoLight, text: colors.info, icon: colors.info },
     warning: { bg: colors.warningLight, text: colors.warning, icon: colors.warning },

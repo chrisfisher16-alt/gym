@@ -47,8 +47,8 @@ export default function ForgotPasswordScreen() {
       <ScreenContainer>
         <View style={[styles.content, { paddingTop: spacing['4xl'] }]}>
           <View style={styles.header}>
-            <View style={[styles.iconCircle, { backgroundColor: colors.successLight }]}>
-              <Ionicons name="mail-outline" size={32} color={colors.success} />
+            <View style={[styles.iconCircle, { backgroundColor: colors.completedMuted }]}>
+              <Ionicons name="mail-outline" size={32} color={colors.completed} />
             </View>
             <Text style={[typography.displayMedium, { color: colors.text, marginTop: spacing.lg }]}>
               Check your email

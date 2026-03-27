@@ -635,9 +635,9 @@ export default function TodayTab() {
                     const t = isSupplementTaken(s.id);
                     return (
                       <TouchableOpacity key={s.id} onPress={() => { if (!t) logSupplement(s.id); }} activeOpacity={0.7}
-                        style={[S.pill, { backgroundColor: t ? colors.successLight : colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginRight: spacing.sm }]}>
-                        <Ionicons name={t ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={t ? colors.success : colors.textTertiary} />
-                        <Text style={[typography.caption, { color: t ? colors.success : colors.textSecondary, marginLeft: spacing.xs }]}>{s.supplementName}</Text>
+                        style={[S.pill, { backgroundColor: t ? colors.completedMuted : colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginRight: spacing.sm }]}>
+                        <Ionicons name={t ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={t ? colors.completed : colors.textTertiary} />
+                        <Text style={[typography.caption, { color: t ? colors.completed : colors.textSecondary, marginLeft: spacing.xs }]}>{s.supplementName}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -774,13 +774,13 @@ export default function TodayTab() {
       const elapsedMin = Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000);
       const visibleExercises = activeSession.exercises.filter(e => !e.isSkipped).slice(0, 3);
       return (
-        <Card style={{ marginTop: spacing.base, borderColor: colors.success, borderWidth: 2 }}>
+        <Card style={{ marginTop: spacing.base, borderColor: colors.primary, borderWidth: 2 }}>
           <View style={S.actHead}>
-            <View style={[S.actCircle, { backgroundColor: colors.successLight }]}>
-              <Ionicons name="flash" size={24} color={colors.success} />
+            <View style={[S.actCircle, { backgroundColor: colors.activeMuted }]}>
+              <Ionicons name="flash" size={24} color={colors.primary} />
             </View>
             <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT IN PROGRESS</Text>
+              <Text style={[typography.labelSmall, { color: colors.primary, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT IN PROGRESS</Text>
               <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{activeSession.name}</Text>
               <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{completedSets} of {totalSets} sets completed · {elapsedMin} min</Text>
             </View>
@@ -794,16 +794,16 @@ export default function TodayTab() {
                     <Ionicons
                       name={done ? 'checkmark-circle' : 'ellipse-outline'}
                       size={16}
-                      color={done ? colors.success : colors.textTertiary}
+                      color={done ? colors.completed : colors.textTertiary}
                     />
-                    <Text style={[typography.body, { color: done ? colors.success : colors.text, marginLeft: spacing.sm }]}>{ex.exerciseName}</Text>
+                    <Text style={[typography.body, { color: done ? colors.completed : colors.text, marginLeft: spacing.sm }]}>{ex.exerciseName}</Text>
                   </View>
                 );
               })}
             </View>
           )}
           <TouchableOpacity
-            style={[S.cta, { backgroundColor: colors.success, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
+            style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
             onPress={() => router.push('/workout/active')} activeOpacity={0.8}>
             <Ionicons name="play" size={18} color={colors.textInverse} />
             <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Resume Workout</Text>
@@ -816,11 +816,11 @@ export default function TodayTab() {
         <>
           <Card style={{ marginTop: spacing.base }}>
             <View style={S.actHead}>
-              <View style={[S.actCircle, { backgroundColor: colors.successLight }]}>
-                <Ionicons name="trophy" size={24} color={colors.success} />
+              <View style={[S.actCircle, { backgroundColor: colors.completedMuted }]}>
+                <Ionicons name="trophy" size={24} color={colors.completed} />
               </View>
               <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT COMPLETE</Text>
+                <Text style={[typography.labelSmall, { color: colors.completed, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT COMPLETE</Text>
                 <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayDone.name}</Text>
               </View>
             </View>
@@ -983,9 +983,9 @@ export default function TodayTab() {
     return (
       <Card style={{ marginTop: spacing.base }}>
         <View style={S.actHead}>
-          <View style={[S.actCircle, { backgroundColor: colors.successLight }]}><Ionicons name="leaf" size={24} color={colors.success} /></View>
+          <View style={[S.actCircle, { backgroundColor: colors.completedMuted }]}><Ionicons name="leaf" size={24} color={colors.completed} /></View>
           <View style={{ flex: 1, marginLeft: spacing.md }}>
-            <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>REST DAY</Text>
+            <Text style={[typography.labelSmall, { color: colors.completed, textTransform: 'uppercase', letterSpacing: 1 }]}>REST DAY</Text>
             <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>Active Recovery</Text>
             <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>Stretch, walk, or light mobility work</Text>
           </View>

@@ -813,7 +813,7 @@ export function DrillDownView({
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.success },
+                { backgroundColor: colors.completed },
                 flashAnimStyle,
               ]}
             />
@@ -858,11 +858,11 @@ export function DrillDownView({
                     borderRadius: 14,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: isCompleted ? colors.success : isCurrent ? GOLD_DARK : colors.surfaceSecondary,
+                    backgroundColor: isCompleted ? colors.completed : isCurrent ? GOLD_DARK : colors.surfaceSecondary,
                     marginRight: 8,
                   }}>
                     <Text style={[typography.labelSmall, {
-                      color: isCompleted || isCurrent ? '#FFFFFF' : colors.textTertiary,
+                      color: isCompleted || isCurrent ? colors.textOnPrimary : colors.textTertiary,
                       fontWeight: '700',
                     }]}>
                       {isCompleted ? '✓' : s.setNumber}
@@ -960,8 +960,8 @@ export function DrillDownView({
         ) : (
           /* All sets done */
           <View style={[styles.allDoneSection, { paddingHorizontal: spacing.xl }]}>
-            <Ionicons name="checkmark-circle" size={64} color={colors.success} />
-            <Text style={[typography.h2, { color: colors.success, marginTop: spacing.md }]}>
+            <Ionicons name="checkmark-circle" size={64} color={colors.completed} />
+            <Text style={[typography.h2, { color: colors.completed, marginTop: spacing.md }]}>
               All Sets Complete!
             </Text>
             <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
@@ -978,14 +978,14 @@ export function DrillDownView({
                     style={[
                       styles.completedSetChip,
                       {
-                        backgroundColor: s.isPR ? colors.warningLight : colors.successLight,
+                        backgroundColor: s.isPR ? colors.warningLight : colors.completedMuted,
                         borderRadius: radius.sm,
                         paddingHorizontal: spacing.sm,
                         paddingVertical: spacing.xs,
                       },
                     ]}
                   >
-                    <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
+                    <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.completed }]}>
                       Set {s.setNumber}: {isTimeBased
                         ? `${s.durationSeconds ? Math.round(s.durationSeconds / 60) : 0} min`
                         : `${s.weight ?? 0} × ${s.reps ?? 0}`}
@@ -1054,9 +1054,9 @@ export function DrillDownView({
             <Ionicons
               name={allComplete ? (isLastExercise ? 'flag' : 'arrow-forward-circle') : 'checkmark-circle'}
               size={28}
-              color="#FFFFFF"
+              color={colors.textOnPrimary}
             />
-            <Text style={[styles.ctaText, { marginLeft: spacing.sm }]}>
+            <Text style={[styles.ctaText, { marginLeft: spacing.sm, color: colors.textOnPrimary }]}>
               {ctaLabel}
             </Text>
           </TouchableOpacity>
@@ -1208,7 +1208,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ctaText: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: 0.5,

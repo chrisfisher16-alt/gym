@@ -504,14 +504,14 @@ export function WorkoutSummaryModal({
             }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>Volume</Text>
-                <Text style={[typography.label, { color: comparison.volumeDiff >= 0 ? colors.success : colors.error }]}>
+                <Text style={[typography.label, { color: comparison.volumeDiff >= 0 ? colors.completed : colors.error }]}>
                   {comparison.volumeDiff >= 0 ? '+' : ''}{comparison.volumePct}%{' '}
                   ({comparison.volumeDiff >= 0 ? '+' : ''}{comparison.volumeDiff.toLocaleString()} {weightUnit})
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>Duration</Text>
-                <Text style={[typography.label, { color: comparison.durationDiff <= 0 ? colors.success : colors.error }]}>
+                <Text style={[typography.label, { color: comparison.durationDiff <= 0 ? colors.completed : colors.error }]}>
                   {comparison.durationDiffMins > 0
                     ? `${comparison.durationDiffMins} min ${comparison.durationDiff <= 0 ? 'faster' : 'slower'}`
                     : 'Same'}
@@ -519,7 +519,7 @@ export function WorkoutSummaryModal({
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>Sets</Text>
-                <Text style={[typography.label, { color: comparison.setDiff >= 0 ? colors.success : colors.error }]}>
+                <Text style={[typography.label, { color: comparison.setDiff >= 0 ? colors.completed : colors.error }]}>
                   {comparison.setDiff >= 0 ? '+' : ''}{comparison.setDiff} sets
                 </Text>
               </View>
@@ -586,7 +586,7 @@ export function WorkoutSummaryModal({
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: colors.successLight ?? colors.surface,
+                  backgroundColor: colors.completedMuted ?? colors.surface,
                   paddingHorizontal: spacing.base,
                   paddingVertical: spacing.sm,
                   borderRadius: radius.md,
@@ -595,8 +595,8 @@ export function WorkoutSummaryModal({
                 accessibilityRole="button"
                 accessibilityLabel="Love it - rate the app"
               >
-                <Ionicons name="heart" size={18} color={colors.success} />
-                <Text style={[typography.label, { color: colors.success }]}>Love it</Text>
+                <Ionicons name="heart" size={18} color={colors.completed} />
+                <Text style={[typography.label, { color: colors.completed }]}>Love it</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setShowFeedbackSheet(true)}

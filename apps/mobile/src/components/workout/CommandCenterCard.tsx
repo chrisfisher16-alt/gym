@@ -356,7 +356,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
         {/* Right: chevron or checkmark */}
         <View style={styles.rightAction}>
           {allCompleted ? (
-            <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+            <Ionicons name="checkmark-circle" size={22} color={colors.completed} />
           ) : (
             <Pressable
               onPress={onToggleExpand}
@@ -398,7 +398,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
               </Text>
               <Text style={{ fontSize: 12 }}>
                 {set.isCompleted ? (
-                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                  <Ionicons name="checkmark-circle" size={14} color={colors.completed} />
                 ) : (
                   <Ionicons name="ellipse-outline" size={14} color={colors.textTertiary} />
                 )}

@@ -756,7 +756,7 @@ export default function ActiveWorkoutScreen() {
           </View>
           <TouchableOpacity
             onPress={handleFinish}
-            style={[styles.finishBtn, { backgroundColor: colors.success, borderRadius: radius.md }]}
+            style={[styles.finishBtn, { backgroundColor: colors.primary, borderRadius: radius.md }]}
           >
             <Text style={[typography.labelSmall, { color: colors.textInverse }]}>Finish</Text>
           </TouchableOpacity>

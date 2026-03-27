@@ -76,7 +76,7 @@ export default function ProgramsScreen() {
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
               <Text style={[typography.labelLarge, { color: colors.text }]}>{program.name}</Text>
-              {isActive && <Badge label="Active" variant="success" />}
+              {isActive && <Badge label="Active" variant="active" />}
               {program.createdBy === 'ai' && <Badge label="AI" variant="pro" />}
             </View>
             {program.description ? (

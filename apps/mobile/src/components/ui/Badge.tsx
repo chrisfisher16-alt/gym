@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme';
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info' | 'pro';
+type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info' | 'pro' | 'active' | 'premium';
 
 interface BadgeProps {
   label: string;
@@ -19,6 +19,8 @@ export function Badge({ label, variant = 'default' }: BadgeProps) {
     error: colors.errorLight,
     info: colors.infoLight,
     pro: colors.primaryMuted,
+    active: colors.activeMuted,
+    premium: colors.primaryMuted,
   };
 
   const textColors: Record<BadgeVariant, string> = {
@@ -28,6 +30,8 @@ export function Badge({ label, variant = 'default' }: BadgeProps) {
     error: colors.error,
     info: colors.info,
     pro: colors.primary,
+    active: colors.active,
+    premium: colors.primary,
   };
 
   return (

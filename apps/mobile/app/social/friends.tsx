@@ -393,7 +393,7 @@ export default function FriendsScreen() {
                           onPress={() => handleAccept(req)}
                           style={[
                             styles.actionBtn,
-                            { backgroundColor: colors.success, borderRadius: radius.md },
+                            { backgroundColor: colors.completed, borderRadius: radius.md },
                           ]}
                           accessibilityRole="button"
                           accessibilityLabel="Accept"

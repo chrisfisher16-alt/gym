@@ -176,10 +176,10 @@ export default function CompleteScreen() {
           <View
             style={[
               styles.successCircle,
-              { backgroundColor: colors.successLight },
+              { backgroundColor: colors.completedMuted },
             ]}
           >
-            <Ionicons name="checkmark-circle" size={72} color={colors.success} />
+            <Ionicons name="checkmark-circle" size={72} color={colors.completed} />
           </View>
 
           <Text style={[typography.displayMedium, { color: colors.text, marginTop: spacing['2xl'], textAlign: 'center' }]}>

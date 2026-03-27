@@ -150,7 +150,7 @@ export function ExerciseTimer({
   }));
 
   // ── Ring color ───────────────────────────────────────────────────
-  const ringColor = isOvertime ? colors.success : colors.primary;
+  const ringColor = isOvertime ? colors.active : colors.primary;
 
   // ── Display text ─────────────────────────────────────────────────
   const displayTime = timerState === 'idle'
@@ -178,18 +178,18 @@ export function ExerciseTimer({
           size={size}
           strokeWidth={8}
           color={ringColor}
-          gradientColors={isOvertime ? [colors.success, colors.successVibrant] : [colors.primary, colors.primaryLight]}
+          gradientColors={isOvertime ? [colors.active, colors.primaryLight] : [colors.primary, colors.primaryLight]}
           trackColor={colors.surfaceSecondary}
         >
           <View style={styles.ringContent}>
             {isOvertime && (
-              <Text style={[typography.labelSmall, { color: colors.success }]}>+</Text>
+              <Text style={[typography.labelSmall, { color: colors.active }]}>+</Text>
             )}
             <Text
               style={[
                 typography.displayFocus,
                 {
-                  color: isOvertime ? colors.success : colors.text,
+                  color: isOvertime ? colors.active : colors.text,
                   fontSize: size > 160 ? typography.displayFocus.fontSize : 32,
                   lineHeight: size > 160 ? typography.displayFocus.lineHeight : 38,
                 },
@@ -210,10 +210,10 @@ export function ExerciseTimer({
           <View
             style={[
               styles.badgePill,
-              { backgroundColor: colors.successLight, borderRadius: radius.full },
+              { backgroundColor: colors.activeMuted, borderRadius: radius.full },
             ]}
           >
-            <Text style={[typography.labelSmall, { color: colors.success }]}>
+            <Text style={[typography.labelSmall, { color: colors.active }]}>
               +{overtime}s
             </Text>
           </View>
@@ -313,7 +313,7 @@ export function ExerciseTimer({
           style={[
             styles.logButton,
             {
-              backgroundColor: isOvertime ? colors.success : colors.surfaceSecondary,
+              backgroundColor: isOvertime ? colors.active : colors.surfaceSecondary,
               borderRadius: radius.full,
               marginTop: spacing.md,
               paddingHorizontal: spacing['2xl'],
@@ -324,7 +324,7 @@ export function ExerciseTimer({
           <Text
             style={[
               typography.label,
-              { color: isOvertime ? '#FFFFFF' : colors.text },
+              { color: isOvertime ? colors.textOnPrimary : colors.text },
             ]}
           >
             LOG SET — {formatTimerDisplay(elapsed)}

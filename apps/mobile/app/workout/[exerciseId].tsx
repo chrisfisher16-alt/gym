@@ -218,7 +218,7 @@ export default function ExerciseDetailScreen() {
             )}
             {record.highestVolume && (
               <View style={[styles.prRow, { marginBottom: spacing.xs }]}>
-                <Ionicons name="trending-up" size={16} color={colors.success} />
+                <Ionicons name="trending-up" size={16} color={colors.completed} />
                 <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm }]}>
                   Best Volume: {record.highestVolume.volume.toLocaleString()} {unit}
                 </Text>
@@ -330,8 +330,8 @@ export default function ExerciseDetailScreen() {
             style={[styles.optionRow, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base }]}
             activeOpacity={0.7}
           >
-            <View style={[styles.optionIcon, { backgroundColor: colors.successLight || colors.primaryMuted }]}>
-              <Ionicons name="body-outline" size={24} color={colors.success || colors.primary} />
+            <View style={[styles.optionIcon, { backgroundColor: colors.completedMuted || colors.primaryMuted }]}>
+              <Ionicons name="body-outline" size={24} color={colors.completed || colors.primary} />
             </View>
             <View style={{ flex: 1, marginLeft: spacing.md }}>
               <Text style={[typography.label, { color: colors.text }]}>Build for Muscle Groups</Text>

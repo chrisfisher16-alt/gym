@@ -410,9 +410,9 @@ export default function ProgramDetailScreen() {
             </Text>
           ) : null}
           {program.isActive ? (
-            <View style={[styles.activeProgramBanner, { backgroundColor: colors.successLight, borderRadius: radius.md, marginTop: spacing.md }]}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-              <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>Active Program</Text>
+            <View style={[styles.activeProgramBanner, { backgroundColor: colors.activeMuted, borderRadius: radius.md, marginTop: spacing.md }]}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+              <Text style={[typography.label, { color: colors.primary, marginLeft: spacing.sm }]}>Active Program</Text>
             </View>
           ) : (
             <Button

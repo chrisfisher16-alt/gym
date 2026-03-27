@@ -312,7 +312,7 @@ export default function WorkoutTab() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           {isActive && (
             <TouchableOpacity onPress={() => router.push('/workout/active')}>
-              <Badge label="In Progress" variant="success" />
+              <Badge label="In Progress" variant="active" />
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -326,13 +326,13 @@ export default function WorkoutTab() {
 
       {/* Today's Workout — active session */}
       {isActive && activeSession && (
-        <Card style={{ marginBottom: spacing.base, borderColor: colors.success, borderWidth: 2 }}>
+        <Card style={{ marginBottom: spacing.base, borderColor: colors.primary, borderWidth: 2 }}>
           <View style={styles.cardHeader}>
             <Ionicons name="calendar-outline" size={20} color={colors.primary} />
             <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
               Today&apos;s Workout
             </Text>
-            <Badge label="IN PROGRESS" variant="success" />
+            <Badge label="IN PROGRESS" variant="active" />
           </View>
           <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
             {activeSession.name}
@@ -357,10 +357,10 @@ export default function WorkoutTab() {
                   <Ionicons
                     name={completedSets === totalSets ? 'checkmark-circle' : 'ellipse-outline'}
                     size={14}
-                    color={completedSets === totalSets ? colors.success : colors.textTertiary}
+                    color={completedSets === totalSets ? colors.completed : colors.textTertiary}
                     style={{ marginRight: spacing.xs }}
                   />
-                  <Text style={[typography.bodySmall, { color: completedSets === totalSets ? colors.success : colors.textTertiary }]}>
+                  <Text style={[typography.bodySmall, { color: completedSets === totalSets ? colors.completed : colors.textTertiary }]}>
                     {e.exerciseName} ({completedSets}/{totalSets})
                   </Text>
                 </View>
@@ -384,7 +384,7 @@ export default function WorkoutTab() {
             title="Resume Workout"
             size="md"
             onPress={() => router.push('/workout/active')}
-            style={{ marginTop: spacing.md, backgroundColor: colors.success }}
+            style={{ marginTop: spacing.md, backgroundColor: colors.primary }}
           />
           <TouchableOpacity
             onPress={() => {
@@ -515,14 +515,14 @@ export default function WorkoutTab() {
                       <Ionicons
                         name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
                         size={16}
-                        color={isCompleted ? colors.success : colors.textTertiary}
+                        color={isCompleted ? colors.completed : colors.textTertiary}
                         style={{ marginRight: spacing.sm }}
                       />
                       <Text
                         style={[
                           typography.bodySmall,
                           {
-                            color: isCompleted ? colors.success : colors.text,
+                            color: isCompleted ? colors.completed : colors.text,
                             flex: 1,
                           },
                         ]}

@@ -20,7 +20,7 @@ export const lightColors = {
   border: '#E5E3DE',
   borderLight: '#F0EEE9',
 
-  // Status
+  // Status (legacy — migrate to semantic names below)
   success: '#059669',
   successLight: '#D1FAE5',
   successVibrant: '#10B981',
@@ -30,6 +30,15 @@ export const lightColors = {
   errorLight: '#FEE2E2',
   info: '#3B82F6',
   infoLight: '#DBEAFE',
+
+  // Semantic status — active (gold, for in-progress states)
+  active: '#B8944F',
+  activeMuted: 'rgba(184, 148, 79, 0.15)',
+
+  // Semantic status — completed (sage green, for done/success states)
+  completed: '#7A9A65',
+  completedLight: '#7A9A65',
+  completedMuted: 'rgba(122, 154, 101, 0.15)',
 
   // PR / Achievements
   gold: '#B8944F',
@@ -110,7 +119,7 @@ export const darkColors: typeof lightColors = {
   border: '#2A2A2A',
   borderLight: '#252525',
 
-  // Status
+  // Status (legacy — migrate to semantic names below)
   success: '#10B981',
   successLight: '#064E3B',
   successVibrant: '#34D399',
@@ -120,6 +129,15 @@ export const darkColors: typeof lightColors = {
   errorLight: '#7F1D1D',
   info: '#60A5FA',
   infoLight: '#1E3A5F',
+
+  // Semantic status — active (gold, for in-progress states)
+  active: '#CFAE80',
+  activeMuted: 'rgba(207, 174, 128, 0.15)',
+
+  // Semantic status — completed (sage green, for done/success states)
+  completed: '#A3BE8C',
+  completedLight: '#A3BE8C',
+  completedMuted: 'rgba(163, 190, 140, 0.15)',
 
   // PR / Achievements
   gold: '#CFAE80',
