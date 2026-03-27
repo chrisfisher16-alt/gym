@@ -6,7 +6,6 @@ import {
   TextInput,
   StyleSheet,
   Platform,
-  Animated,
   ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +14,7 @@ import Reanimated, {
   useAnimatedStyle,
   withTiming,
   withSequence,
+  withSpring,
   Easing,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -412,8 +412,16 @@ export function DrillDownView({
   }, [prediction, currentSet, exercise.id, onLogSet, highlightOpacity]);
 
   // ── Animations ─────────────────────────────────────────────────────
-  const logBtnScale = useRef(new Animated.Value(1)).current;
-  const flashAnim = useRef(new Animated.Value(0)).current;
+  const logBtnScale = useSharedValue(1);
+  const flashAnim = useSharedValue(0);
+
+  const logBtnAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logBtnScale.value }],
+  }));
+
+  const flashAnimStyle = useAnimatedStyle(() => ({
+    opacity: flashAnim.value * 0.15,
+  }));
   const isLoggingRef = useRef(false);
 
   // ── Log Set handler ────────────────────────────────────────────────
@@ -423,14 +431,14 @@ export function DrillDownView({
     if (!currentSet) { isLoggingRef.current = false; return; }
 
     // Button scale animation
-    Animated.sequence([
-      Animated.timing(logBtnScale, { toValue: 0.92, duration: 80, useNativeDriver: true }),
-      Animated.spring(logBtnScale, { toValue: 1, friction: 3, useNativeDriver: true }),
-    ]).start();
+    logBtnScale.value = withSequence(
+      withTiming(0.92, { duration: 80 }),
+      withSpring(1, { damping: 12, stiffness: 180 }),
+    );
 
     // Green flash
-    flashAnim.setValue(1);
-    Animated.timing(flashAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start();
+    flashAnim.value = 1;
+    flashAnim.value = withTiming(0, { duration: 500 });
 
     const nextIncomplete = exercise.sets.find(
       (s) => !s.isCompleted && s.id !== currentSet.id,
@@ -801,14 +809,12 @@ export function DrillDownView({
         {currentSet ? (
           <View style={[styles.inputSection, { paddingHorizontal: spacing.base }]}>
             {/* Green flash overlay */}
-            <Animated.View
+            <Reanimated.View
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                {
-                  backgroundColor: colors.success,
-                  opacity: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.15] }),
-                },
+                { backgroundColor: colors.success },
+                flashAnimStyle,
               ]}
             />
 
@@ -1027,7 +1033,7 @@ export function DrillDownView({
         )}
 
         {/* Prominent CTA Button */}
-        <Animated.View style={{ transform: [{ scale: logBtnScale }] }}>
+        <Reanimated.View style={logBtnAnimStyle}>
           <TouchableOpacity
             onPress={handleCTAPress}
             style={[
@@ -1054,7 +1060,7 @@ export function DrillDownView({
               {ctaLabel}
             </Text>
           </TouchableOpacity>
-        </Animated.View>
+        </Reanimated.View>
 
 
       </View>
