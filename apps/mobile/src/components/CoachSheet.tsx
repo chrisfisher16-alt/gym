@@ -81,7 +81,7 @@ export function CoachSheet() {
   // ── Snap points (Y positions from TOP of screen) ─────────────────
   const FULL_SNAP = insets.top + 10; // ~95% visible
   const EXPANDED_SNAP = screenHeight * 0.35; // ~65% visible
-  const COMPACT_SNAP = screenHeight * 0.65; // ~35% visible
+  const COMPACT_SNAP = screenHeight * 0.76; // ~24% visible — just peeks above tab bar
   const CLOSED_SNAP = screenHeight + 50; // off-screen
 
   const translateY = useSharedValue(CLOSED_SNAP);
