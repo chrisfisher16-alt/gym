@@ -1,8 +1,10 @@
+import { useEffect, useRef } from 'react';
 import { Tabs, useSegments } from 'expo-router';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { CoachFAB } from '../../src/components/CoachFAB';
+import { useCoachStore } from '../../src/stores/coach-store';
 import type { CoachContext } from '@health-coach/shared';
 
 const TAB_CONTEXT: Record<string, CoachContext> = {
@@ -19,6 +21,16 @@ export default function TabsLayout() {
   // segments for tabs: ['(tabs)', 'workout'] — last segment is the tab name
   const activeTab = segments[segments.length - 1] ?? 'index';
   const coachContext = TAB_CONTEXT[activeTab] ?? 'general';
+  const resetConversation = useCoachStore((s) => s.resetConversation);
+  const prevContext = useRef(coachContext);
+
+  // Reset conversation when switching tabs (new context = fresh chat)
+  useEffect(() => {
+    if (prevContext.current !== coachContext) {
+      prevContext.current = coachContext;
+      resetConversation();
+    }
+  }, [coachContext, resetConversation]);
 
   return (
     <View style={{ flex: 1 }}>

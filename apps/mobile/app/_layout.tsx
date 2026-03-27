@@ -17,6 +17,7 @@ import { QuickInputProvider } from '../src/providers/QuickInputProvider';
 import { migrateAIConfig } from '../src/lib/ai-provider';
 import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
 import { useThemeStore } from '../src/stores/theme-store';
+import { darkColors, lightColors } from '../src/theme/colors';
 import { initializeStoreBridge } from '../src/lib/store-bridge';
 import { getInitialURL, onDeepLink, parseInviteCode, handleInviteLink } from '../src/lib/deep-linking';
 
@@ -161,6 +162,11 @@ function RootLayout() {
         animation: 'ios_from_right',
         gestureEnabled: true,
         animationMatchesGesture: true,
+        headerStyle: {
+          backgroundColor: resolvedScheme === 'dark' ? darkColors.background : lightColors.background,
+        },
+        headerTintColor: resolvedScheme === 'dark' ? darkColors.text : lightColors.text,
+        headerShadowVisible: false,
       }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />

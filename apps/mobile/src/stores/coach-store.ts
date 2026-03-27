@@ -85,6 +85,7 @@ interface CoachState {
   initialize: () => Promise<void>;
   sendMessage: (text: string, context?: CoachContext, imageUri?: string) => Promise<void>;
   abortCurrentRequest: () => void;
+  resetConversation: () => void;
   startConversation: (context?: CoachContext) => Promise<void>;
   loadConversation: (conversationId: string) => Promise<void>;
   loadHistory: () => Promise<void>;
@@ -518,6 +519,18 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         error: errorMessage,
       }));
     }
+  },
+
+  resetConversation: () => {
+    set({
+      activeConversation: null,
+      error: null,
+      streamingContent: '',
+      isStreaming: false,
+      isLoading: false,
+    });
+    AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(null))
+      .catch((e) => console.warn('[CoachStore] reset persist failed:', e));
   },
 
   startConversation: async (context = 'general') => {
