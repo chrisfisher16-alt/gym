@@ -31,7 +31,6 @@ import { useProfileStore } from '../../src/stores/profile-store';
 import { ACHIEVEMENTS } from '../../src/lib/achievements';
 import { AchievementBadge } from '../../src/components/AchievementBadge';
 import { getHealthProviderName } from '../../src/lib/health';
-import { CoachFAB } from '../../src/components/CoachFAB';
 import { AchievementUnlockOverlay } from '../../src/components/AchievementUnlockOverlay';
 import { MUSCLE_GROUP_LABELS } from '../../src/lib/exercise-data';
 import type { MuscleGroup, CompletedSession } from '../../src/types/workout';
@@ -1661,6 +1660,9 @@ export default function ProgressTab() {
             )}
           </TouchableOpacity>
         </ExpandableCard>
+
+        {/* Extra padding so content scrolls clear of the CoachFAB */}
+        <View style={{ height: 100 }} />
       </View>
 
       {/* Achievement Unlock Overlay */}
@@ -1669,7 +1671,6 @@ export default function ProgressTab() {
       {/* Quick Action Sheet */}
       <QuickActionSheet {...quickActions.sheetProps} />
 
-      <CoachFAB context="progress" label="Analyze My Progress" prefilledMessage="Analyze my progress this week" />
       </Animated.View>
     </ScreenContainer>
   );

@@ -1,11 +1,27 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useSegments } from 'expo-router';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
+import { CoachFAB } from '../../src/components/CoachFAB';
+import type { CoachContext } from '@health-coach/shared';
+
+const TAB_CONTEXT: Record<string, CoachContext> = {
+  index: 'general',
+  workout: 'workout',
+  nutrition: 'nutrition',
+  compete: 'general',
+  progress: 'progress',
+};
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const segments = useSegments();
+  // segments for tabs: ['(tabs)', 'workout'] — last segment is the tab name
+  const activeTab = segments[segments.length - 1] ?? 'index';
+  const coachContext = TAB_CONTEXT[activeTab] ?? 'general';
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -81,5 +97,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    <CoachFAB context={coachContext} />
+    </View>
   );
 }

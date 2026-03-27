@@ -29,7 +29,6 @@ import { WorkoutTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
 import { formatSessionDate, formatDuration, formatVolume } from '../../src/lib/workout-utils';
 import { DayType, DAY_TYPE_LABELS, DAY_TYPE_COLORS, DAY_TYPE_ICONS } from '../../src/types/workout';
 import type { CompletedSession } from '../../src/types/workout';
-import { CoachFAB } from '../../src/components/CoachFAB';
 import { StartWorkoutSheet } from '../../src/components/workout/StartWorkoutSheet';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
@@ -751,7 +750,7 @@ export default function WorkoutTab() {
       )}
 
       {/* Recent History — wrapped in ExpandableCard with long-press actions */}
-      <View style={{ marginBottom: spacing['2xl'] }}>
+      <View style={{ marginBottom: 100 }}>
         <View style={styles.sectionHeader}>
           <Text style={[typography.h3, { color: colors.text }]}>Recent Workouts</Text>
           {totalWorkouts > 0 && (
@@ -861,15 +860,14 @@ export default function WorkoutTab() {
           ))
         )}
       </View>
-      <CoachFAB context="workout" label="Ask Coach" prefilledMessage="Help me with my workout" />
 
-      {/* Start Workout FAB */}
+      {/* Start Workout FAB — offset left to avoid overlapping CoachFAB */}
       <TouchableOpacity
         onPress={() => setShowStartSheet(true)}
         style={{
           position: 'absolute',
           bottom: 20,
-          right: 20,
+          right: 88,
           width: 56,
           height: 56,
           borderRadius: 28,

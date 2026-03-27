@@ -7,12 +7,32 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import ReAnimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useCoachStore } from '../stores/coach-store';
 import { useCoachSheet } from '../providers/CoachSheetProvider';
 import type { CoachContext } from '@health-coach/shared';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const FAB_SIZE = 56;
+const EDGE_MARGIN = 16;
+const TAB_BAR_HEIGHT = 56;
+const DRAG_THRESHOLD = 8; // px moved before we consider it a drag (not a tap)
+
+const SPRING_CONFIG = { damping: 20, stiffness: 300, mass: 0.8 };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,12 +99,50 @@ export function CoachFAB({
   const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
   const { open } = useCoachSheet();
 
+  // Device-aware dimensions
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // Computed safe bounds
+  const safeTop = insets.top + 8; // small extra buffer below status bar / notch
+  const safeBottom = TAB_BAR_HEIGHT + insets.bottom + EDGE_MARGIN;
+  const maxX = screenW - FAB_SIZE - EDGE_MARGIN;
+  const maxY = screenH - FAB_SIZE - safeBottom;
+  const defaultX = maxX;
+  const defaultY = maxY;
+
   // Tooltip state (floating FAB only)
   const tooltipOpacity = useRef(new Animated.Value(0)).current;
   const [showTooltip, setShowTooltip] = useState(false);
 
   // Quick-prompts popover (floating FAB only)
   const [promptsVisible, setPromptsVisible] = useState(false);
+
+  // -----------------------------------------------------------------------
+  // Draggable position (shared values for reanimated)
+  // -----------------------------------------------------------------------
+
+  const posX = useSharedValue(defaultX);
+  const posY = useSharedValue(defaultY);
+  const startX = useSharedValue(defaultX);
+  const startY = useSharedValue(defaultY);
+  const isDragging = useSharedValue(false);
+  const scale = useSharedValue(1);
+
+  // Update default position when dimensions change (e.g. iPad multitasking)
+  const prevW = useRef(screenW);
+  const prevH = useRef(screenH);
+  useEffect(() => {
+    if (prevW.current !== screenW || prevH.current !== screenH) {
+      // If FAB was at the old default, move it to the new default
+      const oldMaxX = prevW.current - FAB_SIZE - EDGE_MARGIN;
+      const oldMaxY = prevH.current - FAB_SIZE - safeBottom;
+      if (Math.abs(posX.value - oldMaxX) < 2) posX.value = maxX;
+      if (Math.abs(posY.value - oldMaxY) < 2) posY.value = maxY;
+      prevW.current = screenW;
+      prevH.current = screenH;
+    }
+  }, [screenW, screenH, maxX, maxY, safeBottom, posX, posY]);
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -107,6 +165,72 @@ export function CoachFAB({
     },
     [context, setPrefilledContext, open],
   );
+
+  // -----------------------------------------------------------------------
+  // Pan gesture for dragging
+  // -----------------------------------------------------------------------
+
+  const panGesture = Gesture.Pan()
+    .minDistance(DRAG_THRESHOLD)
+    .onStart(() => {
+      startX.value = posX.value;
+      startY.value = posY.value;
+      isDragging.value = true;
+      scale.value = withSpring(1.1, SPRING_CONFIG);
+    })
+    .onUpdate((e) => {
+      const newX = startX.value + e.translationX;
+      const newY = startY.value + e.translationY;
+
+      // Clamp within safe screen bounds
+      posX.value = Math.max(EDGE_MARGIN, Math.min(newX, maxX));
+      posY.value = Math.max(safeTop, Math.min(newY, maxY));
+    })
+    .onEnd(() => {
+      // Snap to nearest horizontal edge
+      const midpoint = screenW / 2;
+      const snapX =
+        posX.value + FAB_SIZE / 2 < midpoint
+          ? EDGE_MARGIN
+          : maxX;
+
+      posX.value = withSpring(snapX, SPRING_CONFIG);
+      scale.value = withSpring(1, SPRING_CONFIG);
+      isDragging.value = false;
+    });
+
+  // Tap gesture — only fires if drag distance was below threshold
+  const tapGesture = Gesture.Tap().onEnd((_e, success) => {
+    if (success) {
+      runOnJS(handlePress)();
+    }
+  });
+
+  // Long-press gesture for quick prompts
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(400)
+    .onStart(() => {
+      runOnJS(handleLongPress)();
+    });
+
+  // Compose: pan takes priority, then long-press, then tap
+  const composedGesture = Gesture.Race(
+    panGesture,
+    Gesture.Exclusive(longPressGesture, tapGesture),
+  );
+
+  // -----------------------------------------------------------------------
+  // Animated style
+  // -----------------------------------------------------------------------
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: posX.value },
+      { translateY: posY.value },
+      { scale: scale.value },
+    ],
+    zIndex: isDragging.value ? 9999 : 999,
+  }));
 
   // -----------------------------------------------------------------------
   // Tooltip auto-show on mount (once per context per session)
@@ -145,7 +269,7 @@ export function CoachFAB({
   if (hidden) return null;
 
   // -----------------------------------------------------------------------
-  // Labeled pill (inline usage) — simple, no tooltip / long-press
+  // Labeled pill (inline usage) — simple, no tooltip / drag / long-press
   // -----------------------------------------------------------------------
 
   if (label) {
@@ -182,57 +306,59 @@ export function CoachFAB({
   }
 
   // -----------------------------------------------------------------------
-  // Floating circular FAB with tooltip + long-press quick prompts
+  // Floating draggable FAB with tooltip + long-press quick prompts
   // -----------------------------------------------------------------------
 
   const tooltipMessage = TOOLTIP_TEXT[context] ?? TOOLTIP_TEXT.general;
   const prompts = QUICK_PROMPTS[context] ?? QUICK_PROMPTS.general;
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
-      {/* Tooltip bubble */}
-      {showTooltip && (
-        <Animated.View
-          style={[
-            styles.tooltip,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderRadius: radius.md,
-              opacity: tooltipOpacity,
-            },
-          ]}
+    <>
+      <GestureDetector gesture={composedGesture}>
+        <ReAnimated.View
+          style={[styles.draggableContainer, animatedContainerStyle]}
+          pointerEvents="box-none"
         >
-          <Text style={[styles.tooltipText, { color: colors.text }]}>
-            {tooltipMessage}
-          </Text>
-          {/* little caret pointing right toward the FAB */}
+          {/* Tooltip bubble */}
+          {showTooltip && (
+            <Animated.View
+              style={[
+                styles.tooltip,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: radius.md,
+                  opacity: tooltipOpacity,
+                },
+              ]}
+            >
+              <Text style={[styles.tooltipText, { color: colors.text }]}>
+                {tooltipMessage}
+              </Text>
+              <View
+                style={[
+                  styles.tooltipCaret,
+                  { borderLeftColor: colors.surface },
+                ]}
+              />
+            </Animated.View>
+          )}
+
+          {/* FAB button */}
           <View
             style={[
-              styles.tooltipCaret,
-              { borderLeftColor: colors.surface },
+              styles.fab,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radius.full,
+                shadowColor: colors.shadow,
+              },
             ]}
-          />
-        </Animated.View>
-      )}
-
-      {/* FAB button */}
-      <TouchableOpacity
-        onPress={handlePress}
-        onLongPress={handleLongPress}
-        delayLongPress={400}
-        activeOpacity={0.8}
-        style={[
-          styles.fab,
-          {
-            backgroundColor: colors.primary,
-            borderRadius: radius.full,
-            shadowColor: colors.shadow,
-          },
-        ]}
-      >
-        <Ionicons name="chatbubble-ellipses" size={24} color={colors.textInverse} />
-      </TouchableOpacity>
+          >
+            <Ionicons name="chatbubble-ellipses" size={24} color={colors.textInverse} />
+          </View>
+        </ReAnimated.View>
+      </GestureDetector>
 
       {/* Quick-prompts modal */}
       <Modal
@@ -277,7 +403,7 @@ export function CoachFAB({
           </View>
         </Pressable>
       </Modal>
-    </View>
+    </>
   );
 }
 
@@ -286,15 +412,16 @@ export function CoachFAB({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: {
+  draggableContainer: {
     position: 'absolute',
-    bottom: 80,
-    right: 20,
+    top: 0,
+    left: 0,
+    width: FAB_SIZE,
     alignItems: 'flex-end',
   },
   fab: {
-    width: 56,
-    height: 56,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 4 },

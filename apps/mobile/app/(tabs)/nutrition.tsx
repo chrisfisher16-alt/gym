@@ -35,7 +35,6 @@ import {
   ProgressRing,
 } from '../../src/components/ui';
 import type { SwipeAction } from '../../src/components/ui';
-import { CoachFAB } from '../../src/components/CoachFAB';
 import { InNutritionCoach } from '../../src/components/InNutritionCoach';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
 import { usePaywall } from '../../src/hooks/usePaywall';
@@ -1081,8 +1080,8 @@ export default function NutritionTab() {
         onClose={() => setShowNutritionCoach(false)}
       />
 
-      {/* Spacer for FAB */}
-      <View style={{ height: 80 }} />
+      {/* Spacer for FABs (Log Meal + CoachFAB) */}
+      <View style={{ height: 100 }} />
 
       {/* FAB - Log Meal */}
       <TouchableOpacity

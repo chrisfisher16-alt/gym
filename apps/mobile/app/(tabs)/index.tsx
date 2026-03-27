@@ -732,7 +732,8 @@ export default function TodayTab() {
           <Text style={[typography.label, { color: colors.primary }]}>View Timeline →</Text>
         </TouchableOpacity>
 
-        <View style={{ marginBottom: spacing['2xl'] }} />
+        {/* Extra padding so content scrolls clear of the CoachFAB */}
+        <View style={{ height: 100 }} />
       </View>
 
       {/* Bottom Sheets */}

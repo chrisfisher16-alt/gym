@@ -40,6 +40,7 @@ export default function CompeteTab() {
     isLoading: friendsLoading,
     initialize: initFriends,
     isInitialized: friendsInitialized,
+    removeFriend,
   } = useFriendsStore();
 
   const {
@@ -164,7 +165,7 @@ export default function CompeteTab() {
       {isInitialLoading ? (
         <CompeteTabSkeleton />
       ) : (
-        <View style={{ gap: spacing.md, paddingBottom: spacing.xl }}>
+        <View style={{ gap: spacing.md, paddingBottom: 100 }}>
           {/* Section 1: Leaderboard */}
           <LeaderboardCard
             entries={leaderboardEntries}
@@ -207,7 +208,7 @@ export default function CompeteTab() {
                         }}
                         onPress={() => router.push('/social/friends')}
                         onChallenge={() => router.push('/social/challenges/create' as any)}
-                        onRemove={() => {}}
+                        onRemove={() => removeFriend(f.id)}
                       />
                     ))}
                     <TouchableOpacity
