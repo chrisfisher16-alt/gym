@@ -11,6 +11,7 @@ import {
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedReaction,
   withSpring,
   withTiming,
   runOnJS,
@@ -96,12 +97,10 @@ export function CoachSheet() {
       translateY.value = withSpring(target, SPRING_CONFIG);
       backdropOpacity.value = withTiming(1, { duration: 250 });
       currentSnap.value = target;
-      runOnJS(setJsSnap)(target);
     } else {
       translateY.value = withSpring(CLOSED_SNAP, SPRING_CONFIG);
       backdropOpacity.value = withTiming(0, { duration: 200 });
       currentSnap.value = CLOSED_SNAP;
-      runOnJS(setJsSnap)(CLOSED_SNAP);
     }
   }, [
     isOpen,
@@ -118,7 +117,6 @@ export function CoachSheet() {
   const expandToExpanded = useCallback(() => {
     translateY.value = withSpring(EXPANDED_SNAP, SPRING_CONFIG);
     currentSnap.value = EXPANDED_SNAP;
-    setJsSnap(EXPANDED_SNAP);
     lightImpact();
   }, [EXPANDED_SNAP, translateY, currentSnap]);
 
@@ -157,7 +155,7 @@ export function CoachSheet() {
         translateY.value = withSpring(CLOSED_SNAP, SPRING_CONFIG);
         backdropOpacity.value = withTiming(0, { duration: 200 });
         currentSnap.value = CLOSED_SNAP;
-        runOnJS(setJsSnap)(CLOSED_SNAP);
+
         runOnJS(close)();
         return;
       }
@@ -166,7 +164,7 @@ export function CoachSheet() {
       if (velocity < -1000) {
         translateY.value = withSpring(FULL_SNAP, SPRING_CONFIG);
         currentSnap.value = FULL_SNAP;
-        runOnJS(setJsSnap)(FULL_SNAP);
+
         runOnJS(lightImpact)();
         return;
       }
@@ -181,29 +179,40 @@ export function CoachSheet() {
         translateY.value = withSpring(CLOSED_SNAP, SPRING_CONFIG);
         backdropOpacity.value = withTiming(0, { duration: 200 });
         currentSnap.value = CLOSED_SNAP;
-        runOnJS(setJsSnap)(CLOSED_SNAP);
+
         runOnJS(close)();
       } else if (currentY > midCompactExpanded) {
         // Snap to compact
         translateY.value = withSpring(COMPACT_SNAP, SPRING_CONFIG);
         currentSnap.value = COMPACT_SNAP;
-        runOnJS(setJsSnap)(COMPACT_SNAP);
+
       } else if (currentY > midExpandedFull) {
         // Snap to expanded
         translateY.value = withSpring(EXPANDED_SNAP, SPRING_CONFIG);
         currentSnap.value = EXPANDED_SNAP;
-        runOnJS(setJsSnap)(EXPANDED_SNAP);
+
       } else {
         // Snap to full
         translateY.value = withSpring(FULL_SNAP, SPRING_CONFIG);
         currentSnap.value = FULL_SNAP;
-        runOnJS(setJsSnap)(FULL_SNAP);
+
         runOnJS(lightImpact)();
       }
     });
 
   // ── Track current snap position (JS-side for rendering) ──────────
   const [jsSnap, setJsSnap] = useState(CLOSED_SNAP);
+
+  // Sync shared value → JS state via animated reaction (safe from worklets)
+  useAnimatedReaction(
+    () => currentSnap.value,
+    (snap, prev) => {
+      if (snap !== prev) {
+        runOnJS(setJsSnap)(snap);
+      }
+    },
+    [currentSnap],
+  );
 
   // ── Derived: is sheet in compact position ─────────────────────────
   const isCompact = !hasMessages && isOpen;
