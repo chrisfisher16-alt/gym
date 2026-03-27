@@ -330,20 +330,26 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         startDate = d.toISOString();
       }
 
-      // Fetch real scores from Supabase RPC
-      const { data: scoreData, error: scoreError } = await supabase.rpc('get_leaderboard_scores', {
-        p_user_ids: userIds,
-        p_metric: metric,
-        p_start_date: startDate,
-        p_end_date: now.toISOString(),
-      });
-
-      if (scoreError) throw scoreError;
-
+      // Fetch real scores from Supabase RPC (falls back to zeros if not deployed)
       const scoreMap = new Map<string, number>();
-      (scoreData ?? []).forEach((row: { user_id: string; score: number }) => {
-        scoreMap.set(row.user_id, Number(row.score) || 0);
-      });
+      try {
+        const { data: scoreData, error: scoreError } = await supabase.rpc('get_leaderboard_scores', {
+          p_user_ids: userIds,
+          p_metric: metric,
+          p_start_date: startDate,
+          p_end_date: now.toISOString(),
+        });
+
+        if (!scoreError && scoreData) {
+          (scoreData as { user_id: string; score: number }[]).forEach((row) => {
+            scoreMap.set(row.user_id, Number(row.score) || 0);
+          });
+        } else if (scoreError) {
+          console.warn('[Challenges] Leaderboard RPC unavailable, using zero scores:', scoreError.code);
+        }
+      } catch (rpcErr) {
+        console.warn('[Challenges] Leaderboard RPC failed, using zero scores');
+      }
 
       // Fetch profiles for display names / avatars
       const { data: profiles } = await supabase
