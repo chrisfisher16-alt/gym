@@ -198,6 +198,12 @@ export function CoachSheet() {
   // The animated value drives the actual layout.
   const isCompact = !hasMessages && isOpen;
 
+  // Visible height in compact mode (for constraining the chat container)
+  const HEADER_HEIGHT = 70; // handle (~16) + title row (~44) + padding
+  const PROMPTS_HEIGHT = 56; // prompt pills + padding
+  const compactVisibleHeight = screenHeight - COMPACT_SNAP;
+  const compactChatHeight = Math.max(80, compactVisibleHeight - HEADER_HEIGHT - PROMPTS_HEIGHT);
+
   // ── Animated styles ───────────────────────────────────────────────
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -340,7 +346,7 @@ export function CoachSheet() {
         )}
 
         {/* ── Chat UI (always mounted to preserve conversation) ── */}
-        <View style={styles.chatContainer}>
+        <View style={isCompact ? { height: compactChatHeight } : styles.chatContainer}>
           <CoachChatUI
             keyboardVerticalOffset={0}
             showHeader={false}

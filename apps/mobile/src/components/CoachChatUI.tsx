@@ -307,7 +307,7 @@ export function CoachChatUI({
       {currentMessages.length === 0 && !isLoading && !compactMode ? (
         renderEmptyState()
       ) : currentMessages.length === 0 && !isLoading && compactMode ? (
-        <View style={{ flex: 1 }} />
+        null
       ) : (
         <FlatList
           ref={flatListRef}
