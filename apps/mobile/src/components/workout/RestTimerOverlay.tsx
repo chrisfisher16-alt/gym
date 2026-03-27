@@ -58,7 +58,9 @@ export function RestTimerOverlay() {
     if (restSecondsLeft === 0 && isRestTimerActive) {
       warningNotification();
       playTimerComplete();
-      setTimeout(clearRestTimer, 200); // Delay clear to let async audio start playing
+      // Delay clear so the completion sound/haptic can start before the overlay dismisses
+      const tid = setTimeout(clearRestTimer, 350);
+      return () => clearTimeout(tid);
     }
   }, [restSecondsLeft, isRestTimerActive, clearRestTimer]);
 

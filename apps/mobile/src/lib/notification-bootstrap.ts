@@ -77,7 +77,9 @@ function handleNotificationResponse(
     try {
       const { useNutritionStore } = require('../stores/nutrition-store');
       useNutritionStore.getState().logWater(8);
-    } catch {}
+    } catch (err) {
+      console.warn('[Notifications] Failed to log water from notification action:', err);
+    }
     return;
   }
 

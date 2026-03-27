@@ -17,7 +17,7 @@ import { lightImpact } from '../../lib/haptics';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-export type InputType = 'weight' | 'reps';
+export type InputType = 'weight' | 'reps' | 'duration' | 'distance' | 'level';
 
 export interface WorkoutInputToolbarProps {
   inputType: InputType;
@@ -32,6 +32,9 @@ export interface WorkoutInputToolbarProps {
 
 const REPS_PRESETS = [5, 8, 10, 12, 15, 20] as const;
 const WEIGHT_INCREMENTS = [2.5, 5, 10] as const;
+const DURATION_PRESETS = [30, 45, 60, 90, 120, 180] as const;
+const DISTANCE_PRESETS = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0] as const;
+const LEVEL_PRESETS = [1, 3, 5, 7, 9, 12, 15] as const;
 const ANIMATION_DURATION = 150;
 const TOOLBAR_HEIGHT = 52;
 const GOLD_ACCENT = '#CFAE80';
@@ -213,6 +216,61 @@ export function WorkoutInputToolbar({
     });
   }, [currentValue, handlePress, chipStyle, chipTextStyle]);
 
+  // ── Duration toolbar content ───────────────────────────────────────
+
+  const durationButtons = useMemo(() => {
+    return DURATION_PRESETS.map((sec) => {
+      const isActive = currentValue === sec;
+      const label = sec >= 60 ? `${sec / 60}m` : `${sec}s`;
+      return (
+        <TouchableOpacity
+          key={`dur-${sec}`}
+          onPress={() => handlePress(sec)}
+          style={chipStyle(isActive, false)}
+          activeOpacity={0.7}
+        >
+          <Text style={chipTextStyle(isActive, false)}>{label}</Text>
+        </TouchableOpacity>
+      );
+    });
+  }, [currentValue, handlePress, chipStyle, chipTextStyle]);
+
+  // ── Distance toolbar content ───────────────────────────────────────
+
+  const distanceButtons = useMemo(() => {
+    return DISTANCE_PRESETS.map((dist) => {
+      const isActive = currentValue === dist;
+      return (
+        <TouchableOpacity
+          key={`dist-${dist}`}
+          onPress={() => handlePress(dist)}
+          style={chipStyle(isActive, false)}
+          activeOpacity={0.7}
+        >
+          <Text style={chipTextStyle(isActive, false)}>{dist} {unitLabel}</Text>
+        </TouchableOpacity>
+      );
+    });
+  }, [currentValue, handlePress, chipStyle, chipTextStyle, unitLabel]);
+
+  // ── Level toolbar content ──────────────────────────────────────────
+
+  const levelButtons = useMemo(() => {
+    return LEVEL_PRESETS.map((lvl) => {
+      const isActive = currentValue === lvl;
+      return (
+        <TouchableOpacity
+          key={`lvl-${lvl}`}
+          onPress={() => handlePress(lvl)}
+          style={chipStyle(isActive, false)}
+          activeOpacity={0.7}
+        >
+          <Text style={chipTextStyle(isActive, false)}>Lv {lvl}</Text>
+        </TouchableOpacity>
+      );
+    });
+  }, [currentValue, handlePress, chipStyle, chipTextStyle]);
+
   // ── Render ──────────────────────────────────────────────────────────
 
   return (
@@ -232,7 +290,15 @@ export function WorkoutInputToolbar({
           contentContainerStyle={[styles.scrollContent, { gap: spacing.sm }]}
           keyboardShouldPersistTaps="always"
         >
-          {inputType === 'weight' ? weightButtons : repsButtons}
+          {inputType === 'weight'
+            ? weightButtons
+            : inputType === 'duration'
+              ? durationButtons
+              : inputType === 'distance'
+                ? distanceButtons
+                : inputType === 'level'
+                  ? levelButtons
+                  : repsButtons}
         </ScrollView>
       </View>
     </Reanimated.View>

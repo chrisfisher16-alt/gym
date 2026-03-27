@@ -148,7 +148,9 @@ async function fetchLocalData() {
           stores[key] = value;
         }
       }
-    } catch {}
+    } catch (err) {
+      console.warn(`[DataExport] Failed to read key "${key}" — skipped:`, err);
+    }
   }
 
   return {

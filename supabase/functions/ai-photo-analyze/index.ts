@@ -3,7 +3,7 @@
 
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
-import type { PhotoAnalyzeRequest, PhotoAnalyzeResponse, ParsedMealItem } from '../_shared/types.ts';
+import type { PhotoAnalyzeRequest, PhotoAnalyzeResponse } from '../_shared/types.ts';
 
 // ── Main Handler ────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ Deno.serve(async (req: Request) => {
   if (corsResp) return corsResp;
 
   try {
-    const { user_id, supabase } = await verifyAuth(req);
+    await verifyAuth(req);
     const body: PhotoAnalyzeRequest = await req.json();
     const { image_base64, image_url } = body;
 
@@ -20,29 +20,14 @@ Deno.serve(async (req: Request) => {
       return errorResponse('No image provided (need image_base64 or image_url)', 400);
     }
 
-    // Placeholder implementation — real vision API integration would go here.
-    // For now, return reasonable estimates with clear labeling.
+    // Server-side photo analysis is not yet implemented.
+    // The mobile app uses client-side AI vision (see ai-meal-analyzer.ts) instead.
     const response: PhotoAnalyzeResponse = {
-      items: getPlaceholderEstimates(),
-      analysis_method: 'placeholder',
+      items: [],
+      analysis_method: 'not_implemented',
       description:
-        'Photo analysis is currently in preview mode. The items below are placeholder estimates. Please review and adjust quantities and macros to match your actual meal.',
+        'Server-side photo analysis is not yet available. The mobile app uses client-side AI vision instead.',
     };
-
-    // Log usage event
-    await supabase.from('ai_usage_events').insert({
-      user_id,
-      model: 'photo_placeholder',
-      input_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-      estimated_cost_usd: 0,
-      latency_ms: 0,
-      status: 'success',
-      tool_calls_count: 0,
-      context: 'nutrition',
-      created_at: new Date().toISOString(),
-    });
 
     return jsonResponse(response);
   } catch (error) {
@@ -54,45 +39,3 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-// ── Placeholder Estimates ───────────────────────────────────────────
-
-function getPlaceholderEstimates(): ParsedMealItem[] {
-  return [
-    {
-      name: 'Main protein (detected)',
-      calories: 250,
-      protein_g: 35,
-      carbs_g: 2,
-      fat_g: 10,
-      fiber_g: 0,
-      quantity: 1,
-      unit: 'serving',
-      is_estimate: true,
-      confidence: 0.4,
-    },
-    {
-      name: 'Carb/grain side (detected)',
-      calories: 200,
-      protein_g: 5,
-      carbs_g: 40,
-      fat_g: 2,
-      fiber_g: 2,
-      quantity: 1,
-      unit: 'serving',
-      is_estimate: true,
-      confidence: 0.4,
-    },
-    {
-      name: 'Vegetables (detected)',
-      calories: 50,
-      protein_g: 3,
-      carbs_g: 8,
-      fat_g: 1,
-      fiber_g: 3,
-      quantity: 1,
-      unit: 'serving',
-      is_estimate: true,
-      confidence: 0.4,
-    },
-  ];
-}

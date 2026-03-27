@@ -142,7 +142,7 @@ export function QuickLogMealSheet({ visible, onClose }: QuickLogMealSheetProps) 
       const uri = result.assets[0].uri;
       setAnalyzing(true);
 
-      const items = await analyzePhotoMeal(uri);
+      const { items } = await analyzePhotoMeal(uri);
       if (items.length > 0) {
         let totalCal = 0, totalPro = 0, totalCarbs = 0, totalFat = 0;
         const names: string[] = [];

@@ -67,7 +67,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
           isInitialized: true,
         });
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[Friends] Failed to load cached friends data:', err);
+    }
 
     if (!isSupabaseConfigured) { set({ isInitialized: true }); return; }
     await get().refresh();

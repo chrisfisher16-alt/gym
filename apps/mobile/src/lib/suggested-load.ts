@@ -1,4 +1,4 @@
-import type { CompletedSession, LoadSuggestion, ExerciseLibraryEntry, ActiveExercise } from '../types/workout';
+import type { CompletedSession, LoadSuggestion, ExerciseLibraryEntry, ActiveExercise, TrackingMode, ExerciseDefaults } from '../types/workout';
 
 /**
  * Progressive overload suggestion engine.
@@ -343,4 +343,348 @@ export function getPreviousSetData(
   }
 
   return null;
+}
+
+// ── Full Previous Set Data (all metric fields) ─────────────────────
+
+export interface PreviousSetDataFull {
+  weight?: number;
+  reps?: number;
+  durationSeconds?: number;
+  distance?: number;
+  distanceUnit?: 'miles' | 'km' | 'meters';
+  incline?: number;
+  speed?: number;
+  speedUnit?: 'mph' | 'kph';
+  level?: number;
+  calories?: number;
+  resistance?: number;
+}
+
+/**
+ * Get full previous set data for a specific set number of an exercise.
+ * Unlike getPreviousSetData, returns all metric fields from the CompletedSet.
+ */
+export function getPreviousSetDataFull(
+  exerciseId: string,
+  setNumber: number,
+  history: CompletedSession[],
+): PreviousSetDataFull | null {
+  const sortedHistory = [...history].sort(
+    (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+  );
+
+  for (const session of sortedHistory) {
+    const exerciseEntry = session.exercises.find((e) => e.exerciseId === exerciseId);
+    if (exerciseEntry) {
+      const workingSets = exerciseEntry.sets.filter((s) => s.setType === 'working');
+      const matchingSet = workingSets[setNumber - 1];
+      if (!matchingSet) return null;
+
+      const result: PreviousSetDataFull = {};
+      if (matchingSet.weight != null) result.weight = matchingSet.weight;
+      if (matchingSet.reps != null) result.reps = matchingSet.reps;
+      if (matchingSet.durationSeconds != null) result.durationSeconds = matchingSet.durationSeconds;
+      if (matchingSet.distance != null) result.distance = matchingSet.distance;
+      if (matchingSet.distanceUnit != null) result.distanceUnit = matchingSet.distanceUnit;
+      if (matchingSet.incline != null) result.incline = matchingSet.incline;
+      if (matchingSet.speed != null) result.speed = matchingSet.speed;
+      if (matchingSet.speedUnit != null) result.speedUnit = matchingSet.speedUnit;
+      if (matchingSet.level != null) result.level = matchingSet.level;
+      if (matchingSet.calories != null) result.calories = matchingSet.calories;
+      if (matchingSet.resistance != null) result.resistance = matchingSet.resistance;
+
+      // Return null only if no fields were populated
+      if (Object.keys(result).length === 0) return null;
+      return result;
+    }
+  }
+
+  return null;
+}
+
+// ── Full Suggestion Engine (multi-mode) ─────────────────────────────
+
+export interface FullSuggestion {
+  // Standard
+  suggestedWeight?: number;
+  suggestedReps?: number;
+  // Duration
+  suggestedDurationSeconds?: number;
+  // Distance
+  suggestedDistance?: number;
+  suggestedDistanceUnit?: 'miles' | 'km' | 'meters';
+  // Secondary metrics
+  suggestedIncline?: number;
+  suggestedSpeed?: number;
+  suggestedLevel?: number;
+  suggestedResistance?: number;
+  // Meta
+  explanation: string;
+  confidence: 'high' | 'medium' | 'low';
+  source: 'history' | 'exercise_default';
+}
+
+/**
+ * Helper: find the most recent session's working sets for an exercise.
+ */
+function findLastWorkingSets(exerciseId: string, history: CompletedSession[]) {
+  const sortedHistory = [...history].sort(
+    (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+  );
+  for (const session of sortedHistory) {
+    const exerciseEntry = session.exercises.find((e) => e.exerciseId === exerciseId);
+    if (exerciseEntry) {
+      return exerciseEntry.sets.filter((s) => s.setType === 'working');
+    }
+  }
+  return null;
+}
+
+/**
+ * Multi-mode suggestion engine.
+ * Provides progression suggestions for all tracking modes, not just weight_reps.
+ */
+export function getFullSuggestion(
+  exerciseId: string,
+  trackingMode: TrackingMode,
+  defaults: ExerciseDefaults | undefined,
+  history: CompletedSession[],
+  isMetric: boolean,
+): FullSuggestion | null {
+  const lastSets = findLastWorkingSets(exerciseId, history);
+
+  switch (trackingMode) {
+    case 'weight_reps': {
+      // Delegate to existing getSuggestedLoad and map the result
+      const targetReps = defaults?.reps ?? '8-12';
+      const targetSetsCount = defaults?.sets ?? 3;
+      const existing = getSuggestedLoad(
+        exerciseId,
+        targetReps,
+        targetSetsCount,
+        history,
+        isMetric,
+      );
+      if (!existing) return null;
+      return {
+        suggestedWeight: existing.suggestedWeight,
+        suggestedReps: existing.suggestedReps,
+        explanation: existing.explanation,
+        confidence: existing.confidence,
+        source: 'history',
+      };
+    }
+
+    case 'duration': {
+      if (lastSets && lastSets.length > 0) {
+        const lastDuration = lastSets[0].durationSeconds;
+        if (lastDuration != null) {
+          const targetDuration = defaults?.durationSeconds ?? lastDuration;
+          if (lastDuration >= targetDuration) {
+            // Hit or exceeded target — suggest +10-15s (cap at +30s)
+            const increase = Math.min(15, 30);
+            const suggested = lastDuration + increase;
+            return {
+              suggestedDurationSeconds: suggested,
+              explanation: `You held ${lastDuration}s last time (target: ${targetDuration}s). Try ${suggested}s today.`,
+              confidence: 'high',
+              source: 'history',
+            };
+          }
+          // Didn't hit target — suggest same
+          return {
+            suggestedDurationSeconds: targetDuration,
+            explanation: `You held ${lastDuration}s last time. Aim for ${targetDuration}s again.`,
+            confidence: 'medium',
+            source: 'history',
+          };
+        }
+      }
+      // No history — use defaults
+      if (defaults?.durationSeconds) {
+        return {
+          suggestedDurationSeconds: defaults.durationSeconds,
+          explanation: `Start with ${defaults.durationSeconds}s and build from there.`,
+          confidence: 'low',
+          source: 'exercise_default',
+        };
+      }
+      return null;
+    }
+
+    case 'bodyweight_reps':
+    case 'reps_only': {
+      if (lastSets && lastSets.length > 0) {
+        const avgReps =
+          lastSets.reduce((sum, s) => sum + (s.reps ?? 0), 0) / lastSets.length;
+        const target = parseTargetReps(defaults?.reps ?? '8-12');
+
+        if (avgReps >= target.max) {
+          // Exceeded target — suggest +1-2 reps
+          const suggestedReps = Math.round(avgReps) + 1;
+          return {
+            suggestedReps,
+            suggestedWeight: trackingMode === 'bodyweight_reps' ? 0 : undefined,
+            explanation: `Avg ${Math.round(avgReps)} reps last time (target: ${target.max}). Push for ${suggestedReps} today.`,
+            confidence: 'high',
+            source: 'history',
+          };
+        }
+        // Below target — keep aiming for target max
+        return {
+          suggestedReps: target.max,
+          suggestedWeight: trackingMode === 'bodyweight_reps' ? 0 : undefined,
+          explanation: `Avg ${Math.round(avgReps)} reps last time. Aim for ${target.max} reps.`,
+          confidence: 'medium',
+          source: 'history',
+        };
+      }
+      // No history — use defaults
+      const target = parseTargetReps(defaults?.reps ?? '8-12');
+      return {
+        suggestedReps: target.min,
+        suggestedWeight: trackingMode === 'bodyweight_reps' ? 0 : undefined,
+        explanation: `Start with ${target.min} reps and build up.`,
+        confidence: 'low',
+        source: 'exercise_default',
+      };
+    }
+
+    case 'duration_distance': {
+      if (lastSets && lastSets.length > 0) {
+        const lastSet = lastSets[0];
+        const lastDist = lastSet.distance;
+        const lastDuration = lastSet.durationSeconds;
+        const unit = lastSet.distanceUnit ?? defaults?.distanceUnit ?? 'miles';
+        const targetDist = defaults?.distanceValue ?? lastDist;
+
+        if (lastDist != null && targetDist != null && lastDist >= targetDist) {
+          // Hit distance target — suggest +5%
+          const suggestedDist = Math.round(lastDist * 1.05 * 100) / 100;
+          return {
+            suggestedDistance: suggestedDist,
+            suggestedDistanceUnit: unit,
+            suggestedDurationSeconds: lastDuration ?? defaults?.durationSeconds,
+            explanation: `You covered ${lastDist} ${unit} last time. Try ${suggestedDist} ${unit} today.`,
+            confidence: 'high',
+            source: 'history',
+          };
+        }
+        // Didn't hit target or no target — keep same
+        return {
+          suggestedDistance: targetDist ?? lastDist,
+          suggestedDistanceUnit: unit,
+          suggestedDurationSeconds: lastDuration ?? defaults?.durationSeconds,
+          explanation: lastDist != null
+            ? `You covered ${lastDist} ${unit} last time. Aim for ${targetDist} ${unit}.`
+            : 'Keep at the same distance and push for consistency.',
+          confidence: 'medium',
+          source: 'history',
+        };
+      }
+      // No history — use defaults
+      if (defaults?.distanceValue) {
+        return {
+          suggestedDistance: defaults.distanceValue,
+          suggestedDistanceUnit: defaults.distanceUnit ?? 'miles',
+          suggestedDurationSeconds: defaults.durationSeconds,
+          explanation: `Start with ${defaults.distanceValue} ${defaults.distanceUnit ?? 'miles'}.`,
+          confidence: 'low',
+          source: 'exercise_default',
+        };
+      }
+      return null;
+    }
+
+    case 'duration_level': {
+      if (lastSets && lastSets.length > 0) {
+        const lastSet = lastSets[0];
+        const lastLevel = lastSet.level;
+        const lastDuration = lastSet.durationSeconds;
+
+        if (lastLevel != null) {
+          // Completed — suggest +1 level
+          const suggestedLevel = lastLevel + 1;
+          return {
+            suggestedLevel,
+            suggestedDurationSeconds: lastDuration ?? defaults?.durationSeconds,
+            explanation: `You completed level ${lastLevel} last time. Try level ${suggestedLevel} today.`,
+            confidence: 'high',
+            source: 'history',
+          };
+        }
+        if (lastDuration != null) {
+          return {
+            suggestedDurationSeconds: lastDuration,
+            suggestedLevel: defaults?.secondaryDefaults?.level,
+            explanation: `Keep the same settings and build consistency.`,
+            confidence: 'medium',
+            source: 'history',
+          };
+        }
+      }
+      // No history — use defaults
+      return {
+        suggestedDurationSeconds: defaults?.durationSeconds,
+        suggestedLevel: defaults?.secondaryDefaults?.level,
+        explanation: defaults?.durationSeconds
+          ? `Start with ${defaults.durationSeconds}s at level ${defaults.secondaryDefaults?.level ?? 1}.`
+          : 'Start at a comfortable level.',
+        confidence: 'low',
+        source: 'exercise_default',
+      };
+    }
+
+    case 'distance_weight': {
+      if (lastSets && lastSets.length > 0) {
+        const lastSet = lastSets[0];
+        const lastDist = lastSet.distance;
+        const lastWeight = lastSet.weight;
+        const unit = lastSet.distanceUnit ?? defaults?.distanceUnit ?? 'meters';
+        const weightIncrement = isMetric ? 2.5 : 5;
+        const distIncrement = 5; // 5 meters
+
+        if (lastDist != null && lastWeight != null) {
+          const targetDist = defaults?.distanceValue ?? lastDist;
+          if (lastDist >= targetDist) {
+            // Hit distance — suggest +weight or +distance
+            const suggestedWeight = roundToNearest(lastWeight + weightIncrement, weightIncrement);
+            return {
+              suggestedWeight,
+              suggestedDistance: lastDist,
+              suggestedDistanceUnit: unit,
+              explanation: `You carried ${lastWeight}${isMetric ? 'kg' : 'lbs'} for ${lastDist}${unit} last time. Try ${suggestedWeight}${isMetric ? 'kg' : 'lbs'} today.`,
+              confidence: 'high',
+              source: 'history',
+            };
+          }
+          // Didn't hit distance — suggest more distance at same weight
+          const suggestedDist = lastDist + distIncrement;
+          return {
+            suggestedWeight: lastWeight,
+            suggestedDistance: suggestedDist,
+            suggestedDistanceUnit: unit,
+            explanation: `You carried ${lastWeight}${isMetric ? 'kg' : 'lbs'} for ${lastDist}${unit}. Aim for ${suggestedDist}${unit} today.`,
+            confidence: 'medium',
+            source: 'history',
+          };
+        }
+      }
+      // No history — use defaults
+      if (defaults?.distanceValue) {
+        return {
+          suggestedDistance: defaults.distanceValue,
+          suggestedDistanceUnit: defaults.distanceUnit ?? 'meters',
+          explanation: `Start with ${defaults.distanceValue} ${defaults.distanceUnit ?? 'meters'}.`,
+          confidence: 'low',
+          source: 'exercise_default',
+        };
+      }
+      return null;
+    }
+
+    default:
+      return null;
+  }
 }

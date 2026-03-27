@@ -57,7 +57,7 @@ export function ExerciseInfoSheet({ visible, exercise, onClose }: ExerciseInfoSh
           topReps: topSet?.reps,
         };
       })
-      .filter(Boolean);
+      .filter((s): s is NonNullable<typeof s> => s != null);
   }, [exercise?.id, history]);
 
   const handleWatchVideo = () => {

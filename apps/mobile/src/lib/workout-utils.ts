@@ -175,6 +175,15 @@ export function activeToCompleted(
             rpe: set.rpe,
             isPR: set.isPR,
             completedAt: set.completedAt ?? now,
+            // Secondary metrics passthrough
+            distance: set.distance,
+            distanceUnit: set.distanceUnit,
+            incline: set.incline,
+            speed: set.speed,
+            speedUnit: set.speedUnit,
+            level: set.level,
+            calories: set.calories,
+            resistance: set.resistance,
           };
         }),
     }));

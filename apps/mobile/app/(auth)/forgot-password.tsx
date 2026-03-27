@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { friendlyAuthError } from '../../src/lib/auth-utils';
 
 const schema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -35,7 +36,7 @@ export default function ForgotPasswordScreen() {
     setFormError('');
     const { error } = await resetPassword(data.email);
     if (error) {
-      setFormError(error);
+      setFormError(friendlyAuthError(error));
     } else {
       setSent(true);
     }

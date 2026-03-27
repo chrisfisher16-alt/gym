@@ -177,7 +177,7 @@ export default function TodayTab() {
         await AsyncStorage.removeItem(`@briefing/${today}`);
       }
       setBriefing(await generateDailyBriefing());
-    } catch { setBriefing(null); }
+    } catch (err) { console.warn('[Home] Daily briefing generation failed:', err); setBriefing(null); }
     finally { setBriefingLoading(false); }
   }, []);
 
@@ -304,7 +304,7 @@ export default function TodayTab() {
       if (c) return;
       setWeekHidden(false); setWeekLoad(true);
       try { const s = await generateWeeklySummary(); if (!c) setWeekly(s); }
-      catch {} finally { if (!c) setWeekLoad(false); }
+      catch (err) { console.warn('[Home] Weekly summary generation failed:', err); } finally { if (!c) setWeekLoad(false); }
     })();
     return () => { c = true; };
   }, [isWeekDay, weekStart]);

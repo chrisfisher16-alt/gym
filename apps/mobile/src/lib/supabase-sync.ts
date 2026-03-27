@@ -56,7 +56,8 @@ async function getQueue(): Promise<SyncQueueItem[]> {
   try {
     const stored = await AsyncStorage.getItem(SYNC_QUEUE_KEY);
     return stored ? JSON.parse(stored) : [];
-  } catch {
+  } catch (err) {
+    console.error('[SyncQueue] Failed to read sync queue — pending items may be invisible:', err);
     return [];
   }
 }
@@ -115,7 +116,8 @@ export async function getSyncStatus(): Promise<SyncStatus> {
       isSyncing,
       lastError: status.lastError ?? null,
     };
-  } catch {
+  } catch (err) {
+    console.error('[SyncQueue] Failed to read sync status:', err);
     return { lastSyncAt: null, pendingCount: 0, isSyncing: false, lastError: null };
   }
 }
@@ -212,7 +214,9 @@ export async function processQueue(): Promise<{ processed: number; failed: numbe
           }
           deadLetter.push(item);
           await AsyncStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(deadLetter));
-        } catch {}
+        } catch (err) {
+          console.error('[SyncQueue] Failed to write dead letter queue — sync item dropped without record:', err);
+        }
       }
     }
   }
@@ -233,7 +237,8 @@ export async function getDeadLetterQueue(): Promise<SyncQueueItem[]> {
   try {
     const raw = await AsyncStorage.getItem(DEAD_LETTER_KEY);
     return raw ? JSON.parse(raw) : [];
-  } catch {
+  } catch (err) {
+    console.error('[SyncQueue] Failed to read dead letter queue:', err);
     return [];
   }
 }

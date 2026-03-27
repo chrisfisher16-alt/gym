@@ -139,6 +139,8 @@ export const useProfileStore = create<ProfileState>()(
             p.fitnessEquipment = Array.isArray(p.availableEquipment) ? p.availableEquipment : [];
           }
           if (!Array.isArray(p.preferredWorkoutDays)) p.preferredWorkoutDays = [];
+          // Ensure unitPreference has a default for profiles created before this field existed
+          if (!p.unitPreference) p.unitPreference = 'imperial';
         }
         return state as { profile: UserProfile };
       },

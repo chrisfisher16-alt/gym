@@ -6,6 +6,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { enqueue } from '../lib/supabase-sync';
 import type { Profile, CoachPreferences } from '@health-coach/shared';
 
 interface AuthState {
@@ -74,8 +75,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isOnboarded: !!profile?.onboarding_completed,
           });
         }
-      } catch {
-        // Session check failed, user not authenticated
+      } catch (err) {
+        // Expected when user is not authenticated; warn on unexpected errors
+        console.warn('[Auth] Session check failed:', err);
       } finally {
         set({ isLoading: false });
       }
@@ -198,14 +200,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // profile-store not available — skip cache write
     }
 
-    // 3. Supabase upsert (fire-and-forget)
+    // 3. Supabase upsert — route through sync queue for retry/offline support
     if (isSupabaseConfigured && user) {
-      supabase
-        .from('profiles')
-        .upsert({ ...updated, id: user.id })
-        .then(({ error: upsertErr }) => {
-          if (upsertErr) console.warn('Profile upsert failed:', upsertErr.message);
-        });
+      void enqueue('profile_update', 'profiles', 'upsert', { ...updated, id: user.id });
     }
   },
 
@@ -322,7 +319,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             try {
               const { useProfileStore } = require('./profile-store');
               useProfileStore.getState().updateProfile({ displayName: fullName });
-            } catch {}
+            } catch (err) {
+              console.warn('[Auth] Failed to set display name in profile store:', err);
+            }
             supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(({ error }) => { if (error) console.error('[AuthStore] Profile upsert failed:', error); });
           }
 
@@ -436,7 +435,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     ];
     try {
       await Promise.all(keysToRemove.map((k) => AsyncStorage.removeItem(k)));
-    } catch {}
+    } catch (err) {
+      console.warn('[Auth] AsyncStorage cleanup on sign-out failed — stale data may persist:', err);
+    }
 
     // Clear auth state last
     set({

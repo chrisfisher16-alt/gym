@@ -12,6 +12,7 @@ import { useTheme } from '../../theme';
 import { useProfileStore } from '../../stores/profile-store';
 import { ExerciseImage } from './ExerciseImage';
 import { SwipeableRow, type SwipeAction } from '../ui/SwipeableRow';
+import { getTrackingModeIcon } from '../../lib/tracking-mode-utils';
 import type { ActiveExercise, ActiveSet } from '../../types/workout';
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -49,24 +50,70 @@ export interface CommandCenterCardProps {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+function formatSetDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${mins}m`;
+}
+
+function formatSetDistance(value: number, distanceUnit?: 'miles' | 'km' | 'meters'): string {
+  if (distanceUnit === 'meters') return `${value}m`;
+  return `${value} ${distanceUnit === 'km' ? 'km' : 'mi'}`;
+}
+
 function buildSetSummary(
   sets: ActiveSet[],
   isBodyweight: boolean,
   unit: string,
+  trackingMode?: string,
 ): string {
   const workingSets = sets.filter((s) => s.setType !== 'warmup');
   const count = workingSets.length;
   if (count === 0) return 'No sets';
 
-  // Check if all completed sets share the same weight×reps
+  const setLabel = count === 1 ? '1 set' : `${count} sets`;
   const completed = workingSets.filter((s) => s.isCompleted);
+
+  // Duration-based sets
+  if (trackingMode === 'duration' || trackingMode === 'duration_distance' || trackingMode === 'duration_level') {
+    if (completed.length > 0) {
+      const durations = new Set(completed.map((s) => s.durationSeconds));
+      if (durations.size === 1 && completed[0].durationSeconds != null) {
+        return `${setLabel} · ${formatSetDuration(completed[0].durationSeconds)}`;
+      }
+    }
+    return setLabel;
+  }
+
+  // Distance-based sets
+  if (trackingMode === 'distance_weight') {
+    if (completed.length > 0) {
+      const distances = new Set(completed.map((s) => s.distance));
+      if (distances.size === 1 && completed[0].distance != null) {
+        return `${setLabel} · ${formatSetDistance(completed[0].distance, completed[0].distanceUnit)}`;
+      }
+    }
+    return setLabel;
+  }
+
+  // Reps-only sets
+  if (trackingMode === 'reps_only') {
+    if (completed.length > 0) {
+      const avgReps = Math.round(completed.reduce((sum, s) => sum + (s.reps ?? 0), 0) / completed.length);
+      return avgReps ? `${setLabel} · ${avgReps} reps` : setLabel;
+    }
+    return setLabel;
+  }
+
+  // Check if all completed sets share the same weight×reps
   if (completed.length > 0 && !isBodyweight) {
     const weights = new Set(completed.map((s) => s.weight));
     const reps = new Set(completed.map((s) => s.reps));
     if (weights.size === 1 && reps.size === 1) {
       const w = completed[0].weight ?? 0;
       const r = completed[0].reps ?? 0;
-      return `${count} sets · ${r}×${w} ${unit}`;
+      return `${setLabel} · ${r}×${w} ${unit}`;
     }
   }
 
@@ -75,10 +122,10 @@ function buildSetSummary(
     const avgReps = completed.length > 0
       ? Math.round(completed.reduce((sum, s) => sum + (s.reps ?? 0), 0) / completed.length)
       : null;
-    return avgReps ? `${count} sets · ${avgReps} reps` : `${count} sets`;
+    return avgReps ? `${setLabel} · ${avgReps} reps` : setLabel;
   }
 
-  return `${count} sets`;
+  return setLabel;
 }
 
 function formatRestTime(seconds: number): string {
@@ -128,6 +175,9 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
   const isBodyweight = !!exercise.isBodyweight;
+  const trackingMode = exercise.trackingMode
+    ?? (exercise.isTimeBased ? 'duration' : exercise.isBodyweight ? 'bodyweight_reps' : 'weight_reps');
+  const trackingIcon = getTrackingModeIcon(trackingMode);
   const workingSets = useMemo(
     () => exercise.sets.filter((s) => s.setType !== 'warmup'),
     [exercise.sets],
@@ -140,8 +190,8 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   const restSeconds = exercise.restSeconds ?? 90;
 
   const summary = useMemo(
-    () => buildSetSummary(exercise.sets, isBodyweight, unit),
-    [exercise.sets, isBodyweight, unit],
+    () => buildSetSummary(exercise.sets, isBodyweight, unit, trackingMode),
+    [exercise.sets, isBodyweight, unit, trackingMode],
   );
 
   // ── Expand/collapse animation ──────────────────────────────────
@@ -240,8 +290,16 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
 
         {/* Center: info */}
         <View style={[styles.centerContent, { marginLeft: spacing.md }]}>
-          {/* Exercise name + current badge */}
+          {/* Exercise name + tracking mode icon + current badge */}
           <View style={styles.nameRow}>
+            {trackingMode !== 'weight_reps' && (
+              <Ionicons
+                name={trackingIcon as any}
+                size={14}
+                color={colors.textTertiary}
+                style={{ marginRight: 4 }}
+              />
+            )}
             <Text
               style={[typography.label, { color: colors.text, flex: 1 }]}
               numberOfLines={1}
@@ -278,7 +336,11 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: set.isCompleted ? goldAccent : colors.border,
+                    backgroundColor: set.isPR
+                      ? colors.warning
+                      : set.isCompleted
+                        ? goldAccent
+                        : colors.border,
                   },
                 ]}
               />

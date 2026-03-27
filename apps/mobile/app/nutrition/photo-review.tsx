@@ -36,6 +36,7 @@ export default function PhotoReviewScreen() {
   const [items, setItems] = useState<MealItemEntry[]>([]);
   const [mealName, setMealName] = useState('Photo Meal');
   const [isAnalyzing, setIsAnalyzing] = useState(true);
+  const [isPreview, setIsPreview] = useState(false);
 
   useEffect(() => {
     if (!imageUri) {
@@ -44,7 +45,10 @@ export default function PhotoReviewScreen() {
     }
     const decodedUri = decodeURIComponent(imageUri);
     analyzePhotoMeal(decodedUri)
-      .then((result) => setItems(result))
+      .then((result) => {
+        setItems(result.items);
+        setIsPreview(result.isPreview);
+      })
       .catch((err) => {
         console.error('Photo analysis error:', err);
         crossPlatformAlert(
@@ -162,12 +166,22 @@ export default function PhotoReviewScreen() {
               </Text>
             </View>
           ) : (
-            <View style={[styles.warning, { backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.base }]}>
-              <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
-              <Text style={[typography.bodySmall, { color: colors.warning, marginLeft: spacing.sm, flex: 1 }]}>
-                Estimated values — please review and adjust before saving
-              </Text>
-            </View>
+            <>
+              {isPreview && (
+                <View style={[styles.warning, { backgroundColor: colors.infoLight ?? colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm }]}>
+                  <Ionicons name="eye-outline" size={18} color={colors.info ?? colors.primary} />
+                  <Text style={[typography.bodySmall, { color: colors.info ?? colors.primary, marginLeft: spacing.sm, flex: 1 }]}>
+                    Preview Mode — items are estimates, please review carefully
+                  </Text>
+                </View>
+              )}
+              <View style={[styles.warning, { backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.base }]}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
+                <Text style={[typography.bodySmall, { color: colors.warning, marginLeft: spacing.sm, flex: 1 }]}>
+                  Estimated values — please review and adjust before saving
+                </Text>
+              </View>
+            </>
           )}
 
           {/* Meal Name */}

@@ -152,7 +152,7 @@ export interface PhotoAnalyzeRequest {
 
 export interface PhotoAnalyzeResponse {
   items: ParsedMealItem[];
-  analysis_method: 'ai_vision' | 'placeholder';
+  analysis_method: 'ai_vision' | 'placeholder' | 'not_implemented';
   description: string;
 }
 

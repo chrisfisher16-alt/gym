@@ -4,6 +4,7 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
+import { validateOutput } from '../_shared/safety.ts';
 import type { CacheableSystemBlock } from '../_shared/types.ts';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -252,6 +253,15 @@ Deno.serve(async (req: Request) => {
 
     if (!data.name || !data.ingredients || !Array.isArray(data.ingredients) || data.ingredients.length === 0) {
       throw new Error('AI response missing required recipe fields');
+    }
+
+    // Safety check: validate AI-generated instructions for medical/dangerous content
+    const instructionText = (data.instructions ?? []).join(' ');
+    const safetyCheck = validateOutput(instructionText);
+    if (!safetyCheck.safe) {
+      console.warn(`[ai-recipe-generate] Safety flagged: ${safetyCheck.reason}`);
+      // Remove unsafe instructions but don't block the entire recipe
+      data.instructions = data.instructions.filter((inst: string) => validateOutput(inst).safe);
     }
 
     const difficulty = normalizeDifficulty(data.difficulty);

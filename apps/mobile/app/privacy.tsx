@@ -1,8 +1,6 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, ScrollView } from 'react-native';
 import { useTheme } from '../src/theme';
-import { ScreenContainer, Card } from '../src/components/ui';
+import { ScreenContainer } from '../src/components/ui';
 
 export default function PrivacyPolicyScreen() {
   const { colors, spacing, typography, radius } = useTheme();
@@ -26,7 +24,7 @@ export default function PrivacyPolicyScreen() {
     {
       title: '4. Third Parties',
       content:
-        'We use the following third-party services:\n\n• Supabase — Database and authentication\n• RevenueCat — Subscription management\n• OpenAI / Anthropic — AI coaching features\n• Apple Health / Health Connect — Health data integration\n\nEach third-party service has its own privacy policy. We only share the minimum data necessary for each service to function.',
+        'We use the following third-party services:\n\n• Supabase — Database and authentication\n• RevenueCat — Subscription management\n• OpenAI / Anthropic — AI coaching features\n• Apple Health / Health Connect — Health data integration\n• Sentry — Error tracking and crash reporting\n\nSentry receives anonymous crash reports and performance data to help us identify and fix bugs. No personal health data or workout details are sent to Sentry.\n\nEach third-party service has its own privacy policy. We only share the minimum data necessary for each service to function.',
     },
     {
       title: '5. Data Retention',
@@ -34,7 +32,17 @@ export default function PrivacyPolicyScreen() {
         'Your account data is retained for as long as your account is active. Workout and nutrition logs are retained indefinitely to support your progress tracking.\n\nIf you delete your account, we will remove your personal data within 30 days. Some anonymized, aggregated data may be retained for analytics purposes.\n\nAI conversation history is retained for 12 months to maintain coaching context.',
     },
     {
-      title: '6. Your Rights',
+      title: '6. Data Security',
+      content:
+        'We implement industry-standard security measures to protect your personal information, including:\n\n• Encryption in transit (TLS/SSL) for all network communications\n• Encryption at rest for stored data\n• Row-level security policies that ensure users can only access their own data\n• Secure authentication with support for social sign-in providers\n• Regular security reviews of our infrastructure\n\nWhile we strive to protect your data, no method of electronic storage or transmission is 100% secure. We cannot guarantee absolute security.',
+    },
+    {
+      title: '7. Children\'s Privacy',
+      content:
+        'Health Coach is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If you are a parent or guardian and believe your child under 13 has provided us with personal information, please contact us at support@healthcoach.app and we will promptly delete that information.\n\nUsers between the ages of 13 and 17 may use Health Coach with the consent of a parent or guardian.',
+    },
+    {
+      title: '8. Your Rights',
       content:
         'You have the right to:\n\n• Access your personal data\n• Export your data in a portable format\n• Request correction of inaccurate data\n• Request deletion of your account and data\n• Opt out of non-essential data collection\n• Revoke health data permissions at any time\n\nTo exercise any of these rights, contact us at support@healthcoach.app.',
     },
@@ -50,27 +58,6 @@ export default function PrivacyPolicyScreen() {
           <Text style={[typography.bodySmall, { color: colors.textTertiary, marginBottom: spacing.lg }]}>
             Last updated: March 2026
           </Text>
-
-          <Card
-            style={{
-              marginBottom: spacing.base,
-              backgroundColor: colors.warningLight,
-              borderColor: colors.warning,
-              borderWidth: 1,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="warning-outline" size={20} color={colors.warning} />
-              <Text
-                style={[
-                  typography.label,
-                  { color: colors.text, marginLeft: spacing.sm, flex: 1 },
-                ]}
-              >
-                Placeholder — Replace with actual legal text reviewed by a lawyer before launch.
-              </Text>
-            </View>
-          </Card>
 
           <Text
             style={[

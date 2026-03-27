@@ -70,7 +70,7 @@ function batchAwardXP(amount: number, reason?: string) {
   if (xpFlushTimeout) clearTimeout(xpFlushTimeout);
   xpFlushTimeout = setTimeout(() => {
     if (pendingXP > 0) {
-      useAchievementsStore.getState().awardXP(pendingXP, reason);
+      useAchievementsStore.getState().awardXP(pendingXP, reason ?? 'workout');
       pendingXP = 0;
     }
     xpFlushTimeout = null;

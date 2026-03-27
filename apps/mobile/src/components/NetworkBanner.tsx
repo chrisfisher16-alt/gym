@@ -60,7 +60,7 @@ export function NetworkBanner() {
 
   // Track network state
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
+    const unsubscribe = NetInfo.addEventListener((state: { isConnected: boolean | null }) => {
       setIsOnline(!!state.isConnected);
     });
     return () => unsubscribe();

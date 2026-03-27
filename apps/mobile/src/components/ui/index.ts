@@ -53,3 +53,4 @@ export { SpaceEditor } from './SpaceEditor';
 export type { SpaceEditorProps } from './SpaceEditor';
 export { SyncStatusBadge } from './SyncStatusBadge';
 export { QuickInputPill } from './QuickInputPill';
+export { Pill } from './Pill';

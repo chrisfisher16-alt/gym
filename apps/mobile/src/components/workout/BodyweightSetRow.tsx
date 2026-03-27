@@ -10,11 +10,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
+import { useProfileStore } from '../../stores/profile-store';
 import { successNotification } from '../../lib/haptics';
 import { completionFlash, checkPop, goldPulse } from '../../lib/animations';
-import type { ActiveSet } from '../../types/workout';
+import type { ActiveSet, WeightContext } from '../../types/workout';
 import { crossPlatformAlert } from '../../lib/cross-platform-alert';
 import { useVelocityStepper, REP_STAGES } from '../../hooks/useVelocityStepper';
+import { AddedWeightToggle } from './AddedWeightToggle';
 
 export interface BodyweightSetRowProps {
   set: ActiveSet;
@@ -23,6 +25,7 @@ export interface BodyweightSetRowProps {
   onComplete: (setId: string) => void;
   onRemove: (setId: string) => void;
   onRPE: (setId: string, rpe: number) => void;
+  weightContext?: WeightContext;
 }
 
 export const BodyweightSetRow = React.memo(function BodyweightSetRow({
@@ -32,9 +35,14 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
   onComplete,
   onRemove,
   onRPE,
+  weightContext,
 }: BodyweightSetRowProps) {
   const { colors, spacing, radius, typography } = useTheme();
+  const unitPreference = useProfileStore((s) => s.profile.unitPreference);
+  const unitLabel = unitPreference === 'metric' ? 'kg' : 'lbs' as const;
   const [localReps, setLocalReps] = useState(set.reps?.toString() ?? '');
+  const [addedWeight, setAddedWeight] = useState(set.weight && set.weight > 0 ? set.weight : 0);
+  const [isWeightExpanded, setIsWeightExpanded] = useState(set.weight != null && set.weight > 0);
   const flashAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const prBounce = useRef(new Animated.Value(1)).current;
@@ -68,7 +76,7 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
     min: 0,
     onChange: (newVal) => {
       setLocalReps(newVal.toString());
-      onLog(set.id, 0, newVal);
+      onLog(set.id, addedWeight, newVal);
     },
     accelerationStages: REP_STAGES,
   });
@@ -76,13 +84,19 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
   const handleRepsChange = (text: string) => {
     setLocalReps(text);
     const r = parseInt(text, 10);
-    if (!isNaN(r)) onLog(set.id, 0, r);
+    if (!isNaN(r)) onLog(set.id, addedWeight, r);
+  };
+
+  const handleAddedWeightChange = (w: number) => {
+    setAddedWeight(w);
+    const r = parseInt(localReps, 10);
+    if (!isNaN(r)) onLog(set.id, w, r);
   };
 
   const handleComplete = () => {
     const r = parseInt(localReps, 10);
     if (isNaN(r) || r <= 0) return;
-    onLog(set.id, 0, r);
+    onLog(set.id, addedWeight, r);
     onComplete(set.id);
   };
 
@@ -94,7 +108,7 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
   return (
     <Animated.View
       style={[
-        styles.setRow,
+        styles.setRowWrapper,
         {
           backgroundColor: set.isCompleted ? (set.isPR ? colors.warningLight : colors.successLight) : 'transparent',
           borderRadius: radius.md,
@@ -117,6 +131,7 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
         ]}
       />
 
+      <View style={styles.setRow}>
       <View style={[styles.setNumber, { width: 28 }]}>
         <Text style={[typography.label, { color: setTypeLabel ? setTypeColor : colors.textSecondary, fontWeight: '600' }]}>
           {setTypeLabel || set.setNumber}
@@ -223,14 +238,35 @@ export const BodyweightSetRow = React.memo(function BodyweightSetRow({
           />
         </Animated.View>
       )}
+      </View>
+
+      {/* Added weight toggle for bodyweight_added exercises */}
+      {weightContext === 'bodyweight_added' && !set.isCompleted && (
+        <View style={styles.addedWeightRow}>
+          <AddedWeightToggle
+            weight={addedWeight}
+            onWeightChange={handleAddedWeightChange}
+            unit={unitLabel}
+            expanded={isWeightExpanded}
+            onToggle={() => setIsWeightExpanded((prev) => !prev)}
+          />
+        </View>
+      )}
     </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
+  setRowWrapper: {
+    flexDirection: 'column',
+  },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  addedWeightRow: {
+    marginTop: 4,
+    paddingLeft: 28,
   },
   setNumber: {
     alignItems: 'center',

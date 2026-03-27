@@ -89,7 +89,12 @@ export async function analyzeMealText(description: string): Promise<MealItemEntr
 
 // ── Photo Analysis ──────────────────────────────────────────────────
 
-export async function analyzePhotoMeal(imageUri: string): Promise<MealItemEntry[]> {
+export interface PhotoAnalysisResult {
+  items: MealItemEntry[];
+  isPreview: boolean;
+}
+
+export async function analyzePhotoMeal(imageUri: string): Promise<PhotoAnalysisResult> {
   try {
     const base64data = await readAsStringAsync(imageUri, {
       encoding: 'base64',
@@ -98,7 +103,7 @@ export async function analyzePhotoMeal(imageUri: string): Promise<MealItemEntry[
     const config = await getAIConfig();
 
     if (config.provider === 'demo') {
-      return generateMockPhotoItems();
+      return { items: generateMockPhotoItems(), isPreview: true };
     }
 
     const imageContent: AIContentBlock[] = [
@@ -122,7 +127,7 @@ export async function analyzePhotoMeal(imageUri: string): Promise<MealItemEntry[
     ];
 
     const response = await callAI(messages, config);
-    return parseAIResponse(response.content);
+    return { items: parseAIResponse(response.content), isPreview: false };
   } catch (error) {
     console.error('AI photo analysis failed:', error);
     throw new Error('Failed to analyze photo. Please try again or enter items manually.');

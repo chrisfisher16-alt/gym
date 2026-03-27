@@ -2,6 +2,15 @@
 
 export type ProductMode = 'workout_coach' | 'nutrition_coach' | 'full_health_coach';
 export type SetType = 'warmup' | 'working' | 'drop' | 'failure';
+
+export type TrackingMode =
+  | 'weight_reps' | 'bodyweight_reps' | 'duration'
+  | 'duration_distance' | 'duration_level' | 'distance_weight' | 'reps_only';
+
+export type WeightContext =
+  | 'barbell' | 'dumbbell_single' | 'dumbbell_pair' | 'dumbbell_each'
+  | 'cable_stack' | 'machine_stack' | 'machine_plates' | 'kettlebell'
+  | 'band' | 'bodyweight_added' | 'sled' | 'vest' | 'body_only' | 'custom';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type MealSource = 'manual' | 'text_parse' | 'photo' | 'barcode' | 'quick_add' | 'saved_meal';
 export type CoachContext = 'general' | 'workout' | 'nutrition' | 'progress' | 'onboarding';
@@ -198,6 +207,14 @@ export interface SetLog {
   reps?: number;
   duration_seconds?: number;
   rpe?: number; // 1-10
+  distance?: number;
+  distance_unit?: 'miles' | 'km' | 'meters';
+  incline?: number;
+  speed?: number;
+  speed_unit?: 'mph' | 'kph';
+  level?: number;
+  calories?: number;
+  resistance?: number;
   is_pr: boolean;
   notes?: string;
   logged_at: string;

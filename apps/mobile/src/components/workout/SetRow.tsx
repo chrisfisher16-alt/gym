@@ -40,6 +40,7 @@ export interface SetRowProps {
   onRPE: (setId: string, rpe: number) => void;
   onWeightCascade?: (setIndex: number, weight: number, reps: number) => void;
   equipmentType?: string;
+  weightLabel?: string;  // e.g. "Bar + Plates (lbs)", "Stack (kg)"
 }
 
 export const SetRow = React.memo(function SetRow({
@@ -53,6 +54,7 @@ export const SetRow = React.memo(function SetRow({
   onRPE,
   onWeightCascade,
   equipmentType,
+  weightLabel,
 }: SetRowProps) {
   const { colors, spacing, radius, typography } = useTheme();
   const unitPreference = useProfileStore((s) => s.profile.unitPreference);
@@ -318,6 +320,9 @@ export const SetRow = React.memo(function SetRow({
 
       {/* Weight stepper */}
       <View style={styles.inputGroup}>
+        {weightLabel ? (
+          <Text style={[typography.caption, { color: colors.textTertiary, fontSize: 9, position: 'absolute', top: -10, alignSelf: 'center', width: '100%', textAlign: 'center' }]}>{weightLabel}</Text>
+        ) : null}
         <TouchableOpacity
           onPressIn={() => weightVelocity.handlePressIn('down')}
           onPressOut={weightVelocity.handlePressOut}

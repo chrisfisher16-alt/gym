@@ -961,6 +961,7 @@ export default function ActiveWorkoutScreen() {
                           setDrilledExerciseIndex(g.index);
                         }}
                         onRemoveExercise={() => handleRemoveExercise(g.exercise)}
+                        onCreateSuperset={() => setSupersetSourceId(g.exercise.id)}
                       />
                     ))}
                   </SupersetGroup>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { crossPlatformAlert } from '../../../src/lib/cross-platform-alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -11,12 +11,15 @@ import { Card, Badge, Button } from '../../../src/components/ui';
 import { useEntitlement } from '../../../src/hooks/useEntitlement';
 import { usePaywall } from '../../../src/hooks/usePaywall';
 import { checkWorkoutLogLimit, incrementUsage } from '../../../src/lib/usage-limits';
+import { WorkoutSummaryModal } from '../../../src/components/workout/WorkoutSummaryModal';
+import { successNotification } from '../../../src/lib/haptics';
 import {
   DayType,
   DAY_TYPE_LABELS,
   DAY_TYPE_COLORS,
   DAY_TYPE_ICONS,
   CardioSuggestion,
+  CompletedSession,
   WorkoutDayLocal,
   ProgramExercise,
 } from '../../../src/types/workout';
@@ -26,7 +29,10 @@ export default function ProgramDetailScreen() {
   const router = useRouter();
   const { colors, spacing, radius, typography } = useTheme();
   const { programs, setActiveProgram, deleteProgram } = useWorkoutPrograms();
-  const { startWorkout, isActive } = useActiveWorkout();
+  const { startWorkout, isActive, completeWorkout, cancelWorkout } = useActiveWorkout();
+  const [completedSession, setCompletedSession] = useState<CompletedSession | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [pendingDayIndex, setPendingDayIndex] = useState<number | null>(null);
   const { canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
 
@@ -95,10 +101,45 @@ export default function ProgramDetailScreen() {
 
   const handleStartDay = (dayIndex: number) => {
     if (isActive) {
-      crossPlatformAlert('Workout in Progress', 'Please finish or cancel your current workout first.');
+      crossPlatformAlert('Workout in Progress', 'You have an active workout. What would you like to do?', [
+        { text: 'Go Back', style: 'cancel' },
+        {
+          text: 'Discard & Start New',
+          style: 'destructive',
+          onPress: () => {
+            cancelWorkout();
+            launchDay(dayIndex);
+          },
+        },
+        {
+          text: 'Finish & Start New',
+          onPress: async () => {
+            const result = await completeWorkout();
+            if (result) {
+              successNotification();
+              setCompletedSession(result);
+              setShowSummary(true);
+              setPendingDayIndex(dayIndex);
+            } else {
+              // No completed sets — discard instead
+              cancelWorkout();
+              launchDay(dayIndex);
+            }
+          },
+        },
+      ]);
       return;
     }
     launchDay(dayIndex);
+  };
+
+  const handleSummaryDone = () => {
+    setShowSummary(false);
+    setCompletedSession(null);
+    if (pendingDayIndex !== null) {
+      launchDay(pendingDayIndex);
+      setPendingDayIndex(null);
+    }
   };
 
   const handleDelete = () => {
@@ -402,6 +443,12 @@ export default function ProgramDetailScreen() {
         {/* Days */}
         {program.days.map((day, dayIndex) => renderDayCard(day, dayIndex))}
       </ScrollView>
+
+      <WorkoutSummaryModal
+        visible={showSummary}
+        session={completedSession}
+        onDone={handleSummaryDone}
+      />
     </SafeAreaView>
   );
 }

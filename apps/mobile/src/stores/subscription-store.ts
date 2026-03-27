@@ -89,7 +89,9 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
           return;
         }
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[Subscriptions] Failed to restore promo grant:', err);
+    }
 
     // Check Supabase entitlements table as source of truth
     try {
@@ -115,8 +117,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
           return;
         }
       }
-    } catch {
-      // Supabase query failed, continue to other sources
+    } catch (err) {
+      console.warn('[Subscriptions] Supabase entitlements query failed, continuing to other sources:', err);
     }
 
     try {
@@ -329,6 +331,29 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   checkEntitlements: async () => {
     try {
+      // Check Supabase entitlements first (covers promo grants and webhook-synced purchases)
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) {
+        const { data: entitlement } = await supabase
+          .from('entitlements')
+          .select('tier, is_trial, trial_ends_at')
+          .eq('user_id', userId)
+          .single();
+
+        if (entitlement && entitlement.tier !== 'free') {
+          const plan = mapPricingConfig(entitlement.tier as Exclude<EntitlementTier, 'free'>);
+          set({
+            tier: entitlement.tier as EntitlementTier,
+            isSubscribed: true,
+            isTrial: entitlement.is_trial ?? false,
+            trialEndsAt: entitlement.trial_ends_at ? new Date(entitlement.trial_ends_at) : null,
+            currentPlan: plan,
+          });
+          return;
+        }
+      }
+
+      // Fall through to RevenueCat for App Store / Play Store subscriptions
       const customerInfo = await getCustomerInfo();
       if (!customerInfo) return;
 

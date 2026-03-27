@@ -1,11 +1,11 @@
 // ── Deep Linking Configuration ────────────────────────────────────
-// URL scheme: formiq://
+// URL scheme: health-coach://
 // Universal links: https://formiq.app/share/*
 //
 // Supported deep links:
-//   formiq://workout/{sessionId}     -> /workout/session/{sessionId}
-//   formiq://achievement/{id}        -> /(tabs)/progress (with achievement highlight)
-//   formiq://share/workout/{id}      -> shared workout summary view
+//   health-coach://workout/{sessionId}     -> /workout/session/{sessionId}
+//   health-coach://achievement/{id}        -> /(tabs)/progress (with achievement highlight)
+//   health-coach://share/workout/{id}      -> shared workout summary view
 //
 // Expo Router handles most of this automatically via the file-based
 // routing convention. This file provides helpers for constructing
@@ -14,7 +14,7 @@
 import { Linking, Platform, Share } from 'react-native';
 import Constants from 'expo-constants';
 
-const SCHEME = 'formiq';
+const SCHEME = 'health-coach';
 const WEB_HOST = 'formiq.app';
 
 /** Build a deep link URL for a workout session */

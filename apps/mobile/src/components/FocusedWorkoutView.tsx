@@ -14,6 +14,9 @@ import { Badge } from './ui';
 import { useWorkoutStore } from '../stores/workout-store';
 import { useProfileStore } from '../stores/profile-store';
 import { getSuggestedLoad } from '../lib/suggested-load';
+import { resolveTrackingMode, getFieldsForMode } from '../lib/tracking-mode-utils';
+import { getWeightLabel } from '../lib/weight-label';
+import type { TrackingMode } from '../types/workout';
 import type { ActiveWorkoutSession, ActiveExercise, ActiveSet, MuscleGroup, Equipment } from '../types/workout';
 import { Image } from 'expo-image';
 import { ExerciseIllustration } from './ExerciseIllustration';
@@ -66,6 +69,42 @@ function isSupersetRoundComplete(members: ActiveExercise[]): boolean {
   return completedCounts.every((c) => c > min) || completedCounts.every((c) => c === completedCounts[0]);
 }
 
+/** Format a completed set for chip display based on tracking mode. */
+function formatSetChip(s: ActiveSet, mode: TrackingMode): string {
+  switch (mode) {
+    case 'weight_reps':
+      return `${s.weight ?? 0} × ${s.reps ?? 0}`;
+    case 'bodyweight_reps':
+      return (s.weight && s.weight > 0)
+        ? `${s.reps ?? 0} reps +${s.weight}`
+        : `${s.reps ?? 0} reps`;
+    case 'reps_only':
+      return `${s.reps ?? 0} reps`;
+    case 'duration':
+      return `${s.durationSeconds ?? 0}s`;
+    case 'duration_distance': {
+      const dur = s.durationSeconds ?? 0;
+      const mins = Math.floor(dur / 60);
+      const secs = dur % 60;
+      const time = mins > 0 ? `${mins}:${String(secs).padStart(2, '0')}` : `${dur}s`;
+      return s.distance ? `${time} · ${s.distance}${s.distanceUnit === 'km' ? 'km' : s.distanceUnit === 'meters' ? 'm' : 'mi'}` : time;
+    }
+    case 'duration_level': {
+      const dur2 = s.durationSeconds ?? 0;
+      const mins2 = Math.floor(dur2 / 60);
+      const secs2 = dur2 % 60;
+      const time2 = mins2 > 0 ? `${mins2}:${String(secs2).padStart(2, '0')}` : `${dur2}s`;
+      return s.level ? `${time2} · Lv${s.level}` : time2;
+    }
+    case 'distance_weight':
+      return s.distance
+        ? `${s.distance}${s.distanceUnit === 'km' ? 'km' : s.distanceUnit === 'meters' ? 'm' : 'mi'} · ${s.weight ?? 0}`
+        : `${s.weight ?? 0}`;
+    default:
+      return `${s.weight ?? 0} × ${s.reps ?? 0}`;
+  }
+}
+
 // ── Component ────────────────────────────────────────────────────────
 
 export function FocusedWorkoutView({
@@ -102,9 +141,13 @@ export function FocusedWorkoutView({
   const isMetric = unitPref === 'metric';
   const unit = isMetric ? 'kg' : 'lbs';
 
-  // ── Exercise type detection ───────────────────────────────────────
-  const isTimeBased = exercise.isTimeBased ?? exerciseLib?.isTimeBased ?? false;
-  const isBodyweight = exercise.isBodyweight ?? exerciseLib?.isBodyweight ?? false;
+  // ── Exercise type detection (mode-based) ─────────────────────────
+  const trackingMode = resolveTrackingMode(exercise);
+  const fields = getFieldsForMode(trackingMode);
+  // Keep legacy flags for backward compat with other code that reads them
+  const isTimeBased = fields.hasDuration && !fields.hasReps;
+  const isBodyweight = !fields.hasWeight && fields.hasReps && !fields.hasDuration;
+  const weightLabel = getWeightLabel(exercise.weightContext ?? exerciseLib?.weightContext, unit);
 
   const suggestion = useMemo(
     () => getSuggestedLoad(exercise.exerciseId, exercise.targetReps ?? '8-12', exercise.sets.length, history, isMetric),
@@ -129,6 +172,8 @@ export function FocusedWorkoutView({
   const [localWeight, setLocalWeight] = useState('');
   const [localReps, setLocalReps] = useState('');
   const [localDuration, setLocalDuration] = useState('');
+  const [localDistance, setLocalDistance] = useState('');
+  const [localLevel, setLocalLevel] = useState('');
 
   const defaultDuration = exercise.defaultDurationSeconds ?? exerciseLib?.defaultDurationSeconds ?? 30;
 
@@ -142,6 +187,8 @@ export function FocusedWorkoutView({
           ? currentSet.durationSeconds.toString()
           : defaultDuration.toString(),
       );
+      setLocalDistance(currentSet.distance !== undefined ? currentSet.distance.toString() : '');
+      setLocalLevel(currentSet.level !== undefined ? currentSet.level.toString() : '');
     }
   }, [currentSet?.id, currentSet?.weight, currentSet?.reps, currentSet?.durationSeconds, defaultDuration]);
 
@@ -191,6 +238,26 @@ export function FocusedWorkoutView({
     [],
   );
 
+  const incrementDistance = useCallback(
+    (delta: number) => {
+      setLocalDistance((prev) => {
+        const newVal = Math.max(0, parseFloat(((parseFloat(prev) || 0) + delta).toFixed(2)));
+        return newVal.toString();
+      });
+    },
+    [],
+  );
+
+  const incrementLevel = useCallback(
+    (delta: number) => {
+      setLocalLevel((prev) => {
+        const newVal = Math.max(1, Math.min(25, (parseInt(prev, 10) || 1) + delta));
+        return newVal.toString();
+      });
+    },
+    [],
+  );
+
   // ── Animations ────────────────────────────────────────────────────
   const logBtnScale = useRef(new Animated.Value(1)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
@@ -202,17 +269,41 @@ export function FocusedWorkoutView({
     if (!currentSet) return;
     isLoggingRef.current = true;
 
-    // Validate inputs based on exercise type
-    if (isTimeBased) {
-      const dur = parseInt(localDuration, 10);
-      if (isNaN(dur) || dur <= 0) { isLoggingRef.current = false; return; }
-    } else if (isBodyweight) {
-      const r = parseInt(localReps, 10);
-      if (isNaN(r)) { isLoggingRef.current = false; return; }
-    } else {
-      const w = parseFloat(localWeight);
-      const r = parseInt(localReps, 10);
-      if (isNaN(w) || isNaN(r)) { isLoggingRef.current = false; return; }
+    // Validate inputs based on tracking mode
+    const fail = () => { isLoggingRef.current = false; };
+    switch (trackingMode) {
+      case 'weight_reps': {
+        const w = parseFloat(localWeight);
+        const r = parseInt(localReps, 10);
+        if (isNaN(w) || isNaN(r)) { fail(); return; }
+        break;
+      }
+      case 'bodyweight_reps':
+      case 'reps_only': {
+        const r = parseInt(localReps, 10);
+        if (isNaN(r)) { fail(); return; }
+        break;
+      }
+      case 'duration': {
+        const dur = parseInt(localDuration, 10);
+        if (isNaN(dur) || dur <= 0) { fail(); return; }
+        break;
+      }
+      case 'duration_distance': {
+        const dur = parseInt(localDuration, 10);
+        if (isNaN(dur) || dur <= 0) { fail(); return; }
+        break;
+      }
+      case 'duration_level': {
+        const dur = parseInt(localDuration, 10);
+        if (isNaN(dur) || dur <= 0) { fail(); return; }
+        break;
+      }
+      case 'distance_weight': {
+        const w = parseFloat(localWeight);
+        if (isNaN(w)) { fail(); return; }
+        break;
+      }
     }
 
     // Button scale animation
@@ -225,19 +316,37 @@ export function FocusedWorkoutView({
     flashAnim.setValue(1);
     Animated.timing(flashAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start();
 
-    // 1. Log the set based on exercise type
-    if (isTimeBased) {
-      const dur = parseInt(localDuration, 10);
-      logTimedSet(exercise.id, currentSet.id, dur);
-    } else if (isBodyweight) {
-      const r = parseInt(localReps, 10);
-      logSet(exercise.id, currentSet.id, 0, r);
-      completeSet(exercise.id, currentSet.id);
-    } else {
-      const w = parseFloat(localWeight);
-      const r = parseInt(localReps, 10);
-      logSet(exercise.id, currentSet.id, w, r);
-      completeSet(exercise.id, currentSet.id);
+    // 1. Log the set based on tracking mode
+    switch (trackingMode) {
+      case 'duration':
+      case 'duration_distance':
+      case 'duration_level': {
+        const dur = parseInt(localDuration, 10);
+        logTimedSet(exercise.id, currentSet.id, dur);
+        break;
+      }
+      case 'bodyweight_reps':
+      case 'reps_only': {
+        const r = parseInt(localReps, 10);
+        const addedW = fields.hasAddedWeight ? (parseFloat(localWeight) || 0) : 0;
+        logSet(exercise.id, currentSet.id, addedW, r);
+        completeSet(exercise.id, currentSet.id);
+        break;
+      }
+      case 'distance_weight': {
+        const w = parseFloat(localWeight) || 0;
+        logSet(exercise.id, currentSet.id, w, 0);
+        completeSet(exercise.id, currentSet.id);
+        break;
+      }
+      case 'weight_reps':
+      default: {
+        const w = parseFloat(localWeight);
+        const r = parseInt(localReps, 10);
+        logSet(exercise.id, currentSet.id, w, r);
+        completeSet(exercise.id, currentSet.id);
+        break;
+      }
     }
     Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
@@ -245,9 +354,9 @@ export function FocusedWorkoutView({
     const nextIncomplete = exercise.sets.find(
       (s) => !s.isCompleted && s.id !== currentSet.id,
     );
-    if (nextIncomplete && !isTimeBased) {
-      const w = isBodyweight ? 0 : parseFloat(localWeight);
-      const r = parseInt(localReps, 10);
+    if (nextIncomplete && !fields.hasDuration) {
+      const w = fields.hasWeight ? (parseFloat(localWeight) || 0) : (fields.hasAddedWeight ? (parseFloat(localWeight) || 0) : 0);
+      const r = fields.hasReps ? (parseInt(localReps, 10) || 0) : 0;
       if (nextIncomplete.weight === undefined && nextIncomplete.reps === undefined) {
         logSet(exercise.id, nextIncomplete.id, w, r, true);
       }
@@ -284,8 +393,8 @@ export function FocusedWorkoutView({
     localWeight,
     localReps,
     localDuration,
-    isTimeBased,
-    isBodyweight,
+    trackingMode,
+    fields,
     exercise,
     logSet,
     logTimedSet,
@@ -472,14 +581,14 @@ export function FocusedWorkoutView({
             ]}
           />
 
-          {/* Suggestion banner (only for weighted exercises) */}
-          {suggestion && !isTimeBased && (
+          {/* Suggestion banner (only for weight_reps / bodyweight_reps modes) */}
+          {suggestion && !fields.hasDuration && (
             <View style={[styles.suggestionCard, { backgroundColor: suggestion.confidence === 'high' ? colors.successLight : colors.primaryMuted, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md }]}>
               <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
                 Based on your last workout, try:
               </Text>
               <Text style={[typography.h2, { color: suggestion.confidence === 'high' ? colors.success : colors.primary, textAlign: 'center' }]}>
-                {isBodyweight
+                {!fields.hasWeight
                   ? `${suggestion.suggestedReps} reps`
                   : `${suggestion.suggestedWeight} ${unit} × ${suggestion.suggestedReps} reps`}
               </Text>
@@ -494,8 +603,8 @@ export function FocusedWorkoutView({
             </View>
           )}
 
-          {isTimeBased ? (
-            /* ── Duration input for timed exercises ──────────────────── */
+          {/* ── Duration input ──────────────────────────────────── */}
+          {fields.hasDuration ? (
             <View style={styles.inputBlock}>
               <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
                 DURATION (seconds)
@@ -544,106 +653,203 @@ export function FocusedWorkoutView({
                 {Math.floor((parseInt(localDuration, 10) || 0) / 60)}:{String((parseInt(localDuration, 10) || 0) % 60).padStart(2, '0')}
               </Text>
             </View>
-          ) : (
-            /* ── Weight + Reps inputs (bodyweight skips weight) ──────── */
-            <>
-              {/* Weight - Scoreboard style (hidden for bodyweight) */}
-              {!isBodyweight && (
-                <View style={styles.inputBlock}>
-                  <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
-                    WEIGHT ({unit})
-                  </Text>
-                  <View style={styles.inputRow}>
-                    <TouchableOpacity
-                      onPress={() => incrementWeight(-weightStep)}
-                      style={[
-                        styles.bigIncBtn,
-                        { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={[
-                        styles.bigInput,
-                        {
-                          color: colors.text,
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                          borderRadius: radius.lg,
-                          fontSize: 30,
-                          fontWeight: '700',
-                          letterSpacing: -1,
-                        },
-                      ]}
-                      value={localWeight}
-                      onChangeText={setLocalWeight}
-                      keyboardType="decimal-pad"
-                      placeholder="0"
-                      placeholderTextColor={colors.textTertiary}
-                      selectTextOnFocus
-                    />
-                    <TouchableOpacity
-                      onPress={() => incrementWeight(weightStep)}
-                      style={[
-                        styles.bigIncBtn,
-                        { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
+          ) : null}
 
-              {/* Reps - Scoreboard style */}
-              <View style={[styles.inputBlock, { marginTop: isBodyweight ? 0 : spacing.sm }]}>
-                <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
-                  REPS
-                </Text>
-                <View style={styles.inputRow}>
-                  <TouchableOpacity
-                    onPress={() => incrementReps(-1)}
-                    style={[
-                      styles.bigIncBtn,
-                      { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                    ]}
-                  >
-                    <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
-                  </TouchableOpacity>
-                  <TextInput
-                    style={[
-                      styles.bigInput,
-                      {
-                        color: colors.text,
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                        borderRadius: radius.lg,
-                        fontSize: 30,
-                        fontWeight: '700',
-                        letterSpacing: -1,
-                      },
-                    ]}
-                    value={localReps}
-                    onChangeText={setLocalReps}
-                    keyboardType="number-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.textTertiary}
-                    selectTextOnFocus
-                  />
-                  <TouchableOpacity
-                    onPress={() => incrementReps(1)}
-                    style={[
-                      styles.bigIncBtn,
-                      { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                    ]}
-                  >
-                    <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
-                  </TouchableOpacity>
-                </View>
+          {/* ── Weight input ─────────────────────────────────────────── */}
+          {(fields.hasWeight || fields.hasAddedWeight) ? (
+            <View style={[styles.inputBlock, { marginTop: fields.hasDuration ? spacing.sm : 0 }]}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
+                {weightLabel.toUpperCase()}
+              </Text>
+              <View style={styles.inputRow}>
+                <TouchableOpacity
+                  onPress={() => incrementWeight(-weightStep)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[
+                    styles.bigInput,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      fontSize: 30,
+                      fontWeight: '700',
+                      letterSpacing: -1,
+                    },
+                  ]}
+                  value={localWeight}
+                  onChangeText={setLocalWeight}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textTertiary}
+                  selectTextOnFocus
+                />
+                <TouchableOpacity
+                  onPress={() => incrementWeight(weightStep)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
+                </TouchableOpacity>
               </View>
-            </>
-          )}
+            </View>
+          ) : null}
+
+          {/* ── Reps input ───────────────────────────────────────────── */}
+          {fields.hasReps ? (
+            <View style={[styles.inputBlock, { marginTop: (fields.hasWeight || fields.hasAddedWeight || fields.hasDuration) ? spacing.sm : 0 }]}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
+                REPS
+              </Text>
+              <View style={styles.inputRow}>
+                <TouchableOpacity
+                  onPress={() => incrementReps(-1)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[
+                    styles.bigInput,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      fontSize: 30,
+                      fontWeight: '700',
+                      letterSpacing: -1,
+                    },
+                  ]}
+                  value={localReps}
+                  onChangeText={setLocalReps}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textTertiary}
+                  selectTextOnFocus
+                />
+                <TouchableOpacity
+                  onPress={() => incrementReps(1)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {/* ── Distance input ───────────────────────────────────────── */}
+          {fields.hasDistance ? (
+            <View style={[styles.inputBlock, { marginTop: spacing.sm }]}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
+                DISTANCE
+              </Text>
+              <View style={styles.inputRow}>
+                <TouchableOpacity
+                  onPress={() => incrementDistance(-0.1)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[
+                    styles.bigInput,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      fontSize: 30,
+                      fontWeight: '700',
+                      letterSpacing: -1,
+                    },
+                  ]}
+                  value={localDistance}
+                  onChangeText={setLocalDistance}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textTertiary}
+                  selectTextOnFocus
+                />
+                <TouchableOpacity
+                  onPress={() => incrementDistance(0.1)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {/* ── Level input (for duration_level mode) ────────────────── */}
+          {trackingMode === 'duration_level' ? (
+            <View style={[styles.inputBlock, { marginTop: spacing.sm }]}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: 2, textAlign: 'center', letterSpacing: 2, fontSize: 11 }]}>
+                LEVEL
+              </Text>
+              <View style={styles.inputRow}>
+                <TouchableOpacity
+                  onPress={() => incrementLevel(-1)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>−</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[
+                    styles.bigInput,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      fontSize: 30,
+                      fontWeight: '700',
+                      letterSpacing: -1,
+                    },
+                  ]}
+                  value={localLevel}
+                  onChangeText={setLocalLevel}
+                  keyboardType="number-pad"
+                  placeholder="1"
+                  placeholderTextColor={colors.textTertiary}
+                  selectTextOnFocus
+                />
+                <TouchableOpacity
+                  onPress={() => incrementLevel(1)}
+                  style={[
+                    styles.bigIncBtn,
+                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {/* Spacer so content isn't hidden behind fixed button */}
           <View style={{ height: 80 }} />
@@ -667,11 +873,7 @@ export function FocusedWorkoutView({
                     ]}
                   >
                     <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
-                      {isTimeBased
-                        ? `${s.durationSeconds ?? 0}s`
-                        : isBodyweight
-                          ? `${s.reps ?? 0} reps`
-                          : `${s.weight ?? 0} × ${s.reps ?? 0}`}
+                      {formatSetChip(s, trackingMode)}
                       {s.isPR ? ' 🏆' : ''}
                     </Text>
                   </View>
@@ -708,7 +910,7 @@ export function FocusedWorkoutView({
                   ]}
                 >
                   <Text style={[typography.labelSmall, { color: s.isPR ? colors.warning : colors.success }]}>
-                    Set {s.setNumber}: {s.weight ?? 0} × {s.reps ?? 0}
+                    Set {s.setNumber}: {formatSetChip(s, trackingMode)}
                     {s.isPR ? ' 🏆' : ''}
                   </Text>
                 </View>
@@ -844,7 +1046,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     left: 6,
-    paddingHorizontal: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
   },

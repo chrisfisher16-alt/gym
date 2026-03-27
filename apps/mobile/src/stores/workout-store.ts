@@ -326,7 +326,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   deleteProgram: (programId) => {
     const program = get().programs.find((p) => p.id === programId);
-    if (program && !program.customized) {
+    if (program && program.createdBy !== 'user' && !program.customized) {
       console.warn(`Cannot delete seed program "${program.name}" (id: ${programId}). Only user-created or customized programs can be deleted.`);
       return 'Cannot delete built-in programs. Duplicate or customize it first.';
     }
@@ -352,7 +352,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       try {
         const { useNotificationStore } = require('./notification-store');
         useNotificationStore.getState().syncWorkoutDaysFromProgram();
-      } catch {}
+      } catch (err) {
+        console.warn('[Workout] Failed to sync notification days from program:', err);
+      }
     }, 200);
   },
 
@@ -404,6 +406,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           isTimeBased: libExercise?.isTimeBased,
           isBodyweight: libExercise?.isBodyweight,
           defaultDurationSeconds: libExercise?.defaultDurationSeconds,
+          trackingMode: libExercise?.trackingMode,
+          weightContext: libExercise?.weightContext,
+          secondaryMetrics: libExercise?.secondaryMetrics,
           restSeconds: e.restSeconds,
           isSkipped: false,
           order: index,
@@ -729,6 +734,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         isTimeBased: exercise.isTimeBased,
         isBodyweight: exercise.isBodyweight,
         defaultDurationSeconds: exercise.defaultDurationSeconds,
+        trackingMode: exercise.trackingMode,
+        weightContext: exercise.weightContext,
+        secondaryMetrics: exercise.secondaryMetrics,
         isSkipped: false,
         order: state.activeSession.exercises.length,
       };

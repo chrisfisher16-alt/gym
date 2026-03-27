@@ -84,6 +84,12 @@ function RootLayout() {
       try {
         const { useAuthStore } = require('../src/stores/auth-store');
         await useAuthStore.getState().initialize();
+
+        // Initialize subscription store so promo grants, entitlements, and RevenueCat are loaded
+        const { useSubscriptionStore } = require('../src/stores/subscription-store');
+        const userId = useAuthStore.getState().user?.id;
+        await useSubscriptionStore.getState().initialize(userId);
+
         // Bootstrap notification categories, re-sync reminders, and set up response listener
         await bootstrapNotifications();
       } catch (e) {

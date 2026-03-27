@@ -50,3 +50,9 @@ export type { RewindOverlayProps } from './RewindOverlay';
 
 export { WorkoutInputToolbar } from './WorkoutInputToolbar';
 export type { WorkoutInputToolbarProps, InputType } from './WorkoutInputToolbar';
+
+export { ExerciseTimer } from './ExerciseTimer';
+export type { ExerciseTimerProps } from './ExerciseTimer';
+
+export { CardioSetRow } from './CardioSetRow';
+export type { CardioSetRowProps } from './CardioSetRow';

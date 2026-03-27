@@ -1,18 +1,52 @@
-import React from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../src/theme';
 import { useWorkoutPrograms } from '../../../src/hooks/useWorkoutPrograms';
-import { Card, Badge, Button } from '../../../src/components/ui';
+import { Card, Badge, Button, Pill } from '../../../src/components/ui';
 import type { WorkoutProgramLocal, DayType } from '../../../src/types/workout';
 import { DAY_TYPE_COLORS, DAY_TYPE_ICONS } from '../../../src/types/workout';
+import { selectionFeedback } from '../../../src/lib/haptics';
+
+type Difficulty = WorkoutProgramLocal['difficulty'];
+
+const DAYS_OPTIONS = [3, 4, 5, 6, 7] as const;
+const DIFFICULTY_OPTIONS: { value: Difficulty | 'all'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
+];
 
 export default function ProgramsScreen() {
   const router = useRouter();
   const { colors, spacing, radius, typography } = useTheme();
   const { activeProgram, inactivePrograms, programs } = useWorkoutPrograms();
+
+  const [selectedDays, setSelectedDays] = useState<number | null>(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | 'all'>('all');
+
+  const toggleDays = useCallback((days: number) => {
+    selectionFeedback();
+    setSelectedDays((prev) => (prev === days ? null : days));
+  }, []);
+
+  const selectDifficulty = useCallback((value: Difficulty | 'all') => {
+    selectionFeedback();
+    setSelectedDifficulty(value);
+  }, []);
+
+  const hasActiveFilters = selectedDays !== null || selectedDifficulty !== 'all';
+
+  const filteredPrograms = useMemo(() => {
+    return programs.filter((p) => {
+      if (selectedDays !== null && p.daysPerWeek !== selectedDays) return false;
+      if (selectedDifficulty !== 'all' && p.difficulty !== selectedDifficulty) return false;
+      return true;
+    });
+  }, [programs, selectedDays, selectedDifficulty]);
 
   const getDayTypeBreakdown = (program: WorkoutProgramLocal) => {
     const counts: Partial<Record<DayType, number>> = {};
@@ -107,35 +141,88 @@ export default function ProgramsScreen() {
       </View>
 
       <FlatList
-        data={programs}
+        data={filteredPrograms}
         renderItem={({ item }: { item: WorkoutProgramLocal }) => renderProgram(item, item.isActive)}
         keyExtractor={(item: WorkoutProgramLocal) => item.id}
         contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          activeProgram ? (
+          <View style={{ marginBottom: spacing.md }}>
+            {/* Days per week filter */}
             <Text style={[typography.labelSmall, { color: colors.textTertiary, marginBottom: spacing.sm }]}>
-              {programs.length} program{programs.length !== 1 ? 's' : ''}
+              Days per week
             </Text>
-          ) : null
+            <View style={styles.pillRow}>
+              {DAYS_OPTIONS.map((d) => (
+                <Pill
+                  key={d}
+                  label={`${d} days`}
+                  active={selectedDays === d}
+                  onPress={() => toggleDays(d)}
+                />
+              ))}
+            </View>
+
+            {/* Difficulty filter */}
+            <Text style={[typography.labelSmall, { color: colors.textTertiary, marginTop: spacing.md, marginBottom: spacing.sm }]}>
+              Level
+            </Text>
+            <View style={[styles.segContainer, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: 3 }]}>
+              {DIFFICULTY_OPTIONS.map((opt) => {
+                const isActive = opt.value === selectedDifficulty;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => selectDifficulty(opt.value)}
+                    activeOpacity={0.7}
+                    style={[
+                      styles.segOption,
+                      {
+                        backgroundColor: isActive ? colors.surface : 'transparent',
+                        borderRadius: radius.md - 2,
+                        paddingVertical: spacing.sm,
+                        borderWidth: isActive ? 1 : 0,
+                        borderColor: isActive ? colors.borderBrand : 'transparent',
+                      },
+                    ]}
+                  >
+                    <Text style={[typography.label, { color: isActive ? colors.text : colors.textTertiary, fontSize: 13 }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Result count */}
+            <Text style={[typography.labelSmall, { color: colors.textTertiary, marginTop: spacing.md }]}>
+              {filteredPrograms.length} program{filteredPrograms.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="barbell-outline" size={48} color={colors.textTertiary} />
-            <Text style={[typography.h3, { color: colors.text, marginTop: spacing.base }]}>No Programs</Text>
+            <Ionicons name={hasActiveFilters ? 'filter-outline' : 'barbell-outline'} size={48} color={colors.textTertiary} />
+            <Text style={[typography.h3, { color: colors.text, marginTop: spacing.base }]}>
+              {hasActiveFilters ? 'No Matches' : 'No Programs'}
+            </Text>
             <Text
               style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }]}
             >
-              Create a workout program to get started
+              {hasActiveFilters
+                ? 'Try adjusting your filters'
+                : 'Create a workout program to get started'}
             </Text>
-            <View style={{ marginTop: spacing.lg }}>
-              <Button
-                title="Create Program"
-                onPress={() => router.push('/workout/programs/create')}
-                size="md"
-                fullWidth={false}
-              />
-            </View>
+            {!hasActiveFilters && (
+              <View style={{ marginTop: spacing.lg }}>
+                <Button
+                  title="Create Program"
+                  onPress={() => router.push('/workout/programs/create')}
+                  size="md"
+                  fullWidth={false}
+                />
+              </View>
+            )}
           </View>
         }
       />
@@ -178,5 +265,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 60,
     paddingHorizontal: 32,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segContainer: {
+    flexDirection: 'row',
+  },
+  segOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

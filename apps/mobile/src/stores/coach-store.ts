@@ -6,6 +6,8 @@ import * as coachApi from '../lib/coach-api';
 import type { AIMessage, AIContentBlock } from '../lib/ai-provider';
 
 import { parseCoachActions, executeCoachAction, type CoachAction } from '../lib/coach-actions';
+import { sanitizeAIResponse } from '../lib/safety-filter';
+import { useProfileStore } from './profile-store';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -48,6 +50,9 @@ export interface CoachConversation {
   message_count: number;
 }
 
+const MESSAGE_LIMIT = 500;
+const MESSAGE_WARNING_THRESHOLD = 450;
+
 // ── Storage Keys ────────────────────────────────────────────────────
 
 const STORAGE_KEYS = {
@@ -73,6 +78,9 @@ interface CoachState {
   // Demo fallback tracking
   lastMessageWasDemo: boolean;
 
+  // Truncation warning
+  truncationWarning: string | null;
+
   // Actions
   initialize: () => Promise<void>;
   sendMessage: (text: string, context?: CoachContext, imageUri?: string) => Promise<void>;
@@ -82,6 +90,7 @@ interface CoachState {
   loadHistory: () => Promise<void>;
   clearError: () => void;
   clearDemoWarning: () => void;
+  clearTruncationWarning: () => void;
   setPrefilledContext: (context: CoachContext, message?: string) => void;
   prefilledContext: CoachContext | null;
   prefilledMessage: string | null;
@@ -212,6 +221,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
   prefilledContext: null,
   prefilledMessage: null,
   lastMessageWasDemo: false,
+  truncationWarning: null,
 
   initialize: async () => {
     try {
@@ -388,12 +398,16 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       // Parse actions from AI response
       const { text: cleanContent, actions } = parseCoachActions(response.content);
 
+      // Client-side safety filter — append disclaimer if unsafe content detected
+      const profileGender = useProfileStore.getState().profile?.gender;
+      const safeContent = sanitizeAIResponse(cleanContent, profileGender);
+
       // Add assistant message with parsed actions
       const assistantMessage: CoachMessage = {
         id: response.message_id ?? generateId('msg'),
         conversation_id: conversation.id,
         role: 'assistant',
-        content: cleanContent,
+        content: safeContent,
         actions: actions.length > 0
           ? actions.map((action) => ({ action, status: 'pending' as const }))
           : undefined,
@@ -423,19 +437,29 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       // Persist
       const updatedState = get();
       const allMessages = updatedState.messages;
-      const messagesToKeep = allMessages.slice(-500);
+      const messagesToKeep = allMessages.slice(-MESSAGE_LIMIT);
+
+      // Warn user when approaching the message limit
+      let truncationWarning: string | null = null;
+      if (allMessages.length > MESSAGE_LIMIT) {
+        const dropped = allMessages.length - MESSAGE_LIMIT;
+        truncationWarning = `${dropped} older message${dropped > 1 ? 's were' : ' was'} removed to stay within the ${MESSAGE_LIMIT}-message limit.`;
+      } else if (allMessages.length >= MESSAGE_WARNING_THRESHOLD) {
+        const remaining = MESSAGE_LIMIT - allMessages.length;
+        truncationWarning = `You're approaching the ${MESSAGE_LIMIT}-message limit (${remaining} remaining). Older messages will be automatically removed.`;
+      }
 
       // Clean up image files for messages being truncated
-      if (allMessages.length > 500) {
-        const droppedMessages = allMessages.slice(0, allMessages.length - 500);
+      if (allMessages.length > MESSAGE_LIMIT) {
+        const droppedMessages = allMessages.slice(0, allMessages.length - MESSAGE_LIMIT);
         void cleanupOrphanedImages(droppedMessages);
       }
 
       // Sync in-memory state to match the truncated list
-      set({ messages: messagesToKeep });
+      set({ messages: messagesToKeep, truncationWarning });
 
       await Promise.all([
-        // Keep last 500 messages in storage — older messages are not persisted
+        // Keep last MESSAGE_LIMIT messages in storage — older messages are not persisted
         AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messagesToKeep)),
         AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(updatedState.conversations)),
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(updatedConversation)),
@@ -548,6 +572,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
 
   clearError: () => set({ error: null }),
   clearDemoWarning: () => set({ lastMessageWasDemo: false }),
+  clearTruncationWarning: () => set({ truncationWarning: null }),
 
   setPrefilledContext: (context: CoachContext, message?: string) => {
     set({ prefilledContext: context, prefilledMessage: message ?? null });
@@ -587,7 +612,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       // Persist
       await AsyncStorage.setItem(
         STORAGE_KEYS.MESSAGES,
-        JSON.stringify(updatedMessages.slice(-500)),
+        JSON.stringify(updatedMessages.slice(-MESSAGE_LIMIT)),
       );
     } catch (error) {
       const updatedActions = [...message.actions!];
@@ -603,7 +628,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       set({ messages: updatedMessages });
 
       // Persist failed action state (matches success path)
-      const messagesToKeep = updatedMessages.slice(-500);
+      const messagesToKeep = updatedMessages.slice(-MESSAGE_LIMIT);
       await AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messagesToKeep)).catch(console.warn);
     }
   },

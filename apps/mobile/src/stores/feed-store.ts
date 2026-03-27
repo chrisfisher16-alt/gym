@@ -61,7 +61,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           const items: FeedItem[] = JSON.parse(cached);
           set({ items });
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[Feed] Failed to load cached feed:', err);
+      }
     }
 
     if (!isSupabaseConfigured) return;

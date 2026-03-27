@@ -37,6 +37,7 @@ import { ExerciseImageViewer } from './ExerciseImageViewer';
 import { getExerciseImages } from '../../lib/exercise-image-map';
 import { WorkoutInputToolbar } from './WorkoutInputToolbar';
 import type { InputType } from './WorkoutInputToolbar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ── Props ────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ export function DrillDownView({
   supersetInfo,
 }: DrillDownViewProps) {
   const { colors, spacing, radius, typography } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const getExerciseRestTime = useWorkoutStore((s) => s.getExerciseRestTime);
   const updateExerciseRestTime = useWorkoutStore((s) => s.updateExerciseRestTime);
@@ -189,6 +191,18 @@ export function DrillDownView({
   // "Applied ✓" feedback state
   const [predictionApplied, setPredictionApplied] = useState(false);
   const predictionAppliedTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loggingResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoAdvanceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup all timeout refs on unmount
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+      if (predictionAppliedTimeout.current) clearTimeout(predictionAppliedTimeout.current);
+      if (loggingResetTimeout.current) clearTimeout(loggingResetTimeout.current);
+      if (autoAdvanceTimeout.current) clearTimeout(autoAdvanceTimeout.current);
+    };
+  }, []);
 
   // Reanimated highlight flash for inputs on prediction apply
   const highlightOpacity = useSharedValue(0);
@@ -474,7 +488,8 @@ export function DrillDownView({
         // Don't auto-finish, let user tap the CTA
       }
     }
-    setTimeout(() => { isLoggingRef.current = false; }, 300);
+    if (loggingResetTimeout.current) clearTimeout(loggingResetTimeout.current);
+    loggingResetTimeout.current = setTimeout(() => { isLoggingRef.current = false; }, 300);
   }, [
     currentSet,
     localWeight,
@@ -524,7 +539,8 @@ export function DrillDownView({
     // If it was the last set, auto-advance after logging
     if (isLastSet && !isLastExercise && !isInSuperset) {
       // Small delay so the user sees the flash, then advance
-      setTimeout(() => {
+      if (autoAdvanceTimeout.current) clearTimeout(autoAdvanceTimeout.current);
+      autoAdvanceTimeout.current = setTimeout(() => {
         onNextExercise();
       }, 300);
     }
@@ -603,7 +619,7 @@ export function DrillDownView({
         {/* ── Exercise Image ──────────────────────────────────────── */}
         {formCheckMode && exerciseImages ? (
           <View style={{ paddingHorizontal: spacing.base }}>
-            <View style={{ flexDirection: 'row', height: 160, borderRadius: radius.lg, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', height: 140, borderRadius: radius.lg, overflow: 'hidden' }}>
               <View style={{ flex: 1, position: 'relative', backgroundColor: colors.surface }}>
                 <Image source={{ uri: exerciseImages.startPosition }} style={{ flex: 1 }} contentFit="contain" cachePolicy="disk" />
                 <View style={styles.formCheckLabel}>
@@ -977,7 +993,7 @@ export function DrillDownView({
       </ScrollView>
 
       {/* ── Bottom Section (fixed) ────────────────────────────────── */}
-      <View style={[styles.bottomSection, { backgroundColor: colors.surface, borderTopColor: colors.borderLight, paddingHorizontal: spacing.base, paddingTop: spacing.sm, paddingBottom: spacing.lg }]}>
+      <View style={[styles.bottomSection, { backgroundColor: colors.surface, borderTopColor: colors.borderLight, paddingHorizontal: spacing.base, paddingTop: spacing.sm, paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.xs) }]}>
         {/* Contextual input toolbar (hidden for time-based weight input) */}
         {focusedInput && !(isTimeBased && focusedInput === 'weight') && (
           <WorkoutInputToolbar
@@ -1212,7 +1228,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     left: 6,
-    paddingHorizontal: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
   },

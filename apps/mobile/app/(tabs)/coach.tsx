@@ -16,6 +16,7 @@ import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../src/theme';
+import { useToast } from '../../src/components/Toast';
 import { useCoachStore } from '../../src/stores/coach-store';
 import { ChatBubble } from '../../src/components/coach/ChatBubble';
 import { TypingIndicator } from '../../src/components/coach/TypingIndicator';
@@ -61,6 +62,10 @@ export default function CoachTab() {
     lastMessageWasDemo,
   } = useCoachStore();
 
+  const truncationWarning = useCoachStore((s) => s.truncationWarning);
+  const clearTruncationWarning = useCoachStore((s) => s.clearTruncationWarning);
+  const { showToast } = useToast();
+
   useEffect(() => {
     invalidateConfigCache();
   }, []);
@@ -81,6 +86,14 @@ export default function CoachTab() {
       clearPrefilledContext();
     }
   }, [prefilledMessage, isInitialized, prefilledContext, clearPrefilledContext]);
+
+  // Show toast when truncation warning is set
+  useEffect(() => {
+    if (truncationWarning) {
+      showToast(truncationWarning, 'warning', 5000);
+      clearTruncationWarning();
+    }
+  }, [truncationWarning]);
 
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();

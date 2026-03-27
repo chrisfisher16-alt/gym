@@ -4,6 +4,7 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
+import { validateOutput } from '../_shared/safety.ts';
 import type { MealParseRequest, MealParseResponse, ParsedMealItem } from '../_shared/types.ts';
 
 // ── Rate Limiting (in-memory) ───────────────────────────────────────
@@ -131,6 +132,13 @@ Return format: { "items": [...] }`,
           confidence: (item.confidence as number) ?? 0.7,
         }),
       );
+
+      // Safety check: validate AI-generated item names for medical terminology
+      const itemNames = items.map((i: ParsedMealItem) => i.name).join(', ');
+      const safetyCheck = validateOutput(itemNames);
+      if (!safetyCheck.safe) {
+        console.warn(`[ai-meal-parse] Safety flagged: ${safetyCheck.reason}`);
+      }
 
       response = { items, raw_text: text, parse_method: 'ai' };
 

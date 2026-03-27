@@ -96,7 +96,7 @@ export const darkColors: typeof lightColors = {
   primaryMuted: '#2A2418',
 
   // Background — true black
-  background: '#0D0D0D',
+  background: '#0C0C0E',
   surface: '#1A1A1A',
   surfaceSecondary: '#252525',
 
@@ -104,7 +104,7 @@ export const darkColors: typeof lightColors = {
   text: '#F5F5F5',
   textSecondary: '#A0A0A0',
   textTertiary: '#808080',
-  textInverse: '#0D0D0D',
+  textInverse: '#0C0C0E',
 
   // Border
   border: '#2A2A2A',

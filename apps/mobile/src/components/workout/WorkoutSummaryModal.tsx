@@ -234,6 +234,47 @@ export function WorkoutSummaryModal({
   const exercisesDone = session.exercises.length;
   const durationDisplay = formatDuration(session.durationSeconds);
 
+  // Total distance across all sets
+  const totalDistance = useMemo(() => {
+    if (!session) return null;
+    let total = 0;
+    let milesCount = 0;
+    let kmCount = 0;
+    let metersCount = 0;
+    for (const ex of session.exercises) {
+      for (const s of ex.sets) {
+        if (s.distance != null && s.distance > 0) {
+          total += s.distance;
+          if (s.distanceUnit === 'km') kmCount++;
+          else if (s.distanceUnit === 'meters') metersCount++;
+          else milesCount++;
+        }
+      }
+    }
+    if (total === 0) return null;
+    // Use the majority unit for display
+    const majorityUnit = kmCount > milesCount && kmCount > metersCount
+      ? 'km'
+      : metersCount > milesCount && metersCount > kmCount
+        ? 'm'
+        : 'mi';
+    return { value: Math.round(total * 10) / 10, unit: majorityUnit };
+  }, [session]);
+
+  // Active time: sum of all duration-based set durations
+  const activeTimeSecs = useMemo(() => {
+    if (!session) return 0;
+    let total = 0;
+    for (const ex of session.exercises) {
+      for (const s of ex.sets) {
+        if (s.durationSeconds != null && s.durationSeconds > 0) {
+          total += s.durationSeconds;
+        }
+      }
+    }
+    return total;
+  }, [session]);
+
   let message = 'Great workout!';
   if (session.prCount > 0 && session.totalSets >= 20) {
     message = 'Incredible session! New records smashed!';
@@ -317,6 +358,10 @@ export function WorkoutSummaryModal({
   const animExercises = useAnimatedCounter(exercisesDone, countersActive);
   const animCalories = useAnimatedCounter(displayCalories, countersActive);
   const animPRs = useAnimatedCounter(session.prCount, countersActive);
+  const animDistance = useAnimatedCounter(
+    totalDistance ? Math.round(totalDistance.value * 10) : 0,
+    countersActive,
+  );
 
   // ── Share handler ──────────────────────────────────────────────
   const handleShare = async () => {
@@ -397,6 +442,12 @@ export function WorkoutSummaryModal({
               : '0'}
             unit="cal"
           />
+          {totalDistance && (
+            <StatCard label="Distance" value={String(animDistance / 10)} unit={totalDistance.unit} />
+          )}
+          {activeTimeSecs > 0 && (
+            <StatCard label="Active Time" value={formatDuration(activeTimeSecs)} />
+          )}
           {session.prCount > 0 && (
             <StatCard label="PRs" value={String(animPRs)}>
               <Ionicons name="trophy" size={14} color={colors.primary} style={{ marginTop: 2 }} />
