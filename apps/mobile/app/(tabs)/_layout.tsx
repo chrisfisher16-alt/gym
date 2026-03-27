@@ -54,12 +54,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="coach"
+        name="compete"
         options={{
-          title: 'Coach',
-          tabBarAccessibilityLabel: 'Coach tab',
+          title: 'Compete',
+          tabBarAccessibilityLabel: 'Compete tab',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
+            <Ionicons name="trophy-outline" size={size} color={color} />
           ),
         }}
       />
@@ -71,6 +71,13 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="trending-up-outline" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="coach"
+        options={{
+          href: null,
+          title: 'Coach',
         }}
       />
     </Tabs>

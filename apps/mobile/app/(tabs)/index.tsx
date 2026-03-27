@@ -345,28 +345,6 @@ export default function TodayTab() {
     router.push('/workout/active');
   }, [activeSession, startEmptyWorkout]);
 
-  // ── Contextual Header Subtext ─────────────────────────────────────
-  const contextualSubtext = useMemo(() => {
-    const status = todayWorkoutStatus();
-    if (status === 'active') {
-      return '💪 Workout in progress — keep pushing!';
-    }
-    if (status === 'completed') {
-      const vol = todayDone?.totalVolume;
-      const unitLabel = unitPref === 'metric' ? 'kg' : 'lbs';
-      return vol ? `Great session today — ${fmt(vol)} ${unitLabel} total volume!` : 'Workout complete — nice work today!';
-    }
-    // Pending workout
-    if (timeOfDay === 'morning' && todayWorkout && showWorkout) {
-      const muscleLabel = todayWorkout.focusArea?.replace('_', ' ') ?? '';
-      return `${todayWorkout.name}${muscleLabel ? ` · ${muscleLabel}` : ''} on deck today`;
-    }
-    if (timeOfDay === 'evening' && showNutrition && calP < 0.9) {
-      const calsLeft = Math.max(0, Math.round(dT.calories - dC.calories));
-      return `${fmt(calsLeft)} calories left — finish strong`;
-    }
-    return undefined;
-  }, [todayWorkoutStatus, todayDone, todayWorkout, timeOfDay, showWorkout, showNutrition, calP, dT, dC, unitPref]);
 
   // ── Gradient ──────────────────────────────────────────────────────
   const grad = dark ? [colors.primaryMuted, colors.surface] as const : [colors.primaryMuted, colors.background] as const;
@@ -769,101 +747,47 @@ export default function TodayTab() {
   // ── Workout Card (extracted for clarity) ──────────────────────────
   function renderWorkoutCard() {
     if (activeSession) {
-      const completedSets = activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0);
-      const totalSets = activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0);
-      const elapsedMin = Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000);
-      const visibleExercises = activeSession.exercises.filter(e => !e.isSkipped).slice(0, 3);
       return (
-        <Card style={{ marginTop: spacing.base, borderColor: colors.primary, borderWidth: 2 }}>
-          <View style={S.actHead}>
-            <View style={[S.actCircle, { backgroundColor: colors.activeMuted }]}>
-              <Ionicons name="flash" size={24} color={colors.primary} />
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/workout')}
+          activeOpacity={0.7}
+          style={{ marginTop: spacing.sm }}
+        >
+          <Card style={{ borderColor: colors.primary, borderWidth: 1.5 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.caption, { color: colors.primary, fontWeight: '700', letterSpacing: 1 }]}>
+                  ACTIVE SESSION
+                </Text>
+                <Text style={[typography.body, { color: colors.text, marginTop: 2 }]} numberOfLines={1}>
+                  {activeSession.name}
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                  {activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0)}/
+                  {activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0)} sets · {Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000)} min
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
             </View>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.labelSmall, { color: colors.primary, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT IN PROGRESS</Text>
-              <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{activeSession.name}</Text>
-              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{completedSets} of {totalSets} sets completed · {elapsedMin} min</Text>
-            </View>
-          </View>
-          {visibleExercises.length > 0 && (
-            <View style={{ marginTop: spacing.md }}>
-              {visibleExercises.map((ex) => {
-                const done = ex.sets.every(s => s.isCompleted);
-                return (
-                  <View key={ex.id} style={[S.row, { paddingVertical: spacing.xs }]}>
-                    <Ionicons
-                      name={done ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={16}
-                      color={done ? colors.completed : colors.textTertiary}
-                    />
-                    <Text style={[typography.body, { color: done ? colors.completed : colors.text, marginLeft: spacing.sm }]}>{ex.exerciseName}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-          <TouchableOpacity
-            style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
-            onPress={() => router.push('/workout/active')} activeOpacity={0.8}>
-            <Ionicons name="play" size={18} color={colors.textInverse} />
-            <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Resume Workout</Text>
-          </TouchableOpacity>
-        </Card>
+          </Card>
+        </TouchableOpacity>
       );
     }
     if (todayDone) {
       return (
-        <>
-          <Card style={{ marginTop: spacing.base }}>
-            <View style={S.actHead}>
-              <View style={[S.actCircle, { backgroundColor: colors.completedMuted }]}>
-                <Ionicons name="trophy" size={24} color={colors.completed} />
-              </View>
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Text style={[typography.labelSmall, { color: colors.completed, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT COMPLETE</Text>
-                <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayDone.name}</Text>
-              </View>
+        <Card style={{ marginTop: spacing.sm }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.completedMuted, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.completed} />
             </View>
-            <View style={[S.statsR, { marginTop: spacing.base }]}>
-              <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{Math.round(todayDone.durationSeconds / 60)}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>minutes</Text></View>
-              <View style={[S.vDiv, { backgroundColor: colors.borderLight }]} />
-              <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{fmt(todayDone.totalVolume)}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>volume</Text></View>
-              <View style={[S.vDiv, { backgroundColor: colors.borderLight }]} />
-              <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{todayDone.totalSets}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>sets</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={[typography.body, { color: colors.text, fontWeight: '600' }]}>Workout Complete</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Great session — rest well!
+              </Text>
             </View>
-            {todayDone.prCount > 0 && (
-              <View style={[S.row, { backgroundColor: colors.goldLight, borderRadius: radius.sm, marginTop: spacing.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, alignSelf: 'flex-start' }]}>
-                <Ionicons name="ribbon" size={14} color={colors.gold} />
-                <Text style={[typography.labelSmall, { color: colors.gold, marginLeft: spacing.xs }]}>{todayDone.prCount} PR{todayDone.prCount > 1 ? 's' : ''} hit!</Text>
-              </View>
-            )}
-          </Card>
-          {todayWorkout ? (
-            <Card style={{ marginTop: spacing.sm }}>
-              <View style={S.actHead}>
-                <View style={[S.actCircle, { backgroundColor: colors.primaryMuted }]}><Ionicons name="barbell" size={24} color={colors.primary} /></View>
-                <View style={{ flex: 1, marginLeft: spacing.md }}>
-                  <Text style={[typography.labelSmall, { color: colors.primary, textTransform: 'uppercase', letterSpacing: 1 }]}>NEXT WORKOUT</Text>
-                  <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayWorkout.name}</Text>
-                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{todayWorkout.exercises.length} exercises{activeProgram ? ` · ${activeProgram.name}` : ''}</Text>
-                </View>
-              </View>
-              <TouchableOpacity style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
-                onPress={handleStartToday} activeOpacity={0.8}>
-                <Ionicons name="play" size={18} color={colors.textInverse} />
-                <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Start Workout</Text>
-              </TouchableOpacity>
-            </Card>
-          ) : (
-            <Card style={{ marginTop: spacing.sm }}>
-              <TouchableOpacity style={[S.cta, { backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.primary }]}
-                onPress={() => router.push('/workout/ai-generate')} activeOpacity={0.8}>
-                <Ionicons name="sparkles" size={16} color={colors.primary} />
-                <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm }]}>Build AI Workout</Text>
-              </TouchableOpacity>
-            </Card>
-          )}
-        </>
+          </View>
+        </Card>
       );
     }
     if (todayWorkout) {

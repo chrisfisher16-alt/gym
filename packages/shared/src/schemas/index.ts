@@ -1,3 +1,5 @@
+export * from './compete';
+
 import { z } from 'zod';
 
 // ── Shared primitives ────────────────────────────────────────────────

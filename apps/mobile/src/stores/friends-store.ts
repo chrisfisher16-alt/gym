@@ -40,6 +40,7 @@ interface FriendsState {
   declineRequest: (friendshipId: string) => Promise<void>;
   removeFriend: (friendshipId: string) => Promise<void>;
   refresh: () => Promise<void>;
+  redeemInviteCode: (code: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 // ── Store ──────────────────────────────────────────────────────────────
@@ -240,6 +241,15 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       .delete()
       .eq('id', friendshipId);
     await get().refresh();
+  },
+
+  redeemInviteCode: async (code) => {
+    const { redeemInviteCode: redeem } = await import('../lib/share-utils');
+    const result = await redeem(code);
+    if (result.success) {
+      await get().refresh();
+    }
+    return result;
   },
 
   reset: () => {

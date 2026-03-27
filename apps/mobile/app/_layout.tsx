@@ -11,6 +11,7 @@ import { NetworkBanner } from '../src/components/NetworkBanner';
 import { CommandPaletteProvider, useCommandPalette } from '../src/providers/CommandPaletteProvider';
 import { CommandPalette } from '../src/components/ui/CommandPalette';
 import { CoachPeekProvider } from '../src/providers/CoachPeekProvider';
+import { CoachSheet } from '../src/components/CoachSheet';
 import { QuickInputProvider } from '../src/providers/QuickInputProvider';
 import { migrateAIConfig } from '../src/lib/ai-provider';
 import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
@@ -154,6 +155,7 @@ function RootLayout() {
         <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy', presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
+      <CoachSheet />
       <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
       </ErrorBoundary>
     </ToastProvider>

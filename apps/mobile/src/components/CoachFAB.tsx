@@ -1,9 +1,9 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useCoachStore } from '../stores/coach-store';
+import { useCoachSheetStore } from './CoachSheet';
 import type { CoachContext } from '@health-coach/shared';
 
 interface CoachFABProps {
@@ -14,12 +14,12 @@ interface CoachFABProps {
 
 export function CoachFAB({ context, label, prefilledMessage }: CoachFABProps) {
   const { colors, radius, spacing } = useTheme();
-  const router = useRouter();
   const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
+  const showCoach = useCoachSheetStore((s) => s.show);
 
   const handlePress = () => {
     setPrefilledContext(context, prefilledMessage);
-    router.push('/(tabs)/coach');
+    showCoach(context);
   };
 
   if (label) {

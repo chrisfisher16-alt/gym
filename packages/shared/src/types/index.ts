@@ -1,3 +1,5 @@
+export * from './compete';
+
 // ── Enums & Literal Types ────────────────────────────────────────────
 
 export type ProductMode = 'workout_coach' | 'nutrition_coach' | 'full_health_coach';

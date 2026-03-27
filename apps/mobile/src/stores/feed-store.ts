@@ -31,6 +31,8 @@ interface FeedState {
   hasMore: boolean;
 
   fetchFeed: (reset?: boolean) => Promise<void>;
+  fetchFriendActivity: (reset?: boolean) => Promise<void>;
+  subscribeFeed: () => () => void;
   reset: () => void;
   postWorkoutCompletion: (params: {
     title: string;
@@ -149,6 +151,145 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     } finally {
       set({ isLoading: false, isRefreshing: false });
     }
+  },
+
+  fetchFriendActivity: async (reset = false) => {
+    if (!isSupabaseConfigured) return;
+
+    const state = get();
+    if (state.isLoading) return;
+
+    set({ isLoading: true, isRefreshing: reset });
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get accepted friend IDs
+      const { data: friendRows } = await supabase
+        .from('friendships')
+        .select('requester_id, addressee_id')
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+
+      const friendIds = (friendRows || []).map((r: any) =>
+        r.requester_id === user.id ? r.addressee_id : r.requester_id
+      );
+
+      // Include own posts too
+      const userIds = [user.id, ...friendIds];
+
+      if (userIds.length === 0) {
+        set({ items: [], hasMore: false, isLoading: false, isRefreshing: false });
+        return;
+      }
+
+      const existingItems = reset ? [] : state.items;
+      const offset = existingItems.length;
+
+      const { data, error } = await supabase
+        .from('social_feed')
+        .select(`
+          id,
+          user_id,
+          type,
+          title,
+          body,
+          metadata,
+          session_id,
+          visibility,
+          likes_count,
+          created_at,
+          profiles!social_feed_user_id_fkey (
+            display_name,
+            avatar_url
+          )
+        `)
+        .in('user_id', userIds)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error('Friend activity fetch error:', error);
+        return;
+      }
+
+      // Check which items user has liked
+      const itemIds = (data || []).map((d: any) => d.id);
+      let likedIds = new Set<string>();
+      if (itemIds.length > 0) {
+        const { data: likes } = await supabase
+          .from('social_likes')
+          .select('feed_item_id')
+          .eq('user_id', user.id)
+          .in('feed_item_id', itemIds);
+        likedIds = new Set((likes || []).map((l: any) => l.feed_item_id));
+      }
+
+      const mapped: FeedItem[] = (data || []).map((row: any) => ({
+        id: row.id,
+        userId: row.user_id,
+        type: row.type,
+        title: row.title,
+        body: row.body,
+        metadata: row.metadata || {},
+        sessionId: row.session_id,
+        visibility: row.visibility,
+        likesCount: row.likes_count,
+        createdAt: row.created_at,
+        userDisplayName: row.profiles?.display_name || 'Unknown',
+        userAvatarUrl: row.profiles?.avatar_url || null,
+        isLikedByMe: likedIds.has(row.id),
+      }));
+
+      set({
+        items: reset ? mapped : [...existingItems, ...mapped],
+        hasMore: mapped.length === PAGE_SIZE,
+      });
+    } catch (err) {
+      console.error('Friend activity fetch exception:', err);
+    } finally {
+      set({ isLoading: false, isRefreshing: false });
+    }
+  },
+
+  subscribeFeed: () => {
+    if (!isSupabaseConfigured) return () => {};
+
+    const channel = supabase
+      .channel('friend-feed')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'social_feed',
+        },
+        (payload) => {
+          const row = payload.new as any;
+          const newItem: FeedItem = {
+            id: row.id,
+            userId: row.user_id,
+            type: row.type,
+            title: row.title,
+            body: row.body,
+            metadata: row.metadata || {},
+            sessionId: row.session_id,
+            visibility: row.visibility,
+            likesCount: row.likes_count ?? 0,
+            createdAt: row.created_at,
+            userDisplayName: 'Friend',
+            userAvatarUrl: null,
+            isLikedByMe: false,
+          };
+          set((s) => ({ items: [newItem, ...s.items] }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 
   postWorkoutCompletion: async ({ title, body, metadata, sessionId }) => {

@@ -307,14 +307,9 @@ export default function WorkoutTab() {
       <View style={[styles.header, { paddingTop: spacing.base, paddingBottom: spacing.lg }]}>
         <View style={{ flex: 1 }}>
           <Text style={[typography.h1, { color: colors.text }]}>Workout</Text>
-          <SmartHeader tab="workout" />
+          {!isActive && <SmartHeader tab="workout" />}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-          {isActive && (
-            <TouchableOpacity onPress={() => router.push('/workout/active')}>
-              <Badge label="In Progress" variant="active" />
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             onPress={() => router.push('/settings')}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -324,29 +319,25 @@ export default function WorkoutTab() {
         </View>
       </View>
 
-      {/* Today's Workout — active session */}
+      {/* Active session — single consolidated card */}
       {isActive && activeSession && (
-        <Card style={{ marginBottom: spacing.base, borderColor: colors.primary, borderWidth: 2 }}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-            <Text style={[typography.labelLarge, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-              Today&apos;s Workout
-            </Text>
-            <Badge label="IN PROGRESS" variant="active" />
-          </View>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+        <Card style={{ marginBottom: spacing.base, borderColor: colors.primary, borderWidth: 1.5 }}>
+          {/* Active session label */}
+          <Text style={[typography.caption, { color: colors.primary, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.xs }]}>
+            ACTIVE SESSION
+          </Text>
+
+          {/* Workout name */}
+          <Text style={[typography.h3, { color: colors.text }]}>
             {activeSession.name}
           </Text>
-          {/* Progress stats */}
-          <View style={[styles.progressDetails, { marginTop: spacing.sm }]}>
-            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-              {activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0)}/
-              {activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0)} sets
-            </Text>
-            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-              {Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000)} min elapsed
-            </Text>
-          </View>
+
+          {/* Progress stats — single line */}
+          <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+            {activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0)}/
+            {activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0)} sets · {Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000)} min elapsed
+          </Text>
+
           {/* Exercise list preview */}
           <View style={[styles.exercisePreview, { marginTop: spacing.sm }]}>
             {(activeExercisesExpanded ? activeSession.exercises : activeSession.exercises.slice(0, 3)).map((e) => {
@@ -380,12 +371,16 @@ export default function WorkoutTab() {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Resume CTA */}
           <Button
             title="Resume Workout"
             size="md"
             onPress={() => router.push('/workout/active')}
             style={{ marginTop: spacing.md, backgroundColor: colors.primary }}
           />
+
+          {/* Discard — subtle text link */}
           <TouchableOpacity
             onPress={() => {
               crossPlatformAlert(
@@ -399,7 +394,7 @@ export default function WorkoutTab() {
             }}
             style={{ alignSelf: 'center', marginTop: spacing.sm }}
           >
-            <Text style={[typography.bodySmall, { color: colors.error }]}>Discard Workout</Text>
+            <Text style={[typography.bodySmall, { color: colors.textTertiary }]}>Discard</Text>
           </TouchableOpacity>
         </Card>
       )}

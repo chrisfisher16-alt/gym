@@ -6,6 +6,7 @@
 //   health-coach://workout/{sessionId}     -> /workout/session/{sessionId}
 //   health-coach://achievement/{id}        -> /(tabs)/progress (with achievement highlight)
 //   health-coach://share/workout/{id}      -> shared workout summary view
+//   health-coach://invite/{code}            -> invite redemption flow
 //
 // Expo Router handles most of this automatically via the file-based
 // routing convention. This file provides helpers for constructing
@@ -30,6 +31,11 @@ export function buildAchievementLink(achievementId: string): string {
 /** Build a shareable web URL for a workout */
 export function buildShareableWorkoutUrl(sessionId: string): string {
   return `https://${WEB_HOST}/share/workout/${sessionId}`;
+}
+
+/** Build an invite deep link URL */
+export function buildInviteLink(code: string): string {
+  return `${SCHEME}://invite/${code}`;
 }
 
 /** Share a workout summary using the native share sheet */
