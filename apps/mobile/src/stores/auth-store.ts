@@ -371,25 +371,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     _initPromise = null;
 
     // Fire-and-forget Supabase sign-out — local cleanup happens regardless
-    try { await supabase.auth.signOut(); } catch {}
+    try { await supabase.auth.signOut(); } catch (e) { console.warn('[AuthStore] signOut failed:', e); }
 
     // Reset all stores (best effort, each in its own try/catch)
-    try { const { useOnboardingStore } = require('./onboarding-store'); useOnboardingStore.getState().reset(); } catch {}
-    try { const { useProfileStore } = require('./profile-store'); useProfileStore.getState().reset(); } catch {}
-    try { const { useWorkoutStore } = require('./workout-store'); useWorkoutStore.getState().reset?.(); } catch {}
-    try { const { useNutritionStore } = require('./nutrition-store'); useNutritionStore.getState().reset?.(); } catch {}
-    try { const { useCoachStore } = require('./coach-store'); useCoachStore.getState().reset?.(); } catch {}
-    try { const { useNotificationStore } = require('./notification-store'); useNotificationStore.getState().reset?.(); } catch {}
-    try { const { useMeasurementsStore } = require('./measurements-store'); await useMeasurementsStore.getState().reset(); } catch {}
-    try { const { useAchievementsStore } = require('./achievements-store'); await useAchievementsStore.getState().reset(); } catch {}
-    try { const { useHealthStore } = require('./health-store'); await useHealthStore.getState().disconnect(); } catch {}
-    try { const { useSpaceStore } = require('./space-store'); await useSpaceStore.getState().reset(); } catch {}
-    try { const { useGroceryStore } = require('./grocery-store'); useGroceryStore.getState().clearList(); } catch {}
-    try { const { useSmartWorkoutStore } = require('./smart-workout-store'); await useSmartWorkoutStore.getState().reset(); } catch {}
-    try { const { useFeedStore } = require('./feed-store'); useFeedStore.getState().reset(); } catch {}
-    try { const { useFeedbackStore } = require('./feedback-store'); useFeedbackStore.getState().reset(); } catch {}
-    try { const { useFriendsStore } = require('./friends-store'); useFriendsStore.getState().reset(); } catch {}
-    try { const { useSubscriptionStore } = require('./subscription-store'); await useSubscriptionStore.getState().logout(); } catch {}
+    try { const { useOnboardingStore } = require('./onboarding-store'); useOnboardingStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset onboarding failed:', e); }
+    try { const { useProfileStore } = require('./profile-store'); useProfileStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset profile failed:', e); }
+    try { const { useWorkoutStore } = require('./workout-store'); useWorkoutStore.getState().reset?.(); } catch (e) { console.warn('[AuthStore] reset workout failed:', e); }
+    try { const { useNutritionStore } = require('./nutrition-store'); useNutritionStore.getState().reset?.(); } catch (e) { console.warn('[AuthStore] reset nutrition failed:', e); }
+    try { const { useCoachStore } = require('./coach-store'); useCoachStore.getState().reset?.(); } catch (e) { console.warn('[AuthStore] reset coach failed:', e); }
+    try { const { useNotificationStore } = require('./notification-store'); useNotificationStore.getState().reset?.(); } catch (e) { console.warn('[AuthStore] reset notifications failed:', e); }
+    try { const { useMeasurementsStore } = require('./measurements-store'); await useMeasurementsStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset measurements failed:', e); }
+    try { const { useAchievementsStore } = require('./achievements-store'); await useAchievementsStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset achievements failed:', e); }
+    try { const { useHealthStore } = require('./health-store'); await useHealthStore.getState().disconnect(); } catch (e) { console.warn('[AuthStore] reset health failed:', e); }
+    try { const { useSpaceStore } = require('./space-store'); await useSpaceStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset spaces failed:', e); }
+    try { const { useGroceryStore } = require('./grocery-store'); useGroceryStore.getState().clearList(); } catch (e) { console.warn('[AuthStore] reset grocery failed:', e); }
+    try { const { useSmartWorkoutStore } = require('./smart-workout-store'); await useSmartWorkoutStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset smart-workout failed:', e); }
+    try { const { useFeedStore } = require('./feed-store'); useFeedStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset feed failed:', e); }
+    try { const { useFeedbackStore } = require('./feedback-store'); useFeedbackStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset feedback failed:', e); }
+    try { const { useFriendsStore } = require('./friends-store'); useFriendsStore.getState().reset(); } catch (e) { console.warn('[AuthStore] reset friends failed:', e); }
+    try { const { useSubscriptionStore } = require('./subscription-store'); await useSubscriptionStore.getState().logout(); } catch (e) { console.warn('[AuthStore] reset subscription failed:', e); }
     // theme-store is intentionally NOT reset on sign-out — theme preference persists across logins
 
     // Clear all user-specific AsyncStorage keys that may not have been
@@ -449,6 +449,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     // Force navigation — root index.tsx evaluates auth state and redirects appropriately
-    try { router.replace('/'); } catch {}
+    try { router.replace('/'); } catch (e) { console.warn('[AuthStore] navigation failed:', e); }
   },
 }));

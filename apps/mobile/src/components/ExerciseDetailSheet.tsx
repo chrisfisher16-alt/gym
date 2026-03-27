@@ -395,7 +395,7 @@ export function ExerciseDetailSheet({
                 How to Perform
               </Text>
               {exercise.instructions.map((step, i) => (
-                <View key={i} style={styles.instructionRow}>
+                <View key={`step-${i}`} style={styles.instructionRow}>
                   <View
                     style={[
                       styles.stepNumber,
@@ -443,7 +443,7 @@ export function ExerciseDetailSheet({
                   </View>
                   {exercise.tips.map((tip, i) => (
                     <Text
-                      key={i}
+                      key={`tip-${i}`}
                       style={[
                         typography.bodySmall,
                         { color: colors.textSecondary, marginTop: spacing.xs },
@@ -521,7 +521,7 @@ export function ExerciseDetailSheet({
             {historyData.sessions.length > 0 ? (
               historyData.sessions.map((session, i) => (
                 <View
-                  key={i}
+                  key={`session-${session.date}`}
                   style={[
                     styles.historyRow,
                     {

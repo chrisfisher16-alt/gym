@@ -532,7 +532,7 @@ function ToggleRow({
         value={value}
         onValueChange={onToggle}
         trackColor={{ true: colors.primary, false: colors.border }}
-        thumbColor="#FFFFFF"
+        thumbColor={colors.textOnPrimary}
       />
     </View>
   );
@@ -575,7 +575,7 @@ function MealToggleRow({
             value={enabled}
             onValueChange={onToggle}
             trackColor={{ true: colors.primary, false: colors.border }}
-            thumbColor="#FFFFFF"
+            thumbColor={colors.textOnPrimary}
             style={{ marginLeft: sp.sm }}
           />
         </View>

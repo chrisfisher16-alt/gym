@@ -175,7 +175,7 @@ export async function getAIConfig(): Promise<AIConfig> {
   }
   // First launch — persist the default so chat can read it immediately
   cachedConfig = DEFAULT_CONFIG;
-  SecureStore.setItemAsync(SECURE_AI_CONFIG_KEY, JSON.stringify(DEFAULT_CONFIG)).catch(() => {});
+  SecureStore.setItemAsync(SECURE_AI_CONFIG_KEY, JSON.stringify(DEFAULT_CONFIG)).catch((e) => console.warn('[AIProvider] persist default config failed:', e));
   return DEFAULT_CONFIG;
 }
 
@@ -198,7 +198,7 @@ export function invalidateConfigCache(): void {
  */
 export function clearConfigCache(): void {
   cachedConfig = null;
-  SecureStore.deleteItemAsync(SECURE_AI_CONFIG_KEY).catch(() => {});
+  SecureStore.deleteItemAsync(SECURE_AI_CONFIG_KEY).catch((e) => console.warn('[AIProvider] clear config failed:', e));
 }
 
 /**

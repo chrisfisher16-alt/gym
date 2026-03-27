@@ -221,7 +221,7 @@ export async function mergeWorkoutHistory(): Promise<void> {
       AsyncStorage.setItem(
         '@workout/history',
         JSON.stringify(merged),
-      ).catch(() => {});
+      ).catch((e) => console.warn('[WorkoutSync] persist merged history failed:', e));
     }
   } catch (err) {
     console.warn('Workout history merge failed (non-fatal):', err);

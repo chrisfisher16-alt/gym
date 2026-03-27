@@ -9,7 +9,7 @@ let Haptics: typeof import('expo-haptics') | null = null;
 if (Platform.OS !== 'web') {
   try {
     Haptics = require('expo-haptics');
-  } catch {}
+  } catch (e) { console.warn('[Haptics] module unavailable:', e); }
 }
 
 // ── Primitives ──────────────────────────────────────────────────

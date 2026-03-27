@@ -99,7 +99,7 @@ function ConfettiBurst({ visible }: { visible: boolean }) {
 
         return (
           <Animated.View
-            key={i}
+            key={`confetti-${i}`}
             style={{
               position: 'absolute',
               left: piece.x,

@@ -42,14 +42,14 @@ function getTimeRemaining(endDate: string): string {
   return `${hours}h remaining`;
 }
 
-function getStatusColor(status: string, goldColor: string, colors: any) {
+function getStatusColor(status: string, colors: any) {
   switch (status) {
     case 'active':
-      return goldColor;
+      return colors.gold;
     case 'pending':
       return colors.textSecondary;
     case 'completed':
-      return colors.success ?? '#4CAF50';
+      return colors.success;
     default:
       return colors.textTertiary;
   }
@@ -61,7 +61,6 @@ export default function ChallengeDetailScreen() {
   const router = useRouter();
   const { challengeId } = useLocalSearchParams<{ challengeId: string }>();
   const { colors, spacing, radius, typography, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
 
   const {
     activeChallenges,
@@ -144,7 +143,7 @@ export default function ChallengeDetailScreen() {
     return (
       <ScreenContainer>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={goldColor} />
+          <ActivityIndicator size="large" color={colors.gold} />
         </View>
       </ScreenContainer>
     );
@@ -173,13 +172,13 @@ export default function ChallengeDetailScreen() {
     );
   }
 
-  const statusColor = getStatusColor(challenge.status, goldColor, colors);
+  const statusColor = getStatusColor(challenge.status, colors);
   const timeRemaining = getTimeRemaining(challenge.endsAt);
 
   return (
     <ScreenContainer
       refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={goldColor} />
+        <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.gold} />
       }
     >
       {/* Header */}
@@ -228,13 +227,13 @@ export default function ChallengeDetailScreen() {
                 borderRadius: radius.lg,
                 padding: spacing.base,
                 borderWidth: 1,
-                borderColor: goldColor,
+                borderColor: colors.gold,
               },
             ]}
           >
             <Text style={{ fontSize: 28 }}>🏆</Text>
             <View style={{ marginLeft: spacing.md, flex: 1 }}>
-              <Text style={[typography.labelSmall, { color: goldColor }]}>CHALLENGE COMPLETE</Text>
+              <Text style={[typography.labelSmall, { color: colors.gold }]}>CHALLENGE COMPLETE</Text>
               <Text style={[typography.label, { color: colors.text }]}>
                 {sortedParticipants[0].displayName} wins!
               </Text>
@@ -256,11 +255,11 @@ export default function ChallengeDetailScreen() {
         >
           <View style={styles.infoRow}>
             <View style={[styles.infoItem, { gap: spacing.xs }]}>
-              <Ionicons name={metricInfo.icon as any} size={18} color={goldColor} />
+              <Ionicons name={metricInfo.icon as any} size={18} color={colors.gold} />
               <Text style={[typography.label, { color: colors.text }]}>{metricInfo.label}</Text>
             </View>
             <View style={[styles.infoItem, { gap: spacing.xs }]}>
-              <Ionicons name="time-outline" size={18} color={goldColor} />
+              <Ionicons name="time-outline" size={18} color={colors.gold} />
               <Text style={[typography.label, { color: colors.text }]}>{timeRemaining}</Text>
             </View>
           </View>
@@ -300,7 +299,7 @@ export default function ChallengeDetailScreen() {
                     borderRadius: radius.md,
                     padding: spacing.sm,
                     borderWidth: isCurrentUser ? 1 : 0,
-                    borderColor: isCurrentUser ? goldColor : 'transparent',
+                    borderColor: isCurrentUser ? colors.gold : 'transparent',
                   },
                 ]}
               >
@@ -320,7 +319,7 @@ export default function ChallengeDetailScreen() {
                   style={[
                     styles.avatar,
                     {
-                      backgroundColor: isCurrentUser ? goldColor : colors.primaryMuted,
+                      backgroundColor: isCurrentUser ? colors.gold : colors.primaryMuted,
                       borderRadius: radius.full,
                     },
                   ]}
@@ -330,7 +329,7 @@ export default function ChallengeDetailScreen() {
                       typography.labelSmall,
                       {
                         color: isCurrentUser
-                          ? dark ? '#1A1A1A' : '#FFFFFF'
+                          ? colors.textInverse
                           : colors.primary,
                       },
                     ]}
@@ -346,7 +345,7 @@ export default function ChallengeDetailScreen() {
                       style={[
                         typography.label,
                         {
-                          color: isCurrentUser ? goldColor : colors.text,
+                          color: isCurrentUser ? colors.gold : colors.text,
                           flex: 1,
                         },
                       ]}
@@ -355,7 +354,7 @@ export default function ChallengeDetailScreen() {
                       {p.displayName}
                       {isCurrentUser ? ' (You)' : ''}
                     </Text>
-                    <Text style={[typography.label, { color: isCurrentUser ? goldColor : colors.text }]}>
+                    <Text style={[typography.label, { color: isCurrentUser ? colors.gold : colors.text }]}>
                       {p.score}
                     </Text>
                   </View>
@@ -374,7 +373,7 @@ export default function ChallengeDetailScreen() {
                         styles.barFill,
                         {
                           width: `${barWidth}%`,
-                          backgroundColor: isCurrentUser ? goldColor : colors.primary,
+                          backgroundColor: isCurrentUser ? colors.gold : colors.primary,
                           borderRadius: radius.sm,
                           height: 6,
                         },
@@ -428,7 +427,7 @@ export default function ChallengeDetailScreen() {
               style={[
                 styles.actionButton,
                 {
-                  backgroundColor: goldColor,
+                  backgroundColor: colors.gold,
                   borderRadius: radius.lg,
                   paddingVertical: spacing.base,
                   flex: 1,
@@ -438,9 +437,9 @@ export default function ChallengeDetailScreen() {
               accessibilityLabel="Accept challenge"
             >
               {isAccepting ? (
-                <ActivityIndicator size="small" color={dark ? '#1A1A1A' : '#FFFFFF'} />
+                <ActivityIndicator size="small" color={colors.textInverse} />
               ) : (
-                <Text style={[typography.label, { color: dark ? '#1A1A1A' : '#FFFFFF' }]}>
+                <Text style={[typography.label, { color: colors.textInverse }]}>
                   Accept
                 </Text>
               )}
@@ -462,8 +461,8 @@ export default function ChallengeDetailScreen() {
               },
             ]}
           >
-            <Ionicons name="pulse-outline" size={20} color={goldColor} />
-            <Text style={[typography.label, { color: goldColor, marginLeft: spacing.sm }]}>
+            <Ionicons name="pulse-outline" size={20} color={colors.gold} />
+            <Text style={[typography.label, { color: colors.gold, marginLeft: spacing.sm }]}>
               Challenge In Progress
             </Text>
           </View>

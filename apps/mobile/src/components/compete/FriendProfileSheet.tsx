@@ -29,8 +29,7 @@ export function FriendProfileSheet({
   onChallenge,
   onRemove,
 }: FriendProfileSheetProps) {
-  const { colors, typography, spacing, radius, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
+  const { colors, typography, spacing, radius } = useTheme();
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
@@ -129,7 +128,7 @@ export function FriendProfileSheet({
           style={[
             styles.challengeButton,
             {
-              backgroundColor: goldColor,
+              backgroundColor: colors.gold,
               borderRadius: radius.md,
               paddingVertical: spacing.md,
               marginTop: spacing.lg,
@@ -138,8 +137,8 @@ export function FriendProfileSheet({
           accessibilityRole="button"
           accessibilityLabel={`Challenge ${friend.displayName}`}
         >
-          <Ionicons name="trophy" size={18} color="#FFFFFF" />
-          <Text style={[typography.label, { color: '#FFFFFF', marginLeft: spacing.sm }]}>
+          <Ionicons name="trophy" size={18} color={colors.textOnPrimary} />
+          <Text style={[typography.label, { color: colors.textOnPrimary, marginLeft: spacing.sm }]}>
             Challenge
           </Text>
         </Pressable>

@@ -265,6 +265,6 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
     await Promise.all([
       AsyncStorage.removeItem(STORAGE_KEY),
       AsyncStorage.removeItem(XP_STORAGE_KEY),
-    ]).catch(() => {});
+    ]).catch((e) => console.warn('[AchievementsStore] reset storage failed:', e));
   },
 }));

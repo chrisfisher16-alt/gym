@@ -67,12 +67,12 @@ function buildSmoothPath(points: { x: number; y: number }[]): string {
 }
 
 /** Determine trend color based on first/last data values */
-function getTrendColor(data: number[]): string {
+function getTrendColor(data: number[], colors: { completed: string; error: string; textTertiary: string }): string {
   const first = data[0];
   const last = data[data.length - 1];
-  if (last > first) return '#4CAF50'; // green — upward
-  if (last < first) return '#F44336'; // red — downward
-  return '#9E9E9E'; // neutral gray
+  if (last > first) return colors.completed; // upward
+  if (last < first) return colors.error; // downward
+  return colors.textTertiary; // neutral
 }
 
 export function Sparkline({
@@ -102,7 +102,7 @@ export function Sparkline({
 
   // Determine line color
   const lineColor = isInline
-    ? (trendColor ?? getTrendColor(data))
+    ? (trendColor ?? getTrendColor(data, colors))
     : (colorProp ?? colors.chartLine);
   const gradientColor = fillColorProp ?? lineColor;
 

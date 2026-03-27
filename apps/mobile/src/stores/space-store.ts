@@ -314,6 +314,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set({ spaces: [], activeSpaceId: null, isInitialized: false });
     await Promise.all(
       Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
-    ).catch(() => {});
+    ).catch((e) => console.warn('[SpaceStore] reset storage failed:', e));
   },
 }));

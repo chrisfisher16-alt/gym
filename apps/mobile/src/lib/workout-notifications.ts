@@ -58,7 +58,7 @@ export async function showWorkoutNotification(
   if (activeNotificationId) {
     try {
       await Notifications.dismissNotificationAsync(activeNotificationId);
-    } catch {}
+    } catch (e) { console.warn('[WorkoutNotification] dismiss failed:', e); }
   }
 
   activeNotificationId = await Notifications.scheduleNotificationAsync({
@@ -92,7 +92,7 @@ export async function showRestTimerNotification(
   if (activeNotificationId) {
     try {
       await Notifications.dismissNotificationAsync(activeNotificationId);
-    } catch {}
+    } catch (e) { console.warn('[WorkoutNotification] dismiss failed:', e); }
   }
 
   activeNotificationId = await Notifications.scheduleNotificationAsync({
@@ -116,7 +116,7 @@ export async function clearWorkoutNotification(): Promise<void> {
   if (activeNotificationId) {
     try {
       await Notifications.cancelScheduledNotificationAsync(activeNotificationId);
-    } catch {}
+    } catch (e) { console.warn('[WorkoutNotification] cancel failed:', e); }
     activeNotificationId = null;
   }
 
@@ -129,5 +129,5 @@ export async function clearWorkoutNotification(): Promise<void> {
         await Notifications.dismissNotificationAsync(n.request.identifier);
       }
     }
-  } catch {}
+  } catch (e) { console.warn('[WorkoutNotification] cleanup failed:', e); }
 }

@@ -15,7 +15,7 @@ interface StartWorkoutSheetProps {
   onStartEmptyWorkout: () => void;
 }
 
-const AI_PURPLE = '#8B5CF6';
+
 
 export function StartWorkoutSheet({
   visible,
@@ -110,7 +110,7 @@ export function StartWorkoutSheet({
         ]}
       >
         <View style={styles.cardTop}>
-          <Ionicons name="sparkles" size={20} color={AI_PURPLE} />
+          <Ionicons name="sparkles" size={20} color={colors.aiAccent} />
           <View style={{ flex: 1, marginLeft: spacing.sm }}>
             <Text style={[typography.labelLarge, { color: colors.text }]}>AI Workout</Text>
             <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
@@ -121,8 +121,8 @@ export function StartWorkoutSheet({
         <View style={[styles.cardBottom, { marginTop: spacing.sm }]}>
           <View />
           <View style={styles.actionRow}>
-            <Text style={[typography.label, { color: AI_PURPLE }]}>Generate</Text>
-            <Ionicons name="arrow-forward" size={16} color={AI_PURPLE} style={{ marginLeft: 4 }} />
+            <Text style={[typography.label, { color: colors.aiAccent }]}>Generate</Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.aiAccent} style={{ marginLeft: 4 }} />
           </View>
         </View>
       </TouchableOpacity>

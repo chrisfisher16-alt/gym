@@ -12,7 +12,6 @@ export default function SocialLayout() {
       <Stack.Screen name="feed" />
       <Stack.Screen name="friends" />
       <Stack.Screen name="leaderboard" />
-      <Stack.Screen name="challenges/create" />
       <Stack.Screen name="challenges/[challengeId]" />
     </Stack>
   );

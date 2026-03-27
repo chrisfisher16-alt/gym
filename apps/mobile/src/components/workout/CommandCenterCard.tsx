@@ -170,7 +170,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   onRemoveExercise,
   onCreateSuperset,
 }: CommandCenterCardProps) {
-  const { colors, spacing, radius, typography, dark } = useTheme();
+  const { colors, spacing, radius, typography } = useTheme();
   const unitPref = useProfileStore((s) => s.profile.unitPreference);
   const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
@@ -225,13 +225,12 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   );
 
   // ── Gold accent color ──────────────────────────────────────────
-  const goldAccent = dark ? '#CFAE80' : '#B8944F';
 
   // ── Swipe actions ─────────────────────────────────────────────
   const leftSwipeAction = useMemo<SwipeAction | undefined>(
     () =>
       onCreateSuperset
-        ? { label: 'Superset', icon: 'link-outline', color: '#B8944F', onTrigger: onCreateSuperset }
+        ? { label: 'Superset', icon: 'link-outline', color: colors.gold, onTrigger: onCreateSuperset }
         : undefined,
     [onCreateSuperset],
   );
@@ -239,7 +238,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
   const rightSwipeAction = useMemo<SwipeAction | undefined>(
     () =>
       onRemoveExercise
-        ? { label: 'Remove', icon: 'trash-outline', color: '#E53E3E', onTrigger: onRemoveExercise }
+        ? { label: 'Remove', icon: 'trash-outline', color: colors.error, onTrigger: onRemoveExercise }
         : undefined,
     [onRemoveExercise],
   );
@@ -264,7 +263,7 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
         },
         isCurrent && {
           borderLeftWidth: GOLD_BORDER_WIDTH,
-          borderLeftColor: goldAccent,
+          borderLeftColor: colors.gold,
         },
       ]}
     >
@@ -310,10 +309,10 @@ export const CommandCenterCard = React.memo(function CommandCenterCard({
               <View
                 style={[
                   styles.currentPill,
-                  { backgroundColor: goldAccent, borderRadius: radius.sm },
+                  { backgroundColor: colors.gold, borderRadius: radius.sm },
                 ]}
               >
-                <Text style={[styles.currentPillText, { color: dark ? '#0D0D0D' : '#FFFFFF' }]}>
+                <Text style={[styles.currentPillText, { color: colors.textInverse }]}>
                   CURRENT
                 </Text>
               </View>

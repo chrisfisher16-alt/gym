@@ -107,7 +107,7 @@ export default function ProgramsScreen() {
             <View style={styles.dotsRow}>
               {program.days.map((day, i) => (
                 <Ionicons
-                  key={i}
+                  key={`day-${i}-${day.dayType}`}
                   name={DAY_TYPE_ICONS[day.dayType] as any}
                   size={14}
                   color={DAY_TYPE_COLORS[day.dayType]}

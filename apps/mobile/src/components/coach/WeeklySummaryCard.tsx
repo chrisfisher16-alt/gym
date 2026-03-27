@@ -100,7 +100,7 @@ export function WeeklySummaryCard({ data }: WeeklySummaryCardProps) {
             PRs This Week
           </Text>
           {prs.map((pr, i) => (
-            <View key={i} style={styles.prRow}>
+            <View key={`pr-${pr.exercise}`} style={styles.prRow}>
               <Ionicons name="trophy" size={14} color={colors.warning} />
               <Text style={[typography.bodySmall, { color: colors.text, marginLeft: spacing.xs }]}>
                 {pr.exercise}: {pr.value}
@@ -135,7 +135,7 @@ export function WeeklySummaryCard({ data }: WeeklySummaryCardProps) {
             Recommendations
           </Text>
           {recommendations.map((rec, i) => (
-            <Text key={i} style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+            <Text key={`rec-${i}`} style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
               • {rec}
             </Text>
           ))}

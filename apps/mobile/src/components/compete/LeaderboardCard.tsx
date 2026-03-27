@@ -73,7 +73,6 @@ export function LeaderboardCard({
   unitLabel,
 }: LeaderboardCardProps) {
   const { colors, typography, spacing, radius, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
 
   const sorted = useMemo(
     () => [...entries].sort((a, b) => b.value - a.value),
@@ -90,7 +89,7 @@ export function LeaderboardCard({
       </Text>
 
       {isLoading ? (
-        <ActivityIndicator size="small" color={goldColor} />
+        <ActivityIndicator size="small" color={colors.gold} />
       ) : (
         <View style={styles.top3Preview}>
           {top3.map((entry, i) => (
@@ -169,7 +168,7 @@ export function LeaderboardCard({
             style={[
               typography.body,
               {
-                color: entry.isCurrentUser ? goldColor : colors.text,
+                color: entry.isCurrentUser ? colors.gold : colors.text,
                 fontWeight: entry.isCurrentUser ? '600' : '400',
                 flex: 1,
                 marginLeft: spacing.sm,
@@ -185,7 +184,7 @@ export function LeaderboardCard({
           <Text
             style={[
               typography.label,
-              { color: i < 3 ? goldColor : colors.textSecondary },
+              { color: i < 3 ? colors.gold : colors.textSecondary },
             ]}
           >
             {formatValue(entry.value, unitLabel)}
@@ -230,7 +229,7 @@ export function LeaderboardCard({
                   style={[
                     typography.caption,
                     {
-                      color: isActive ? goldColor : colors.textSecondary,
+                      color: isActive ? colors.gold : colors.textSecondary,
                       fontWeight: isActive ? '600' : '400',
                     },
                   ]}
@@ -274,7 +273,7 @@ export function LeaderboardCard({
                   style={[
                     typography.caption,
                     {
-                      color: isActive ? goldColor : colors.textSecondary,
+                      color: isActive ? colors.gold : colors.textSecondary,
                       fontWeight: isActive ? '600' : '400',
                     },
                   ]}

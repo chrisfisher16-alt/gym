@@ -58,7 +58,7 @@ export function SkeletonBlock({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const bgColor = dark ? '#252525' : '#F0EEE9';
+  const bgColor = colors.surfaceSecondary;
   const shimmerColors: [string, string, string] = dark
     ? ['transparent', 'rgba(196, 162, 101, 0.08)', 'transparent']
     : ['transparent', 'rgba(255, 255, 255, 0.6)', 'transparent'];

@@ -17,7 +17,7 @@ if (Platform.OS !== 'web') {
     const mod = require('react-native-purchases');
     Purchases = mod.default;
     LOG_LEVEL = mod.LOG_LEVEL;
-  } catch {}
+  } catch (e) { console.warn('[RevenueCat] module unavailable:', e); }
 }
 
 // ── Configuration ─────────────────────────────────────────────────────

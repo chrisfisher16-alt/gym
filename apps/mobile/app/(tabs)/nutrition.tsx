@@ -11,7 +11,7 @@ import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 // Lazy-load haptics (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
 if (Platform.OS !== 'web') {
-  try { Haptics = require('expo-haptics'); } catch {}
+  try { Haptics = require('expo-haptics'); } catch (e) { console.warn('[Nutrition] haptics unavailable:', e); }
 }
 import { useNutritionStore } from '../../src/stores/nutrition-store';
 import { useNutritionDashboard } from '../../src/hooks/useNutritionDashboard';
@@ -534,7 +534,7 @@ export default function NutritionTab() {
               <View style={{ gap: spacing.sm }}>
                 <Text style={[typography.label, { color: colors.text, marginTop: spacing.xs }]}>By Meal</Text>
                 {mealMacroBreakdown.map((m, i) => (
-                  <View key={i} style={[styles.breakdownRow, { paddingVertical: spacing.xs }]}>
+                  <View key={`meal-${m.name}-${i}`} style={[styles.breakdownRow, { paddingVertical: spacing.xs }]}>
                     <Text style={[typography.bodySmall, { color: colors.text, flex: 1 }]} numberOfLines={1}>
                       {m.name}
                     </Text>

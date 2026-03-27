@@ -644,6 +644,6 @@ export const useSmartWorkoutStore = create<SmartWorkoutState>((set, get) => ({
     });
     await Promise.all(
       Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
-    ).catch(() => {});
+    ).catch((e) => console.warn('[SmartWorkoutStore] reset storage failed:', e));
   },
 }));

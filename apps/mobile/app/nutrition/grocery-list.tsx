@@ -168,7 +168,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
     }
     try {
       await Share.share({ message: lines.join('\n') });
-    } catch {}
+    } catch (e) { console.warn('[GroceryList] share failed:', e); }
   }, [currentList]);
 
   // ── Clear ──────────────────────────────────────────────────────

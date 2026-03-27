@@ -67,7 +67,7 @@ async function getUsageCount(type: UsageType, period: string): Promise<number> {
 
 async function syncLocalCache(type: UsageType, period: string, used: number): Promise<void> {
   const key = getStorageKey(type, period);
-  await AsyncStorage.setItem(key, JSON.stringify({ count: used, period })).catch(() => {});
+  await AsyncStorage.setItem(key, JSON.stringify({ count: used, period })).catch((e) => console.warn('[UsageLimits] cache sync failed:', e));
 }
 
 // ── Check Limits ──────────────────────────────────────────────────────

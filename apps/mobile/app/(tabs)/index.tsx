@@ -219,19 +219,19 @@ export default function TodayTab() {
           } else {
             // New day — reset
             setDismissed(new Set());
-            AsyncStorage.removeItem(DISMISSED_KEY).catch(() => {});
+            AsyncStorage.removeItem(DISMISSED_KEY).catch((e) => console.warn('[Home] clear dismissed failed:', e));
           }
         } catch {
           setDismissed(new Set());
         }
       }
-    }).catch(() => {});
+    }).catch((e) => console.warn('[Home] load dismissed state failed:', e));
   }, []);
   const dismiss = useCallback((id: string) => {
     setDismissed((p) => {
       const n = new Set(p).add(id);
       const todayStr = new Date().toISOString().split('T')[0];
-      AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify({ date: todayStr, dismissed: Array.from(n) })).catch(() => {});
+      AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify({ date: todayStr, dismissed: Array.from(n) })).catch((e) => console.warn('[Home] persist dismissed failed:', e));
       return n;
     });
   }, []);

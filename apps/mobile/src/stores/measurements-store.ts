@@ -158,7 +158,7 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     let permanentUri = photo.uri;
     try {
       const PHOTOS_DIR = `${FileSystem.documentDirectory}progress-photos/`;
-      await FileSystem.makeDirectoryAsync(PHOTOS_DIR, { intermediates: true }).catch(() => {});
+      await FileSystem.makeDirectoryAsync(PHOTOS_DIR, { intermediates: true }).catch((e) => console.warn('[MeasurementsStore] mkdir failed:', e));
 
       const ext = photo.uri.split('.').pop()?.toLowerCase() || 'jpg';
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -184,7 +184,7 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     } catch (error) {
       // Clean up copied file to prevent orphaning
       if (permanentUri !== photo.uri) {
-        FileSystem.deleteAsync(permanentUri, { idempotent: true }).catch(() => {});
+        FileSystem.deleteAsync(permanentUri, { idempotent: true }).catch((e) => console.warn('[MeasurementsStore] cleanup orphan failed:', e));
       }
       throw error;
     }
@@ -193,7 +193,7 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
   deletePhoto: async (id) => {
     const photo = get().photos.find((p) => p.id === id);
     if (photo) {
-      await FileSystem.deleteAsync(photo.uri, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(photo.uri, { idempotent: true }).catch((e) => console.warn('[MeasurementsStore] delete photo failed:', e));
     }
     const photos = get().photos.filter((p) => p.id !== id);
     set({ photos });
@@ -204,7 +204,7 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
     set({ measurements: [], photos: [], isInitialized: false });
     await Promise.all([
       ...Object.values(STORAGE_KEYS).map((key) => AsyncStorage.removeItem(key)),
-      FileSystem.deleteAsync(`${FileSystem.documentDirectory}progress-photos/`, { idempotent: true }).catch(() => {}),
-    ]).catch(() => {});
+      FileSystem.deleteAsync(`${FileSystem.documentDirectory}progress-photos/`, { idempotent: true }).catch((e) => console.warn('[MeasurementsStore] delete photos dir failed:', e)),
+    ]).catch((e) => console.warn('[MeasurementsStore] reset storage failed:', e));
   },
 }));

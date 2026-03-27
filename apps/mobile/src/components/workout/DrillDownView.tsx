@@ -78,11 +78,6 @@ function getSupersetGroupMembers(
   return session.exercises.filter((e) => e.supersetGroupId === groupId && !e.isSkipped);
 }
 
-// ── Gold theme constants ─────────────────────────────────────────────
-
-const GOLD_DARK = '#CFAE80';
-const GOLD_LIGHT = '#B8944F';
-
 // ── Component ────────────────────────────────────────────────────────
 
 export function DrillDownView({
@@ -133,12 +128,12 @@ export function DrillDownView({
     const HINT_KEY = '@workout/superset_hint_seen';
     AsyncStorage.getItem(HINT_KEY).then((val) => {
       if (!val) setShowSupersetHint(true);
-    }).catch(() => {});
+    }).catch((e) => console.warn('[DrillDownView] load hint state failed:', e));
   }, []);
 
   const dismissSupersetHint = useCallback(() => {
     setShowSupersetHint(false);
-    AsyncStorage.setItem('@workout/superset_hint_seen', '1').catch(() => {});
+    AsyncStorage.setItem('@workout/superset_hint_seen', '1').catch((e) => console.warn('[DrillDownView] persist hint state failed:', e));
   }, []);
 
   // Auto-dismiss hint once user is in a superset
@@ -848,7 +843,7 @@ export function DrillDownView({
                     borderRadius: radius.md,
                     backgroundColor: isCurrent ? colors.surfaceSecondary : 'transparent',
                     borderWidth: isCurrent ? 1.5 : 0,
-                    borderColor: isCurrent ? GOLD_DARK : 'transparent',
+                    borderColor: isCurrent ? colors.gold : 'transparent',
                   }}
                 >
                   {/* Set number circle */}
@@ -858,7 +853,7 @@ export function DrillDownView({
                     borderRadius: 14,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: isCompleted ? colors.completed : isCurrent ? GOLD_DARK : colors.surfaceSecondary,
+                    backgroundColor: isCompleted ? colors.completed : isCurrent ? colors.gold : colors.surfaceSecondary,
                     marginRight: 8,
                   }}>
                     <Text style={[typography.labelSmall, {
@@ -874,13 +869,13 @@ export function DrillDownView({
                     <TextInput
                       style={{
                         borderWidth: 1,
-                        borderColor: isCurrent ? (ghostState === 'exceeding' ? GOLD_DARK : colors.border) : colors.borderLight ?? colors.border,
+                        borderColor: isCurrent ? (ghostState === 'exceeding' ? colors.gold : colors.border) : colors.borderLight ?? colors.border,
                         borderRadius: radius.md,
                         paddingVertical: 8,
                         paddingHorizontal: 12,
                         fontSize: 18,
                         fontWeight: '600',
-                        color: isCurrent && ghostState === 'exceeding' ? GOLD_DARK : colors.text,
+                        color: isCurrent && ghostState === 'exceeding' ? colors.gold : colors.text,
                         backgroundColor: isCurrent ? colors.surface : 'transparent',
                         textAlign: 'center',
                         fontVariant: ['tabular-nums'] as any,
@@ -905,13 +900,13 @@ export function DrillDownView({
                       <TextInput
                         style={{
                           borderWidth: 1,
-                          borderColor: isCurrent ? (ghostState === 'exceeding' ? GOLD_DARK : colors.border) : colors.borderLight ?? colors.border,
+                          borderColor: isCurrent ? (ghostState === 'exceeding' ? colors.gold : colors.border) : colors.borderLight ?? colors.border,
                           borderRadius: radius.md,
                           paddingVertical: 8,
                           paddingHorizontal: 12,
                           fontSize: 18,
                           fontWeight: '600',
-                          color: isCurrent && ghostState === 'exceeding' ? GOLD_DARK : colors.text,
+                          color: isCurrent && ghostState === 'exceeding' ? colors.gold : colors.text,
                           backgroundColor: isCurrent ? colors.surface : 'transparent',
                           textAlign: 'center',
                           fontVariant: ['tabular-nums'] as any,
@@ -952,7 +947,7 @@ export function DrillDownView({
                   <Text style={[styles.ghostIndicator, { color: colors.textTertiary }]}>=</Text>
                 )}
                 {ghostState === 'exceeding' && (
-                  <Reanimated.Text style={[styles.ghostIndicator, { color: GOLD_DARK }]}>↑</Reanimated.Text>
+                  <Reanimated.Text style={[styles.ghostIndicator, { color: colors.gold }]}>↑</Reanimated.Text>
                 )}
               </Reanimated.View>
             )}
@@ -1039,10 +1034,10 @@ export function DrillDownView({
             style={[
               styles.ctaButton,
               {
-                backgroundColor: GOLD_DARK,
+                backgroundColor: colors.gold,
                 borderRadius: radius.xl,
                 height: 56,
-                shadowColor: GOLD_DARK,
+                shadowColor: colors.gold,
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.4,
                 shadowRadius: 12,

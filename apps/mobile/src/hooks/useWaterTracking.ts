@@ -4,7 +4,7 @@ import { useNutritionStore } from '../stores/nutrition-store';
 
 let Haptics: typeof import('expo-haptics') | null = null;
 if (Platform.OS !== 'web') {
-  try { Haptics = require('expo-haptics'); } catch {}
+  try { Haptics = require('expo-haptics'); } catch (e) { console.warn('[WaterTracking] haptics unavailable:', e); }
 }
 
 export function useWaterTracking() {

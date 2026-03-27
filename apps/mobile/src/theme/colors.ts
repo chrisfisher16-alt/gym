@@ -95,6 +95,9 @@ export const lightColors = {
 
   // Superset
   triSet: '#8B5CF6',
+
+  // AI accent
+  aiAccent: '#8B5CF6',
 };
 
 export const darkColors: typeof lightColors = {
@@ -194,6 +197,9 @@ export const darkColors: typeof lightColors = {
 
   // Superset
   triSet: '#A78BFA',
+
+  // AI accent
+  aiAccent: '#A78BFA',
 };
 
 export type Colors = typeof lightColors;

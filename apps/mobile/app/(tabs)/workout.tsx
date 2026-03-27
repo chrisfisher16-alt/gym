@@ -471,7 +471,7 @@ export default function WorkoutTab() {
               {todayWorkout.cardioSuggestions && todayWorkout.cardioSuggestions.length > 0 && (
                 <View style={{ marginTop: spacing.sm }}>
                   {todayWorkout.cardioSuggestions.slice(0, 2).map((s, i) => (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginTop: i > 0 ? spacing.xs : 0 }}>
+                    <View key={`cardio-${s.name}`} style={{ flexDirection: 'row', alignItems: 'center', marginTop: i > 0 ? spacing.xs : 0 }}>
                       <Ionicons name={(s.icon || 'heart-outline') as keyof typeof Ionicons.glyphMap} size={16} color={DAY_TYPE_COLORS.cardio} />
                       <Text style={[typography.body, { color: colors.textSecondary, marginLeft: spacing.sm }]}>
                         {s.name} — {s.duration}
@@ -641,7 +641,7 @@ export default function WorkoutTab() {
                 variant="secondary"
                 size="md"
                 onPress={() => router.push('/workout/ai-generate')}
-                icon={<Ionicons name="sparkles" size={18} color="#8B5CF6" />}
+                icon={<Ionicons name="sparkles" size={18} color={colors.aiAccent} />}
               />
             </View>
           </View>

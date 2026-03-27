@@ -166,7 +166,7 @@ export function ExerciseInfoSheet({ visible, exercise, onClose }: ExerciseInfoSh
         <View style={{ marginBottom: spacing.lg }}>
           <Overline style={{ marginBottom: spacing.sm }}>Instructions</Overline>
           {exercise.instructions.map((step, i) => (
-            <View key={i} style={[styles.instructionRow, { marginBottom: spacing.sm }]}>
+            <View key={`step-${i}`} style={[styles.instructionRow, { marginBottom: spacing.sm }]}>
               <View
                 style={[
                   styles.stepNumber,
@@ -215,7 +215,7 @@ export function ExerciseInfoSheet({ visible, exercise, onClose }: ExerciseInfoSh
             </View>
             {exercise.tips.map((tip, i) => (
               <Text
-                key={i}
+                key={`tip-${i}`}
                 style={[
                   typography.body,
                   { color: colors.text, marginBottom: i < exercise.tips!.length - 1 ? spacing.xs : 0 },
@@ -261,7 +261,7 @@ export function ExerciseInfoSheet({ visible, exercise, onClose }: ExerciseInfoSh
           <Overline style={{ marginBottom: spacing.sm }}>History</Overline>
           {recentSessions.map((session, i) => (
             <View
-              key={i}
+              key={`history-${session.date}`}
               style={[
                 styles.historyRow,
                 {

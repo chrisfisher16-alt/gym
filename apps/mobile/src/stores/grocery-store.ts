@@ -96,7 +96,7 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
 
   clearList: () => {
     set({ currentList: null });
-    AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+    AsyncStorage.removeItem(STORAGE_KEY).catch((e) => console.warn('[GroceryStore] clear storage failed:', e));
   },
 
   mergeRecipeItems: (categoryName: string, items: GroceryItem[]) => {

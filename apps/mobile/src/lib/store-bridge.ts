@@ -133,8 +133,8 @@ export function initializeStoreBridge(): () => void {
         for (const session of state.history) {
           if (!lastHistoryIds.has(session.id)) {
             enqueueWorkoutSession(session).then(() => {
-              processQueue().catch(() => {});
-            }).catch(() => {});
+              processQueue().catch((e) => console.warn('[StoreBridge] processQueue failed:', e));
+            }).catch((e) => console.warn('[StoreBridge] enqueue failed:', e));
           }
         }
         lastHistoryIds = currentIds;

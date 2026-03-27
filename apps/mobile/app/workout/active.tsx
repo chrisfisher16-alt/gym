@@ -64,7 +64,7 @@ import { incrementUsage } from '../../src/lib/usage-limits';
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
 if (Platform.OS !== 'web') {
-  try { Haptics = require('expo-haptics'); } catch {}
+  try { Haptics = require('expo-haptics'); } catch (e) { console.warn('[ActiveWorkout] haptics unavailable:', e); }
 }
 
 // Helper to navigate away without calling router during render

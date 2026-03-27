@@ -1078,7 +1078,7 @@ export default function ProgressTab() {
                 return workoutFrequency.weeks.map((week, i) => {
                   const height = (week.count / maxCount) * 80;
                   return (
-                    <View key={i} style={styles.chartBar}>
+                    <View key={`week-${week.label}`} style={styles.chartBar}>
                       <Text style={[typography.caption, { color: colors.primary, marginBottom: 4 }]}>
                         {week.count}
                       </Text>
@@ -1322,7 +1322,7 @@ export default function ProgressTab() {
             <Card>
               {selectedPRData.map((point, i) => (
                 <View
-                  key={i}
+                  key={`pr-${point.date}`}
                   style={[styles.progressPoint, { marginBottom: i < selectedPRData.length - 1 ? spacing.sm : 0 }]}
                 >
                   <View
@@ -1371,7 +1371,7 @@ export default function ProgressTab() {
                     day.status === 'yellow' ? colors.warning :
                     colors.error;
                   return (
-                    <View key={i} style={[styles.adherenceBar, { marginRight: spacing.xs }]}>
+                    <View key={`adherence-${day.label}`} style={[styles.adherenceBar, { marginRight: spacing.xs }]}>
                       <Text style={[{ fontSize: 9, color: colors.textTertiary, marginBottom: 2 }]}>
                         {Math.round(day.pct)}%
                       </Text>
@@ -1460,7 +1460,7 @@ export default function ProgressTab() {
                           />
                           <View style={{ marginTop: spacing.sm }}>
                             {prHistory?.slice(-3).reverse().map((point, i) => (
-                              <View key={i} style={[styles.progressPoint, { marginBottom: i < 2 ? spacing.xs : 0 }]}>
+                              <View key={`pr-hist-${point.date}`} style={[styles.progressPoint, { marginBottom: i < 2 ? spacing.xs : 0 }]}>
                                 <View style={[styles.progressDot, { backgroundColor: colors.primary, borderRadius: radius.full }]} />
                                 <Text style={[typography.caption, { color: colors.textSecondary, marginLeft: spacing.sm, flex: 1 }]}>
                                   {typeof point.date === 'string' && point.date.length > 10

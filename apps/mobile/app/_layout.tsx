@@ -88,11 +88,11 @@ function RootLayout() {
         const { requireOptionalNativeModule } = require('expo-modules-core');
         const devMenuPrefs = requireOptionalNativeModule('DevMenuPreferences');
         devMenuPrefs?.setPreferencesAsync?.({ showFloatingActionButton: false });
-      } catch {}
+      } catch (e) { console.warn('[Layout] dev menu prefs failed:', e); }
     }
 
     // Migrate AI config on all platforms (clears stale cached API key)
-    migrateAIConfig().catch(() => {});
+    migrateAIConfig().catch((e) => console.warn('[Layout] AI config migration failed:', e));
 
     // Initialize theme store (loads persisted color mode)
     useThemeStore.getState().initialize();
@@ -123,14 +123,14 @@ function RootLayout() {
         try {
           const SplashScreen = require('expo-splash-screen');
           SplashScreen.hideAsync();
-        } catch {}
+        } catch (e) { console.warn('[Layout] splash hide failed:', e); }
       }
     }
     
     try {
       const SplashScreen = require('expo-splash-screen');
       SplashScreen.preventAutoHideAsync();
-    } catch {}
+    } catch (e) { console.warn('[Layout] splash prevent hide failed:', e); }
     
     init();
   }, []);

@@ -13,19 +13,21 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { WorkoutPhase } from '../../hooks/useWorkoutPhase';
+import { useTheme } from '../../theme';
 
 export interface AmbientStatusBarProps {
   phase: WorkoutPhase;
 }
 
-const PHASE_COLORS: Record<Exclude<WorkoutPhase, 'idle'>, string> = {
-  active_set: '#CFAE80',
-  resting: '#4A90D9',
-  pr_achieved: '#CFAE80',
-  workout_complete: '#4CAF50',
-};
-
 export function AmbientStatusBar({ phase }: AmbientStatusBarProps) {
+  const { colors } = useTheme();
+
+  const phaseColors: Record<Exclude<WorkoutPhase, 'idle'>, string> = {
+    active_set: colors.gold,
+    resting: colors.info,
+    pr_achieved: colors.gold,
+    workout_complete: colors.completed,
+  };
   const insets = useSafeAreaInsets();
   const barHeight = insets.top + 4;
 
@@ -111,7 +113,7 @@ export function AmbientStatusBar({ phase }: AmbientStatusBarProps) {
   // Gradient colors: phase color at top → transparent at bottom
   const gradientColors = useMemo(() => {
     if (phase === 'idle') return ['transparent', 'transparent'] as const;
-    const color = PHASE_COLORS[phase];
+    const color = phaseColors[phase];
     return [color, 'transparent'] as const;
   }, [phase]);
 

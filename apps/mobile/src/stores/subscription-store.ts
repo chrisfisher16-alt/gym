@@ -321,7 +321,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
           grantedAt: Date.now(),
           expiresAt: Date.now() + PROMO_GRANT_DAYS * 24 * 60 * 60 * 1000,
         }),
-      ).catch(() => {});
+      ).catch((e) => console.warn('[SubscriptionStore] persist promo grant failed:', e));
 
       return { success: true };
     } catch (e: any) {
@@ -384,7 +384,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   logout: async () => {
     await rcLogout();
-    await AsyncStorage.removeItem('formiq_promo_grant').catch(() => {});
+    await AsyncStorage.removeItem('formiq_promo_grant').catch((e) => console.warn('[SubscriptionStore] remove promo grant failed:', e));
     set({
       tier: 'free',
       isSubscribed: false,

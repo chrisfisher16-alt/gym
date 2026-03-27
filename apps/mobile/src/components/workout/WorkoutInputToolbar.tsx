@@ -37,7 +37,7 @@ const DISTANCE_PRESETS = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0] as const;
 const LEVEL_PRESETS = [1, 3, 5, 7, 9, 12, 15] as const;
 const ANIMATION_DURATION = 150;
 const TOOLBAR_HEIGHT = 52;
-const GOLD_ACCENT = '#CFAE80';
+
 
 // ── Component ─────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ export function WorkoutInputToolbar({
       {
         backgroundColor: isActive
           ? isAccent
-            ? GOLD_ACCENT
+            ? colors.gold
             : colors.primary
           : colors.surfaceSecondary,
         borderColor: isActive
@@ -123,9 +123,7 @@ export function WorkoutInputToolbar({
       typography.labelSmall,
       {
         color: isActive
-          ? isAccent
-            ? '#1A1A1A'
-            : colors.textInverse
+          ? colors.textInverse
           : colors.text,
         fontWeight: '600' as const,
       },

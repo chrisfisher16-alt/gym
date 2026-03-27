@@ -113,8 +113,7 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
   onLike,
   onPress,
 }: ActivityFeedItemProps) {
-  const { colors, typography, spacing, radius, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
+  const { colors, typography, spacing, radius } = useTheme();
 
   return (
     <Pressable
@@ -178,14 +177,14 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
             <Ionicons
               name={item.isLikedByMe ? 'heart' : 'heart-outline'}
               size={16}
-              color={item.isLikedByMe ? goldColor : colors.textTertiary}
+              color={item.isLikedByMe ? colors.gold : colors.textTertiary}
             />
             {item.likesCount > 0 && (
               <Text
                 style={[
                   typography.caption,
                   {
-                    color: item.isLikedByMe ? goldColor : colors.textTertiary,
+                    color: item.isLikedByMe ? colors.gold : colors.textTertiary,
                     marginLeft: 3,
                   },
                 ]}

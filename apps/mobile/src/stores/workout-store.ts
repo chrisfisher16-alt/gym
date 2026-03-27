@@ -423,7 +423,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     // Preload exercise images for the session (fire and forget)
     const exerciseIds = exercises.map(e => e.exerciseId);
-    preloadExerciseImages(exerciseIds).catch(() => {});
+    preloadExerciseImages(exerciseIds).catch((e) => console.warn('[WorkoutStore] image preload failed:', e));
   },
 
   startEmptyWorkout: () => {

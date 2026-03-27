@@ -78,16 +78,16 @@ export function PRCelebrationBanner({ data, onDismiss }: PRCelebrationBannerProp
       />
 
       <View style={styles.content}>
-        <Ionicons name="trophy" size={28} color="#FFD700" style={{ marginRight: spacing.sm }} />
+        <Ionicons name="trophy" size={28} color={colors.gold} style={{ marginRight: spacing.sm }} />
         <View style={{ flex: 1 }}>
-          <Text style={[typography.label, { color: '#FFFFFF', fontWeight: '800', fontSize: 16 }]}>
+          <Text style={[typography.label, { color: colors.textOnPrimary, fontWeight: '800', fontSize: 16 }]}>
             NEW PR!
           </Text>
           <Text style={[typography.bodySmall, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>
             {data.exerciseName} — {data.weight} {data.unit} × {data.reps}
           </Text>
         </View>
-        <Ionicons name="trophy" size={28} color="#FFD700" />
+        <Ionicons name="trophy" size={28} color={colors.gold} />
       </View>
     </Animated.View>
   );

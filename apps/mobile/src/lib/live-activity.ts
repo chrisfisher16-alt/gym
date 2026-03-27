@@ -44,7 +44,8 @@ function getFactory(): LiveActivityFactoryType | null {
     const layout = require('../../../widgets/workout-live-activity').default;
     factory = createLiveActivity('WorkoutLiveActivity', layout);
     return factory;
-  } catch {
+  } catch (e) {
+    console.warn('[LiveActivity] factory init failed:', e);
     return null;
   }
 }
@@ -104,12 +105,12 @@ export function startWorkoutActivity(
     // End any stale activity from a previous session
     const existing = f.getInstances();
     for (const a of existing) {
-      try { a.end('immediate'); } catch {}
+      try { a.end('immediate'); } catch (e) { console.warn('[LiveActivity] end stale failed:', e); }
     }
 
     const props = buildProps(session, unit);
     currentActivity = f.start(props, 'formiq://workout');
-  } catch {}
+  } catch (e) { console.warn('[LiveActivity] start failed:', e); }
 }
 
 /**
@@ -124,7 +125,7 @@ export function updateWorkoutActivity(
     if (!currentActivity) return;
     const props = buildProps(session, unit, restInfo);
     currentActivity.update(props);
-  } catch {}
+  } catch (e) { console.warn('[LiveActivity] update failed:', e); }
 }
 
 /**
@@ -135,5 +136,5 @@ export function endWorkoutActivity(): void {
     if (!currentActivity) return;
     currentActivity.end('default');
     currentActivity = null;
-  } catch {}
+  } catch (e) { console.warn('[LiveActivity] end failed:', e); }
 }

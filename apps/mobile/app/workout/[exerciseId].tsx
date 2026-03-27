@@ -191,7 +191,7 @@ export default function ExerciseDetailScreen() {
         <Card style={{ marginBottom: spacing.base }}>
           <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>Instructions</Text>
           {exercise.instructions.map((step, i) => (
-            <View key={i} style={[styles.instructionRow, { marginBottom: spacing.xs }]}>
+            <View key={`step-${i}`} style={[styles.instructionRow, { marginBottom: spacing.xs }]}>
               <View style={[styles.stepNumber, { backgroundColor: colors.primaryMuted }]}>
                 <Text style={[typography.labelSmall, { color: colors.primary }]}>{i + 1}</Text>
               </View>
@@ -251,7 +251,7 @@ export default function ExerciseDetailScreen() {
                     .filter((s) => s.setType !== 'warmup')
                     .map((s, i) => (
                       <View
-                        key={i}
+                        key={`set-${i}-${s.weight ?? 0}x${s.reps ?? 0}`}
                         style={[
                           styles.setChip,
                           {

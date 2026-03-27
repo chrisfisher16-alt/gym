@@ -22,7 +22,6 @@ import type { ChallengeMetric } from '../../../../packages/shared/src/types/comp
 export default function CompeteTab() {
   const router = useRouter();
   const { colors, spacing, radius, typography, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
 
   // ── Stores ────────────────────────────────────────────────────────
   const {
@@ -133,7 +132,7 @@ export default function CompeteTab() {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          tintColor={goldColor}
+          tintColor={colors.gold}
         />
       }
     >
@@ -155,8 +154,8 @@ export default function CompeteTab() {
             },
           ]}
         >
-          <Ionicons name="person-add-outline" size={18} color={goldColor} />
-          <Text style={[typography.labelSmall, { color: goldColor, marginLeft: spacing.xs }]}>
+          <Ionicons name="person-add-outline" size={18} color={colors.gold} />
+          <Text style={[typography.labelSmall, { color: colors.gold, marginLeft: spacing.xs }]}>
             Invite
           </Text>
         </TouchableOpacity>
@@ -180,7 +179,7 @@ export default function CompeteTab() {
           <ChallengeCard
             challenges={activeChallenges}
             onViewChallenge={(id) => router.push(`/social/challenges/${id}` as any)}
-            onCreateChallenge={() => router.push('/social/challenges/create' as any)}
+            onCreateChallenge={() => router.push('/compete/create-challenge' as any)}
           />
 
           {/* Section 3: Friends */}
@@ -207,7 +206,7 @@ export default function CompeteTab() {
                           avatarUrl: f.friend.avatarUrl,
                         }}
                         onPress={() => router.push('/social/friends')}
-                        onChallenge={() => router.push('/social/challenges/create' as any)}
+                        onChallenge={() => router.push('/compete/create-challenge' as any)}
                         onRemove={() => removeFriend(f.id)}
                       />
                     ))}
@@ -225,8 +224,8 @@ export default function CompeteTab() {
                       accessibilityRole="button"
                       accessibilityLabel="Invite friends"
                     >
-                      <Ionicons name="add" size={18} color={goldColor} />
-                      <Text style={[typography.label, { color: goldColor, marginLeft: spacing.xs }]}>
+                      <Ionicons name="add" size={18} color={colors.gold} />
+                      <Text style={[typography.label, { color: colors.gold, marginLeft: spacing.xs }]}>
                         Invite Friends
                       </Text>
                     </TouchableOpacity>
@@ -279,10 +278,10 @@ export default function CompeteTab() {
                     accessibilityRole="button"
                     accessibilityLabel="View all activity"
                   >
-                    <Text style={[typography.label, { color: goldColor }]}>
+                    <Text style={[typography.label, { color: colors.gold }]}>
                       View All Activity
                     </Text>
-                    <Ionicons name="arrow-forward" size={16} color={goldColor} style={{ marginLeft: spacing.xs }} />
+                    <Ionicons name="arrow-forward" size={16} color={colors.gold} style={{ marginLeft: spacing.xs }} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -292,7 +291,7 @@ export default function CompeteTab() {
               <Text style={[typography.label, { color: colors.text, flex: 1 }]}>
                 📰 Activity Feed
               </Text>
-              {feedLoading && <ActivityIndicator size="small" color={goldColor} />}
+              {feedLoading && <ActivityIndicator size="small" color={colors.gold} />}
             </View>
           </ExpandableCard>
         </View>

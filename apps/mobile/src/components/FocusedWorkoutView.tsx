@@ -26,7 +26,7 @@ import { getExerciseImages } from '../lib/exercise-image-map';
 // Lazy-load native module (crashes on web)
 let Haptics: typeof import('expo-haptics') | null = null;
 if (Platform.OS !== 'web') {
-  try { Haptics = require('expo-haptics'); } catch {}
+  try { Haptics = require('expo-haptics'); } catch (e) { console.warn('[FocusedWorkoutView] haptics unavailable:', e); }
 }
 
 // ── Props ────────────────────────────────────────────────────────────

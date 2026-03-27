@@ -10,7 +10,7 @@ import { selectionFeedback } from '../../src/lib/haptics';
 // Lazily load expo-notifications to avoid crashes when the native module is unavailable
 let Notifications: typeof import('expo-notifications') | null = null;
 if (Platform.OS !== 'web') {
-  try { Notifications = require('expo-notifications'); } catch {}
+  try { Notifications = require('expo-notifications'); } catch (e) { console.warn('[Onboarding] notifications unavailable:', e); }
 }
 
 // ── Time Presets ────────────────────────────────────────────────────

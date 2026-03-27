@@ -704,7 +704,7 @@ Deno.serve(async (req: Request) => {
 
     // Clean up orphaned user message if AI call failed
     if (userMessageId && supabase) {
-      await supabase.from('coach_messages').delete().eq('id', userMessageId).catch(() => {});
+      await supabase.from('coach_messages').delete().eq('id', userMessageId).catch((e) => console.warn('[CoachChat] cleanup orphaned message failed:', e));
     }
 
     return errorResponse('Coach is temporarily unavailable. Please try again.', 500);

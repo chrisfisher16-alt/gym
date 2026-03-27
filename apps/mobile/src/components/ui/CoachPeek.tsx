@@ -34,7 +34,7 @@ export function CoachPeek({
 }: CoachPeekProps) {
   const { colors, spacing, typography, dark } = useTheme();
   const bgColor = dark ? 'rgba(207, 174, 128, 0.92)' : 'rgba(184, 148, 79, 0.92)';
-  const textColor = '#1A1A1A';
+  const textColor = colors.textInverse;
 
   // ── Slide-up animation ──────────────────────────────────────────
   const translateY = useSharedValue(80);

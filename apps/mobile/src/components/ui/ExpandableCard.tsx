@@ -172,9 +172,7 @@ export function ExpandableCard({
     opacity: interpolate(shimmerTranslate.value, [-1, 0, 1.5, 2], [0, 0.6, 0.6, 0]),
   }));
 
-  // ── Gold color per scheme ──────────────────────────────────────
 
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
 
   // ── Render ─────────────────────────────────────────────────────
 
@@ -217,7 +215,7 @@ export function ExpandableCard({
         <View style={[StyleSheet.absoluteFill, styles.shimmerContainer]} pointerEvents="none">
           <Animated.View style={[styles.shimmerStrip, shimmerStyle]}>
             <LinearGradient
-              colors={['transparent', goldColor, 'transparent']}
+              colors={['transparent', colors.gold, 'transparent']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}

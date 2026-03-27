@@ -71,7 +71,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   setColorMode: (mode: ColorMode) => {
     const resolved = resolveScheme(mode);
     set({ colorMode: mode, resolvedScheme: resolved });
-    AsyncStorage.setItem(STORAGE_KEY, mode).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEY, mode).catch((e) => console.warn('[ThemeStore] persist mode failed:', e));
     safeSetColorScheme(mode);
   },
 }));

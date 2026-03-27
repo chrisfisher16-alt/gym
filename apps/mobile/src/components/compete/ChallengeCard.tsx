@@ -40,7 +40,6 @@ export function ChallengeCard({
   onCreateChallenge,
 }: ChallengeCardProps) {
   const { colors, typography, spacing, radius, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
 
   const activeChallenges = useMemo(
     () => challenges.filter((c) => c.status === 'active'),
@@ -99,7 +98,7 @@ export function ChallengeCard({
             </View>
 
             {/* Metric badge */}
-            <Text style={[typography.caption, { color: goldColor, marginTop: spacing.xs }]}>
+            <Text style={[typography.caption, { color: colors.gold, marginTop: spacing.xs }]}>
               {metricLabel(challenge.metric)}
             </Text>
 
@@ -134,7 +133,7 @@ export function ChallengeCard({
                           styles.progressFill,
                           {
                             width: `${progress * 100}%` as any,
-                            backgroundColor: goldColor,
+                            backgroundColor: colors.gold,
                             borderRadius: radius.sm,
                           },
                         ]}
@@ -172,8 +171,8 @@ export function ChallengeCard({
           },
         ]}
       >
-        <Ionicons name="add" size={18} color={goldColor} />
-        <Text style={[typography.label, { color: goldColor, marginLeft: spacing.xs }]}>
+        <Ionicons name="add" size={18} color={colors.gold} />
+        <Text style={[typography.label, { color: colors.gold, marginLeft: spacing.xs }]}>
           New Challenge
         </Text>
       </Pressable>

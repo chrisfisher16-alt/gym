@@ -33,7 +33,6 @@ export const FriendRow = React.memo(function FriendRow({
   onRemove,
 }: FriendRowProps) {
   const { colors, typography, spacing, radius, dark } = useTheme();
-  const goldColor = dark ? '#CFAE80' : '#B8944F';
 
   const leftAction = useMemo<SwipeAction>(
     () => ({
@@ -49,10 +48,10 @@ export const FriendRow = React.memo(function FriendRow({
     () => ({
       label: 'Challenge',
       icon: 'trophy-outline',
-      color: goldColor,
+      color: colors.gold,
       onTrigger: onChallenge,
     }),
-    [goldColor, onChallenge],
+    [colors.gold, onChallenge],
   );
 
   return (
@@ -123,7 +122,7 @@ export const FriendRow = React.memo(function FriendRow({
               },
             ]}
           >
-            <Text style={[typography.labelSmall, { color: goldColor }]}>
+            <Text style={[typography.labelSmall, { color: colors.gold }]}>
               🔥{friend.streak}
             </Text>
           </View>

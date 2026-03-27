@@ -134,8 +134,8 @@ export function CoachFAB({
           posY.value = saved.y;
         }
       })
-      .catch(() => {
-        // Ignore — use defaults
+      .catch((e) => {
+        console.warn('[CoachFAB] load position failed:', e);
       });
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,7 +179,7 @@ export function CoachFAB({
   );
 
   const savePosition = useCallback((x: number, y: number) => {
-    AsyncStorage.setItem(FAB_POSITION_KEY, JSON.stringify({ x, y })).catch(() => {});
+    AsyncStorage.setItem(FAB_POSITION_KEY, JSON.stringify({ x, y })).catch((e) => console.warn('[CoachFAB] save position failed:', e));
   }, []);
 
   // -----------------------------------------------------------------------
