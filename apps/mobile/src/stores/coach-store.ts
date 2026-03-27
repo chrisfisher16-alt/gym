@@ -381,19 +381,34 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const aiHistory = toAIHistory(historyMessages);
 
       // Call the API with conversation history and streaming callback
-      const response = await coachApi.sendChatMessage(
-        conversation.id,
-        messageContent,
-        context ?? conversation.context,
-        aiHistory,
-        (token) => {
-          set((s) => ({
-            streamingContent: s.streamingContent + token,
-            isStreaming: true,
-          }));
-        },
-        abortController.signal,
-      );
+      const onToken = (token: string) => {
+        set((s) => ({
+          streamingContent: s.streamingContent + token,
+          isStreaming: true,
+        }));
+      };
+
+      // Use SSE Edge Function for text-only messages, fall back to
+      // direct AI call for image messages (not supported by edge yet).
+      let response: coachApi.ChatResponse;
+      if (typeof messageContent === 'string') {
+        response = await coachApi.sendChatMessageSSE(
+          conversation.id,
+          messageContent,
+          context ?? conversation.context,
+          onToken,
+          abortController.signal,
+        );
+      } else {
+        response = await coachApi.sendChatMessage(
+          conversation.id,
+          messageContent,
+          context ?? conversation.context,
+          aiHistory,
+          onToken,
+          abortController.signal,
+        );
+      }
 
       // Parse actions from AI response
       const { text: cleanContent, actions } = parseCoachActions(response.content);

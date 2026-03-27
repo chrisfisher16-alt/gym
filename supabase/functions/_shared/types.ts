@@ -65,6 +65,7 @@ export interface AIToolDefinition {
 
 export interface AIProvider {
   chat(messages: AIMessage[], options?: AIProviderOptions): Promise<AIResponse>;
+  chatStream(messages: AIMessage[], options?: AIProviderOptions): AsyncGenerator<import('./ai-provider.ts').AIStreamChunk>;
   readonly isAnthropicAPI?: boolean;
 }
 
@@ -78,6 +79,7 @@ export interface ChatRequest {
   message: string;
   context?: CoachContext;
   metadata?: Record<string, unknown>;
+  stream?: boolean;
 }
 
 export interface ChatResponse {

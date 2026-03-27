@@ -301,22 +301,50 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
       );
       const userIds = [user.id, ...friendIds];
 
-      // Placeholder: generate leaderboard from friend profiles with zero scores
-      // TODO: Replace with actual aggregation query once workout stats tables are ready
+      // Calculate date range
+      const now = new Date();
+      let startDate: string | null = null;
+      if (timeframe === 'week') {
+        const d = new Date(now);
+        d.setDate(d.getDate() - d.getDay() + 1); // Monday
+        d.setHours(0, 0, 0, 0);
+        startDate = d.toISOString();
+      } else if (timeframe === 'month') {
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate = d.toISOString();
+      }
+
+      // Fetch real scores from Supabase RPC
+      const { data: scoreData, error: scoreError } = await supabase.rpc('get_leaderboard_scores', {
+        p_user_ids: userIds,
+        p_metric: metric,
+        p_start_date: startDate,
+        p_end_date: now.toISOString(),
+      });
+
+      if (scoreError) throw scoreError;
+
+      const scoreMap = new Map<string, number>();
+      (scoreData ?? []).forEach((row: { user_id: string; score: number }) => {
+        scoreMap.set(row.user_id, Number(row.score) || 0);
+      });
+
+      // Fetch profiles for display names / avatars
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, display_name, avatar_url')
         .in('id', userIds);
 
       const leaderboard: LeaderboardEntry[] = (profiles ?? [])
-        .map((p: any, idx: number) => ({
+        .map((p: any) => ({
           userId: p.id,
           displayName: p.display_name ?? 'Unknown',
           avatarUrl: p.avatar_url ?? null,
-          score: 0,
-          rank: idx + 1,
+          score: scoreMap.get(p.id) ?? 0,
+          rank: 0,
         }))
-        .sort((a, b) => a.rank - b.rank);
+        .sort((a, b) => b.score - a.score)
+        .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
       set({ leaderboard });
     } catch (err) {

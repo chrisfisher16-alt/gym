@@ -303,7 +303,7 @@ export function InWorkoutCoach({
 
     return (
       <View
-        key={`${adj.action}-${adj.currentExercise ?? ''}-${index}`}
+        key={`${adj.action}-${index}`}
         style={[
           styles.adjustmentCard,
           {

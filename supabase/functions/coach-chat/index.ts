@@ -1,7 +1,7 @@
 // ── Coach Chat Edge Function ────────────────────────────────────────
 // Main chat endpoint: receives user message, loads context, calls AI, returns response.
 
-import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
+import { handleCors, getCorsHeaders, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.2';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
@@ -336,12 +336,200 @@ Deno.serve(async (req: Request) => {
 
     // Call AI with cache-optimized system blocks
     const aiProvider = createAIProvider();
-    const aiResponse = await aiProvider.chat(aiMessages, {
+    const aiOpts = {
       tools: COACH_TOOLS,
       temperature: 0.7,
       max_tokens: 2048,
       cacheOptions: { cachedSystemBlocks: cachedSystemBlocks },
-    });
+    };
+
+    // ── Streaming path ──────────────────────────────────────────────
+    if (body.stream) {
+      const corsHeaders = getCorsHeaders(req);
+      const stream = new ReadableStream({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          const send = (event: string, data: unknown) => {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          };
+
+          try {
+            send('stream_start', { conversation_id: convId, message_id: userMsg?.id });
+
+            // First AI call (streaming)
+            let fullContent = '';
+            let firstResponse: import('../_shared/ai-provider.ts').AIStreamChunk['response'] | undefined;
+
+            for await (const chunk of aiProvider.chatStream(aiMessages, aiOpts)) {
+              if (chunk.type === 'token' && chunk.text) {
+                send('token', { text: chunk.text });
+                fullContent += chunk.text;
+              } else if (chunk.type === 'done') {
+                firstResponse = chunk.response;
+              }
+            }
+
+            // Handle tool calls if the AI requested them
+            const streamToolCallResults: ToolCallResult[] = [];
+            let totalStreamToolTokens = 0;
+            let streamFollowUpCacheRead = 0;
+            let streamFollowUpCacheCreation = 0;
+
+            if (firstResponse?.tool_calls && firstResponse.tool_calls.length > 0) {
+              const toolMessages: AIMessage[] = [...aiMessages];
+              toolMessages.push({
+                role: 'assistant',
+                content: fullContent,
+                tool_calls: firstResponse.tool_calls,
+              });
+
+              for (const toolCall of firstResponse.tool_calls) {
+                let toolResult: Record<string, unknown>;
+                try {
+                  const toolResponse = await fetch(
+                    `${Deno.env.get('SUPABASE_URL')}/functions/v1/coach-tools`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: req.headers.get('Authorization') ?? '',
+                      },
+                      body: JSON.stringify({
+                        tool_name: toolCall.function.name,
+                        params: (() => { try { return JSON.parse(toolCall.function.arguments); } catch { return {}; } })(),
+                        user_id,
+                      }),
+                    },
+                  );
+                  toolResult = await toolResponse.json();
+                } catch {
+                  toolResult = { error: 'Tool execution failed' };
+                }
+
+                streamToolCallResults.push({ tool_name: toolCall.function.name, result: toolResult });
+                toolMessages.push({
+                  role: 'tool',
+                  content: JSON.stringify(toolResult),
+                  tool_call_id: toolCall.id,
+                  name: toolCall.function.name,
+                });
+              }
+
+              // Second AI call with tool results (also streaming)
+              fullContent = '';
+              for await (const chunk of aiProvider.chatStream(toolMessages, {
+                temperature: 0.7,
+                max_tokens: 2048,
+                cacheOptions: { cachedSystemBlocks: cachedSystemBlocks },
+              })) {
+                if (chunk.type === 'token' && chunk.text) {
+                  send('token', { text: chunk.text });
+                  fullContent += chunk.text;
+                } else if (chunk.type === 'done' && chunk.response) {
+                  totalStreamToolTokens = chunk.response.input_tokens + chunk.response.output_tokens;
+                  streamFollowUpCacheRead = chunk.response.cache_read_tokens ?? 0;
+                  streamFollowUpCacheCreation = chunk.response.cache_creation_tokens ?? 0;
+                }
+              }
+            }
+
+            // Output safety check
+            const streamOutputCheck = validateOutput(fullContent, userContext.profile.gender);
+            if (!streamOutputCheck.safe) {
+              await logSafetyEvent(supabase, user_id, {
+                conversation_id: convId,
+                message_id: userMsg?.id,
+                category: streamOutputCheck.category ?? 'unknown',
+                reason: streamOutputCheck.reason ?? 'Output safety check failed',
+                content_snippet: fullContent,
+                direction: 'output',
+                context: coachContext,
+              });
+              fullContent = "I want to make sure I give you safe advice. For this particular question, I'd recommend consulting with a healthcare professional who can give you personalized guidance. Is there something else I can help you with regarding your workouts or nutrition?";
+            }
+
+            // Persist assistant message
+            const { data: streamAssistantMsg } = await supabase
+              .from('coach_messages')
+              .insert({
+                conversation_id: convId,
+                role: 'assistant',
+                content: fullContent,
+                tool_calls: streamToolCallResults.length > 0 ? streamToolCallResults : null,
+                model: firstResponse?.model ?? 'unknown',
+                tokens_used: (firstResponse?.total_tokens ?? 0) + totalStreamToolTokens,
+                created_at: new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+
+            // Update conversation timestamp
+            await supabase
+              .from('coach_conversations')
+              .update({ last_message_at: new Date().toISOString() })
+              .eq('id', convId);
+
+            // Log telemetry
+            const streamLatencyMs = Date.now() - startTime;
+            const streamInputTokens = firstResponse?.input_tokens ?? 0;
+            const streamOutputTokens = firstResponse?.output_tokens ?? 0;
+            const streamTotalTokens = streamInputTokens + streamOutputTokens + totalStreamToolTokens;
+            const streamTotalCacheRead = (firstResponse?.cache_read_tokens ?? 0) + streamFollowUpCacheRead;
+            const streamTotalCacheCreation = (firstResponse?.cache_creation_tokens ?? 0) + streamFollowUpCacheCreation;
+
+            await supabase.from('ai_usage_events').insert({
+              user_id,
+              conversation_id: convId,
+              message_id: streamAssistantMsg?.id,
+              model: firstResponse?.model ?? 'unknown',
+              input_tokens: streamInputTokens,
+              output_tokens: streamOutputTokens,
+              total_tokens: streamTotalTokens,
+              estimated_cost_usd: estimateCost(firstResponse?.model ?? '', streamInputTokens, streamOutputTokens),
+              latency_ms: streamLatencyMs,
+              status: streamOutputCheck.flagged ? 'flagged' : 'success',
+              tool_calls_count: firstResponse?.tool_calls?.length ?? 0,
+              cache_read_tokens: streamTotalCacheRead,
+              cache_creation_tokens: streamTotalCacheCreation,
+              cache_hit: streamTotalCacheRead > 0,
+              intent: intent,
+              created_at: new Date().toISOString(),
+            });
+
+            send('content_final', {
+              conversation_id: convId,
+              message_id: streamAssistantMsg?.id ?? '',
+              content: fullContent,
+              model: firstResponse?.model ?? 'unknown',
+              tokens: {
+                input: streamInputTokens,
+                output: streamOutputTokens,
+                total: streamTotalTokens,
+              },
+            });
+            send('done', {});
+          } catch (streamError) {
+            console.error('Streaming error:', streamError);
+            const errMsg = streamError instanceof Error ? streamError.message : 'Streaming failed';
+            send('error', { message: errMsg });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // ── Non-streaming path (original) ───────────────────────────────
+    const aiResponse = await aiProvider.chat(aiMessages, aiOpts);
 
     // Handle tool calls if present
     let finalContent = aiResponse.content ?? '';

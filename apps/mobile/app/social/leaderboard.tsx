@@ -15,6 +15,7 @@ import { useFriendsStore } from '../../src/stores/friends-store';
 import { useWorkoutStore } from '../../src/stores/workout-store';
 import { useProfileStore } from '../../src/stores/profile-store';
 import { useNutritionStore } from '../../src/stores/nutrition-store';
+import { supabase, isSupabaseConfigured } from '../../src/lib/supabase';
 
 type LeaderboardCategory = 'volume' | 'workouts' | 'streak' | 'prs' | 'nutrition';
 
@@ -60,10 +61,61 @@ export default function LeaderboardScreen() {
   const dailyLogs = useNutritionStore((s) => s.dailyLogs);
 
   const [selectedCategory, setSelectedCategory] = useState<LeaderboardCategory>('volume');
+  const [friendScores, setFriendScores] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (!friendsInitialized) initFriends();
   }, [friendsInitialized]);
+
+  // Fetch friend scores from Supabase RPC
+  useEffect(() => {
+    if (!isSupabaseConfigured || friends.length === 0) return;
+
+    const fetchScores = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const friendIds = friends.map((f) => f.friend.id);
+      const userIds = [user.id, ...friendIds];
+
+      const weekStart = getWeekStart();
+      const monthStart = getMonthStart();
+      const now = new Date();
+
+      // Map social category to RPC metric
+      const rpcMetric = selectedCategory === 'nutrition' ? null : selectedCategory;
+      if (!rpcMetric) {
+        setFriendScores(new Map());
+        return;
+      }
+
+      const startDate = selectedCategory === 'prs'
+        ? monthStart.toISOString()
+        : selectedCategory === 'streak'
+          ? null
+          : weekStart.toISOString();
+
+      const { data, error } = await supabase.rpc('get_leaderboard_scores', {
+        p_user_ids: userIds,
+        p_metric: rpcMetric,
+        p_start_date: startDate,
+        p_end_date: now.toISOString(),
+      });
+
+      if (error) {
+        console.error('[Leaderboard] RPC error:', error);
+        return;
+      }
+
+      const scores = new Map<string, number>();
+      (data ?? []).forEach((row: { user_id: string; score: number }) => {
+        scores.set(row.user_id, Number(row.score) || 0);
+      });
+      setFriendScores(scores);
+    };
+
+    fetchScores();
+  }, [selectedCategory, friends]);
 
   // Compute current user's stats
   const myStats = useMemo(() => {
@@ -154,18 +206,38 @@ export default function LeaderboardScreen() {
         break;
     }
 
-    // Friends show as placeholders since we don't have their workout data locally
-    // In production, this would be a Supabase RPC query
-    const friendEntries: LeaderboardEntry[] = friends.map((f) => ({
-      userId: f.friend.id,
-      displayName: f.friend.displayName,
-      value: 0,
-      displayValue: '--',
-      isCurrentUser: false,
-    }));
+    const friendEntries: LeaderboardEntry[] = friends.map((f) => {
+      const value = selectedCategory === 'nutrition' ? 0 : (friendScores.get(f.friend.id) ?? 0);
+      let displayValue = '--';
+      if (value > 0 || friendScores.has(f.friend.id)) {
+        switch (selectedCategory) {
+          case 'volume':
+            displayValue = `${Math.round(value).toLocaleString()} ${weightUnit}`;
+            break;
+          case 'workouts':
+            displayValue = `${value} sessions`;
+            break;
+          case 'streak':
+            displayValue = `${value} days`;
+            break;
+          case 'prs':
+            displayValue = `${value} PRs`;
+            break;
+          default:
+            displayValue = '--';
+        }
+      }
+      return {
+        userId: f.friend.id,
+        displayName: f.friend.displayName,
+        value,
+        displayValue,
+        isCurrentUser: false,
+      };
+    });
 
     return [me, ...friendEntries].sort((a, b) => b.value - a.value);
-  }, [selectedCategory, myStats, friends, profile.displayName, weightUnit]);
+  }, [selectedCategory, myStats, friends, profile.displayName, weightUnit, friendScores]);
 
   const categoryInfo = CATEGORIES.find((c) => c.key === selectedCategory)!;
   const periodLabel = selectedCategory === 'prs' ? 'This Month' : 'This Week';

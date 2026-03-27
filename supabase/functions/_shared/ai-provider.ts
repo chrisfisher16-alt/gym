@@ -5,6 +5,7 @@ import type {
   AIResponse,
   AIProviderOptions,
   AIProvider,
+  AIToolCall,
   CacheableSystemBlock,
 } from './types.ts';
 
@@ -161,6 +162,303 @@ export class OpenAICompatibleProvider implements AIProvider {
     };
   }
 
+  // ── Streaming ─────────────────────────────────────────────────────
+
+  async *chatStream(
+    messages: AIMessage[],
+    options?: AIProviderOptions,
+  ): AsyncGenerator<AIStreamChunk> {
+    const model = this.model;
+    const cachedBlocks = options?.cacheOptions?.cachedSystemBlocks;
+
+    if (this.isAnthropicAPI && cachedBlocks && cachedBlocks.length > 0) {
+      yield* this.streamAnthropicNative(model, messages, cachedBlocks, options);
+    } else {
+      yield* this.streamOpenAICompatible(model, messages, cachedBlocks, options);
+    }
+  }
+
+  private async *streamOpenAICompatible(
+    model: string,
+    messages: AIMessage[],
+    cachedBlocks: CacheableSystemBlock[] | undefined,
+    options?: AIProviderOptions,
+  ): AsyncGenerator<AIStreamChunk> {
+    let finalMessages = messages;
+    if (cachedBlocks && cachedBlocks.length > 0) {
+      const mergedSystem = cachedBlocks.map((b) => b.text).join('\n\n');
+      const nonSystem = messages.filter((m) => m.role !== 'system');
+      finalMessages = [{ role: 'system' as const, content: mergedSystem }, ...nonSystem];
+    }
+
+    const body: Record<string, unknown> = {
+      model,
+      messages: finalMessages.map((m) => {
+        const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        if (m.tool_calls) msg.tool_calls = m.tool_calls;
+        if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+        if (m.name) msg.name = m.name;
+        return msg;
+      }),
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.max_tokens ?? 2048,
+      stream: true,
+    };
+
+    if (options?.json_mode) {
+      body.response_format = { type: 'json_object' };
+    }
+    if (options?.tools && options.tools.length > 0) {
+      body.tools = options.tools;
+      if (options.tool_choice) body.tool_choice = options.tool_choice;
+    }
+
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`AI API error (${response.status}): ${errorText.slice(0, 200)}`);
+    }
+
+    let fullContent = '';
+    let finishReason = 'stop';
+    const toolCalls: AIToolCall[] = [];
+    // Accumulate partial tool call data keyed by index
+    const toolCallPartials: Record<number, { id: string; name: string; args: string }> = {};
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(payload);
+          const delta = parsed.choices?.[0]?.delta;
+          if (!delta) continue;
+
+          if (delta.content) {
+            fullContent += delta.content;
+            yield { type: 'token', text: delta.content };
+          }
+
+          // Accumulate streamed tool calls
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallPartials[idx]) {
+                toolCallPartials[idx] = { id: tc.id ?? '', name: tc.function?.name ?? '', args: '' };
+              }
+              if (tc.id) toolCallPartials[idx].id = tc.id;
+              if (tc.function?.name) toolCallPartials[idx].name = tc.function.name;
+              if (tc.function?.arguments) toolCallPartials[idx].args += tc.function.arguments;
+            }
+          }
+
+          if (parsed.choices?.[0]?.finish_reason) {
+            finishReason = parsed.choices[0].finish_reason;
+          }
+        } catch { /* skip malformed SSE lines */ }
+      }
+    }
+
+    // Finalize tool calls
+    for (const idx of Object.keys(toolCallPartials).map(Number).sort()) {
+      const p = toolCallPartials[idx];
+      toolCalls.push({
+        id: p.id,
+        type: 'function',
+        function: { name: p.name, arguments: p.args },
+      });
+    }
+
+    yield {
+      type: 'done',
+      response: {
+        content: fullContent || null,
+        tool_calls: toolCalls,
+        model,
+        input_tokens: estimateTokenCount(JSON.stringify(messages)),
+        output_tokens: estimateTokenCount(fullContent),
+        total_tokens: 0,
+        finish_reason: finishReason,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+      },
+    };
+  }
+
+  private async *streamAnthropicNative(
+    model: string,
+    messages: AIMessage[],
+    cachedBlocks: CacheableSystemBlock[],
+    options?: AIProviderOptions,
+  ): AsyncGenerator<AIStreamChunk> {
+    const nonSystemMessages = messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => {
+        const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        if (m.name) msg.name = m.name;
+        return msg;
+      });
+
+    const systemBlocks = cachedBlocks.map((block) => ({
+      type: 'text' as const,
+      text: block.text,
+      ...(block.cacheControl ? { cache_control: { type: 'ephemeral' } } : {}),
+    }));
+
+    const body: Record<string, unknown> = {
+      model,
+      system: systemBlocks,
+      messages: nonSystemMessages,
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.max_tokens ?? 2048,
+      stream: true,
+    };
+
+    if (options?.tools && options.tools.length > 0) {
+      body.tools = options.tools.map((t) => ({
+        name: t.function.name,
+        description: t.function.description,
+        input_schema: t.function.parameters,
+      }));
+    }
+
+    const response = await fetch(this.baseUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'prompt-caching-2024-07-31',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Anthropic API error (${response.status}): ${errorText.slice(0, 200)}`);
+    }
+
+    let fullContent = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+    let stopReason = 'stop';
+    const toolCalls: AIToolCall[] = [];
+    // Track current tool_use block being streamed
+    let currentToolId = '';
+    let currentToolName = '';
+    let currentToolArgs = '';
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (!payload) continue;
+
+        try {
+          const event = JSON.parse(payload);
+
+          switch (event.type) {
+            case 'content_block_start':
+              if (event.content_block?.type === 'tool_use') {
+                currentToolId = event.content_block.id ?? '';
+                currentToolName = event.content_block.name ?? '';
+                currentToolArgs = '';
+              }
+              break;
+
+            case 'content_block_delta':
+              if (event.delta?.type === 'text_delta' && event.delta.text) {
+                fullContent += event.delta.text;
+                yield { type: 'token', text: event.delta.text };
+              } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+                currentToolArgs += event.delta.partial_json;
+              }
+              break;
+
+            case 'content_block_stop':
+              if (currentToolId) {
+                toolCalls.push({
+                  id: currentToolId,
+                  type: 'function',
+                  function: { name: currentToolName, arguments: currentToolArgs },
+                });
+                currentToolId = '';
+                currentToolName = '';
+                currentToolArgs = '';
+              }
+              break;
+
+            case 'message_delta':
+              if (event.delta?.stop_reason) {
+                stopReason = event.delta.stop_reason;
+              }
+              if (event.usage) {
+                outputTokens = event.usage.output_tokens ?? outputTokens;
+              }
+              break;
+
+            case 'message_start':
+              if (event.message?.usage) {
+                inputTokens = event.message.usage.input_tokens ?? 0;
+                cacheReadTokens = event.message.usage.cache_read_input_tokens ?? 0;
+                cacheCreationTokens = event.message.usage.cache_creation_input_tokens ?? 0;
+              }
+              break;
+          }
+        } catch { /* skip malformed SSE lines */ }
+      }
+    }
+
+    yield {
+      type: 'done',
+      response: {
+        content: fullContent || null,
+        tool_calls: toolCalls,
+        model,
+        input_tokens: inputTokens || estimateTokenCount(JSON.stringify(messages)),
+        output_tokens: outputTokens || estimateTokenCount(fullContent),
+        total_tokens: (inputTokens || 0) + (outputTokens || 0),
+        finish_reason: stopReason === 'end_turn' ? 'stop' : (stopReason ?? 'stop'),
+        cache_read_tokens: cacheReadTokens,
+        cache_creation_tokens: cacheCreationTokens,
+      },
+    };
+  }
+
   // ── Anthropic-native request path (with prompt caching) ───────────
 
   private async callAnthropicNative(
@@ -248,6 +546,14 @@ export class OpenAICompatibleProvider implements AIProvider {
       cache_creation_tokens: usage.cache_creation_input_tokens ?? 0,
     };
   }
+}
+
+// ── Stream Chunk Type ────────────────────────────────────────────────
+
+export interface AIStreamChunk {
+  type: 'token' | 'done';
+  text?: string;
+  response?: AIResponse;
 }
 
 /**
