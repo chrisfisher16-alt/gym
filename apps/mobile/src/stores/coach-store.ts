@@ -389,17 +389,32 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         }));
       };
 
-      // Use SSE Edge Function for text-only messages, fall back to
-      // direct AI call for image messages (not supported by edge yet).
+      // Try SSE Edge Function for text-only messages; fall back to
+      // direct AI call if the edge function isn't deployed (404) or
+      // for image messages (not supported by edge yet).
       let response: coachApi.ChatResponse;
       if (typeof messageContent === 'string') {
-        response = await coachApi.sendChatMessageSSE(
-          conversation.id,
-          messageContent,
-          context ?? conversation.context,
-          onToken,
-          abortController.signal,
-        );
+        try {
+          response = await coachApi.sendChatMessageSSE(
+            conversation.id,
+            messageContent,
+            context ?? conversation.context,
+            onToken,
+            abortController.signal,
+          );
+        } catch (sseError) {
+          // Edge Function unavailable — fall back to direct AI call
+          console.warn('[CoachStore] SSE failed, falling back to direct AI:', sseError);
+          set({ streamingContent: '', isStreaming: false });
+          response = await coachApi.sendChatMessage(
+            conversation.id,
+            messageContent,
+            context ?? conversation.context,
+            aiHistory,
+            onToken,
+            abortController.signal,
+          );
+        }
       } else {
         response = await coachApi.sendChatMessage(
           conversation.id,
