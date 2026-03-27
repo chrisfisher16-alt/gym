@@ -36,8 +36,8 @@ export default function WelcomeScreen() {
       } else {
         router.push('/(onboarding)/health-sync');
       }
-    } catch (e: any) {
-      setError(e.message || 'Google sign-in failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Google sign-in failed');
     } finally {
       setGoogleLoading(false);
     }

@@ -180,7 +180,24 @@ export default function CreateProgramScreen() {
       }
 
       // Normalize exercise fields — AI may return snake_case or camelCase
-      const normalizeExercise = (e: any, idx: number): ProgramExercise => {
+      // AI may return snake_case or camelCase fields — normalize loosely
+      interface RawAIExercise {
+        exerciseId?: string; exercise_id?: string;
+        exerciseName?: string; exercise_name?: string; name?: string;
+        targetSets?: number; target_sets?: number;
+        targetReps?: string | number; target_reps?: string | number;
+        restSeconds?: number; rest_seconds?: number;
+        notes?: string;
+      }
+      interface RawAIDay {
+        name?: string;
+        dayNumber?: number; day_number?: number;
+        dayType?: string; day_type?: string;
+        focusArea?: string; focus_area?: string;
+        exercises?: RawAIExercise[];
+      }
+
+      const normalizeExercise = (e: RawAIExercise, idx: number): ProgramExercise => {
         const exerciseId = e.exerciseId || e.exercise_id || '';
         const exerciseName = e.exerciseName || e.exercise_name || e.name || exerciseId;
         const targetSets = e.targetSets ?? e.target_sets ?? 3;
@@ -199,7 +216,7 @@ export default function CreateProgramScreen() {
         };
       };
 
-      const normalizeDay = (d: any) => {
+      const normalizeDay = (d: RawAIDay) => {
         const dayType = d.dayType || d.day_type || 'lifting';
         const focusArea = (d.focusArea || d.focus_area || 'full_body') as MuscleGroup;
         const exercises = (d.exercises || []).map(normalizeExercise);
@@ -209,7 +226,7 @@ export default function CreateProgramScreen() {
       // Populate form fields with the AI result
       setName(planAction.name || '');
       setDescription(planAction.description || '');
-      setDaysPerWeek(planAction.daysPerWeek || (planAction as any).days_per_week || 4);
+      setDaysPerWeek(planAction.daysPerWeek || (planAction as unknown as { days_per_week?: number }).days_per_week || 4);
       setDifficulty(planAction.difficulty || 'intermediate');
       const normalizedDays = planAction.days.map(normalizeDay);
       setDays(
@@ -222,9 +239,9 @@ export default function CreateProgramScreen() {
           })),
       );
       setAiGenerated(true);
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return;
-      setAiError(err?.message || 'Failed to generate program. Check your AI settings.');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setAiError(err instanceof Error ? err.message : 'Failed to generate program. Check your AI settings.');
     } finally {
       setAiLoading(false);
       abortRef.current = null;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../theme';
+import { useTheme, type Theme } from '../theme';
 import { Card } from './ui';
 import {
   generateWeeklySummary,
@@ -186,10 +186,10 @@ function StatCell({
   label: string;
   value: string;
   icon: keyof typeof Ionicons.glyphMap;
-  colors: any;
-  spacing: any;
-  typography: any;
-  radius: any;
+  colors: Theme['colors'];
+  spacing: Theme['spacing'];
+  typography: Theme['typography'];
+  radius: Theme['radius'];
 }) {
   return (
     <View

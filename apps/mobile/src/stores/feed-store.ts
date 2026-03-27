@@ -44,6 +44,22 @@ interface FeedState {
   deleteItem: (feedItemId: string) => Promise<void>;
 }
 
+// ── Row types (match Supabase .select() shapes) ────────────────────────
+
+interface FeedRow {
+  id: string;
+  user_id: string;
+  type: FeedItem['type'];
+  title: string;
+  body: string | null;
+  metadata: Record<string, unknown> | null;
+  session_id: string | null;
+  visibility: FeedItem['visibility'];
+  likes_count: number;
+  created_at: string;
+  profiles: { display_name: string | null; avatar_url: string | null } | null;
+}
+
 const PAGE_SIZE = 20;
 
 // ── Store ──────────────────────────────────────────────────────────────
@@ -110,7 +126,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       }
 
       // Check which items user has liked
-      const itemIds = (data || []).map((d: any) => d.id);
+      const itemIds = (data || []).map((d) => d.id);
       let likedIds = new Set<string>();
       if (itemIds.length > 0) {
         const { data: likes } = await supabase
@@ -118,9 +134,10 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           .select('feed_item_id')
           .eq('user_id', user.id)
           .in('feed_item_id', itemIds);
-        likedIds = new Set((likes || []).map((l: any) => l.feed_item_id));
+        likedIds = new Set((likes || []).map((l) => l.feed_item_id));
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join types return profiles as array but runtime is object
       const mapped: FeedItem[] = (data || []).map((row: any) => ({
         id: row.id,
         userId: row.user_id,
@@ -172,7 +189,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         .eq('status', 'accepted')
         .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
 
-      const friendIds = (friendRows || []).map((r: any) =>
+      const friendIds = (friendRows || []).map((r) =>
         r.requester_id === user.id ? r.addressee_id : r.requester_id
       );
 
@@ -215,7 +232,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       }
 
       // Check which items user has liked
-      const itemIds = (data || []).map((d: any) => d.id);
+      const itemIds = (data || []).map((d) => d.id);
       let likedIds = new Set<string>();
       if (itemIds.length > 0) {
         const { data: likes } = await supabase
@@ -223,9 +240,10 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           .select('feed_item_id')
           .eq('user_id', user.id)
           .in('feed_item_id', itemIds);
-        likedIds = new Set((likes || []).map((l: any) => l.feed_item_id));
+        likedIds = new Set((likes || []).map((l) => l.feed_item_id));
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join types return profiles as array but runtime is object
       const mapped: FeedItem[] = (data || []).map((row: any) => ({
         id: row.id,
         userId: row.user_id,
@@ -266,7 +284,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           table: 'social_feed',
         },
         (payload) => {
-          const row = payload.new as any;
+          const row = payload.new as Omit<FeedRow, 'profiles'>;
           const newItem: FeedItem = {
             id: row.id,
             userId: row.user_id,

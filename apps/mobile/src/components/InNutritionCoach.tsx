@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   StyleSheet,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
@@ -175,7 +177,7 @@ export function InNutritionCoach({ visible, onClose }: InNutritionCoachProps) {
               returnKeyType="send"
               onSubmitEditing={() => handleSend(customInput)}
               blurOnSubmit={false}
-              onKeyPress={(e: any) => {
+              onKeyPress={(e: NativeSyntheticEvent<TextInputKeyPressEventData & { shiftKey?: boolean }>) => {
                 if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
                   e.preventDefault?.();
                   handleSend(customInput);

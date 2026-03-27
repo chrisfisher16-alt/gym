@@ -325,7 +325,7 @@ export default function TodayTab() {
       name: `${activeProgram.name} — ${todayWorkout.name}`,
       programId: activeProgram.id,
       dayId: todayWorkout.id,
-      exercises: todayWorkout.exercises.map((e: any) => ({
+      exercises: todayWorkout.exercises.map((e) => ({
         exerciseId: e.exerciseId,
         exerciseName: e.exerciseName,
         targetSets: e.targetSets,

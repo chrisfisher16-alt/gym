@@ -7,7 +7,7 @@
  * instead of crashing.
  */
 export async function safeSupabaseCall<T>(
-  operation: () => Promise<{ data: T | null; error: any }>,
+  operation: () => Promise<{ data: T | null; error: { message?: string; code?: string } | null }>,
   fallbackMessage: string = 'Something went wrong. Please try again.',
 ): Promise<{ data: T | null; error: string | null }> {
   try {
@@ -25,12 +25,13 @@ export async function safeSupabaseCall<T>(
       return { data: null, error: fallbackMessage };
     }
     return { data: result.data, error: null };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Network error:', err);
+    const message = err instanceof Error ? err.message : '';
     if (
-      err.message?.includes('Network') ||
-      err.message?.includes('fetch') ||
-      err.message?.includes('timeout')
+      message.includes('Network') ||
+      message.includes('fetch') ||
+      message.includes('timeout')
     ) {
       return { data: null, error: 'No internet connection. Your data is saved locally.' };
     }

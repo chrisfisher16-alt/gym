@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useTheme, typography, spacing } from '../theme';
+import { useTheme, typography, spacing, type Theme } from '../theme';
 import { useSmartWorkout } from '../hooks/useSmartWorkout';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywall } from '../hooks/usePaywall';
@@ -832,10 +832,10 @@ function ExerciseRow({
   radius,
 }: {
   exercise: SmartExercise;
-  colors: any;
-  typo: any;
-  spacing: any;
-  radius: any;
+  colors: Theme['colors'];
+  typo: Theme['typography'];
+  spacing: Theme['spacing'];
+  radius: Theme['radius'];
 }) {
   return (
     <View

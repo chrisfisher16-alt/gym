@@ -9,7 +9,9 @@ import { ENTITLEMENT_IDS } from './pricing-config';
 
 // ── Lazy-load native module (crashes on web) ─────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic optional dependency; native module loaded at runtime
 let Purchases: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic optional dependency; enum loaded at runtime
 let LOG_LEVEL: any = {};
 
 if (Platform.OS !== 'web') {

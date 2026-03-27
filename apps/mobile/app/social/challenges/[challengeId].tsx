@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../../src/theme';
+import { useTheme, type Theme } from '../../../src/theme';
 import { ScreenContainer } from '../../../src/components/ui';
 import { useChallengeStore } from '../../../src/stores/challenge-store';
 import { supabase } from '../../../src/lib/supabase';
@@ -42,7 +42,7 @@ function getTimeRemaining(endDate: string): string {
   return `${hours}h remaining`;
 }
 
-function getStatusColor(status: string, colors: any) {
+function getStatusColor(status: string, colors: Theme['colors']) {
   switch (status) {
     case 'active':
       return colors.gold;

@@ -125,14 +125,14 @@ export default function ProgressTab() {
 
   const photoCount = useMeasurementsStore((s) => s.photos.length);
   const totalMealsLogged = useMemo(() => {
-    return Object.values(dailyLogs).reduce((sum, log: any) => sum + (log?.meals?.length ?? 0), 0);
+    return Object.values(dailyLogs).reduce((sum, log) => sum + (log?.meals?.length ?? 0), 0);
   }, [dailyLogs]);
 
   // Compute consecutive days with at least one meal logged (for achievement hints)
   const consecutiveMealDays = useMemo(() => {
     const daysWithMeals = new Set<string>();
     for (const [dateKey, log] of Object.entries(dailyLogs)) {
-      if ((log as any)?.meals?.length > 0) daysWithMeals.add(dateKey);
+      if (log?.meals?.length > 0) daysWithMeals.add(dateKey);
     }
     if (daysWithMeals.size === 0) return 0;
     let streak = 0;
@@ -173,7 +173,7 @@ export default function ProgressTab() {
     const h = history ?? [];
     if (h.length === 0) return 0;
     // Get unique workout dates sorted descending
-    const dates = [...new Set(h.map((s: any) => {
+    const dates = [...new Set(h.map((s) => {
       const d = new Date(s.completedAt);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }))].sort().reverse();
@@ -421,7 +421,7 @@ export default function ProgressTab() {
 
   const exerciseOptions = useMemo(() => {
     const lookupName = (id: string) =>
-      exercises.find((e: any) => e.id === id)?.name ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+      exercises.find((e) => e.id === id)?.name ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
     if (demo) {
       return demoPRs.map((pr) => ({ id: pr.exerciseId, name: lookupName(pr.exerciseId) }));
     }
@@ -455,7 +455,7 @@ export default function ProgressTab() {
     }> = [];
 
     const lookupName = (id: string) =>
-      exercises.find((e: any) => e.id === id)?.name ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+      exercises.find((e) => e.id === id)?.name ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
     const records = demo ? demoPRs : allRecords;
 

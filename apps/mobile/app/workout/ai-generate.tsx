@@ -8,6 +8,8 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -185,7 +187,7 @@ function parseWorkoutFromResponse(content: string): ParsedWorkout | null {
     const library = useWorkoutStore.getState().exercises;
     return {
       name: data.name,
-      exercises: data.exercises.map((e: any) => {
+      exercises: data.exercises.map((e: { name: string; sets?: number; reps?: string; rest?: number; rest_seconds?: number; notes?: string }) => {
         const libMatch = findExerciseMatch(e.name, library);
         return {
           exerciseId: libMatch?.id ?? `custom_${e.name.toLowerCase().replace(/\s+/g, '_')}`,
@@ -680,7 +682,7 @@ export default function AIGenerateWorkoutScreen() {
           returnKeyType="send"
           onSubmitEditing={() => handleSend()}
           blurOnSubmit={false}
-          onKeyPress={(e: any) => {
+          onKeyPress={(e: NativeSyntheticEvent<TextInputKeyPressEventData & { shiftKey?: boolean }>) => {
             if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
               e.preventDefault?.();
               handleSend();

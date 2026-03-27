@@ -36,9 +36,23 @@ interface ChallengeState {
   reset: () => void;
 }
 
+// ── Row types (match Supabase .select() shapes) ────────────────────────
+
+interface FriendshipRow {
+  requester_id: string;
+  addressee_id: string;
+}
+
+interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-function mapRowToChallenge(row: any): ChallengeWithParticipants {
+/* eslint-disable @typescript-eslint/no-explicit-any -- Supabase join types are complex; row shape is validated by the .select() call */
+function mapRowToChallenge(row: Record<string, any>): ChallengeWithParticipants {
   return {
     id: row.id,
     creatorId: row.creator_id,
@@ -48,6 +62,7 @@ function mapRowToChallenge(row: any): ChallengeWithParticipants {
     endsAt: row.ends_at,
     status: row.status,
     createdAt: row.created_at,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     participants: (row.challenge_participants ?? []).map((p: any) => ({
       id: p.id,
       challengeId: p.challenge_id,
@@ -60,6 +75,7 @@ function mapRowToChallenge(row: any): ChallengeWithParticipants {
     })),
   };
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ── Store ──────────────────────────────────────────────────────────────
 
@@ -113,7 +129,7 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         return;
       }
 
-      const challengeIds = (participantRows ?? []).map((r: any) => r.challenge_id);
+      const challengeIds = (participantRows ?? []).map((r) => r.challenge_id);
 
       if (challengeIds.length === 0) {
         set({ activeChallenges: [], completedChallenges: [], loading: false });
@@ -296,7 +312,7 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         .eq('status', 'accepted')
         .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
 
-      const friendIds = (friendRows ?? []).map((r: any) =>
+      const friendIds = (friendRows ?? []).map((r: FriendshipRow) =>
         r.requester_id === user.id ? r.addressee_id : r.requester_id,
       );
       const userIds = [user.id, ...friendIds];
@@ -336,7 +352,7 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         .in('id', userIds);
 
       const leaderboard: LeaderboardEntry[] = (profiles ?? [])
-        .map((p: any) => ({
+        .map((p: ProfileRow) => ({
           userId: p.id,
           displayName: p.display_name ?? 'Unknown',
           avatarUrl: p.avatar_url ?? null,

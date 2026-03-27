@@ -102,7 +102,7 @@ export async function registerPushToken(): Promise<string | null> {
 export async function scheduleLocalNotification(
   title: string,
   body: string,
-  trigger: any,
+  trigger: Parameters<typeof import('expo-notifications').scheduleNotificationAsync>[0]['trigger'],
   data?: NotificationData,
   categoryIdentifier?: string,
 ): Promise<string> {

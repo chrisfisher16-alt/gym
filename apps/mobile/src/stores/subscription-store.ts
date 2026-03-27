@@ -324,8 +324,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       ).catch((e) => console.warn('[SubscriptionStore] persist promo grant failed:', e));
 
       return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message || 'Failed to validate promo code' };
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed to validate promo code' };
     }
   },
 

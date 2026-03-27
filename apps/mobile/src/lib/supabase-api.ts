@@ -184,16 +184,22 @@ export async function getSuggestedWeight(
   if (error || !recentSets?.length) return null;
 
   // Group by session (the most recent one)
-  const lastSessionId = (recentSets[0] as any).workout_sessions?.id;
+  // Supabase !inner join returns the related row as a single object at runtime
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join shape
+  const first = recentSets[0] as any;
+  const lastSessionId: string | undefined = first.workout_sessions?.id;
   const lastSessionSets = recentSets.filter(
-    (s: any) => s.workout_sessions?.id === lastSessionId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (s) => (s as any).workout_sessions?.id === lastSessionId,
   );
 
   if (!lastSessionSets.length) return null;
 
-  const lastWeight = (lastSessionSets[0] as any).weight_kg ?? 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lastWeight: number = (lastSessionSets[0] as any).weight_kg ?? 0;
   const allHitTarget = lastSessionSets.every(
-    (s: any) => (s.reps ?? 0) >= targetReps,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (s) => ((s as any).reps ?? 0) >= targetReps,
   );
 
   // Progressive overload: if all sets hit target reps, suggest increment
@@ -441,7 +447,7 @@ export async function checkAchievements(context: AchCtx): Promise<string[]> {
     .select('achievement_type')
     .eq('user_id', userId);
 
-  const earnedTypes = new Set((earned ?? []).map((a: any) => a.achievement_type));
+  const earnedTypes = new Set((earned ?? []).map((a: { achievement_type: string }) => a.achievement_type));
   const newlyEarned: string[] = [];
 
   for (const def of ACHIEVEMENT_DEFINITIONS) {

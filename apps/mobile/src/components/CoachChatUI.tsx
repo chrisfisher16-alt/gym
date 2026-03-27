@@ -11,6 +11,8 @@ import {
   StyleSheet,
   type StyleProp,
   type ViewStyle,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { invalidateConfigCache } from '../lib/ai-provider';
 import { crossPlatformAlert } from '../lib/cross-platform-alert';
@@ -481,7 +483,7 @@ export function CoachChatUI({
           returnKeyType="send"
           onSubmitEditing={handleSend}
           blurOnSubmit={false}
-          onKeyPress={(e: any) => {
+          onKeyPress={(e: NativeSyntheticEvent<TextInputKeyPressEventData & { shiftKey?: boolean }>) => {
             if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
               e.preventDefault?.();
               handleSend();

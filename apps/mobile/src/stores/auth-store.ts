@@ -361,8 +361,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { error } = await supabase.auth.resetPasswordForEmail(email);
       if (error) return { error: error.message };
       return { error: null };
-    } catch (e: any) {
-      return { error: e.message || 'Failed to send reset email' };
+    } catch (e: unknown) {
+      return { error: e instanceof Error ? e.message : 'Failed to send reset email' };
     }
   },
 

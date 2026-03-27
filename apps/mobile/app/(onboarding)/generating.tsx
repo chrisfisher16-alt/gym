@@ -253,8 +253,8 @@ export default function GeneratingScreen() {
 
       // Navigate to complete screen which handles Supabase save, coach prefs, and reset
       router.replace('/(onboarding)/complete');
-    } catch (err: any) {
-      crossPlatformAlert('Something went wrong', err?.message || 'Please try again.');
+    } catch (err: unknown) {
+      crossPlatformAlert('Something went wrong', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setIsSaving(false);
     }

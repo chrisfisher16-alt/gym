@@ -58,8 +58,8 @@ export default function SignInScreen() {
       } else {
         router.replace('/');
       }
-    } catch (e: any) {
-      setFormError(friendlyAuthError(e?.message || 'Something went wrong. Please try again.'));
+    } catch (e: unknown) {
+      setFormError(friendlyAuthError(e instanceof Error ? e.message : 'Something went wrong. Please try again.'));
     }
   };
 
