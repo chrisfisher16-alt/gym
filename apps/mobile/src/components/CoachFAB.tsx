@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   Modal,
   Pressable,
   StyleSheet,
@@ -49,14 +48,6 @@ interface CoachFABProps {
 // Context-aware copy
 // ---------------------------------------------------------------------------
 
-const TOOLTIP_TEXT: Record<string, string> = {
-  workout: 'Need help with your workout?',
-  nutrition: 'Questions about your meals?',
-  progress: "Let's review your progress",
-  onboarding: 'I can help you get set up',
-  general: 'Ask your coach anything',
-};
-
 const QUICK_PROMPTS: Record<string, string[]> = {
   workout: [
     'Suggest a workout for today',
@@ -80,10 +71,7 @@ const QUICK_PROMPTS: Record<string, string[]> = {
   ],
 };
 
-const TOOLTIP_DURATION = 3_000;
 
-// Track which contexts have already shown a tooltip this session
-const shownTooltips = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Component
@@ -110,10 +98,6 @@ export function CoachFAB({
   const maxY = screenH - FAB_SIZE - safeBottom;
   const defaultX = maxX;
   const defaultY = maxY;
-
-  // Tooltip state (floating FAB only)
-  const tooltipOpacity = useRef(new Animated.Value(0)).current;
-  const [showTooltip, setShowTooltip] = useState(false);
 
   // Quick-prompts popover (floating FAB only)
   const [promptsVisible, setPromptsVisible] = useState(false);
@@ -233,36 +217,6 @@ export function CoachFAB({
   }));
 
   // -----------------------------------------------------------------------
-  // Tooltip auto-show on mount (once per context per session)
-  // -----------------------------------------------------------------------
-
-  useEffect(() => {
-    // Only for the floating (unlabeled) variant
-    if (label || hidden) return;
-
-    const key = context;
-    if (shownTooltips.has(key)) return;
-    shownTooltips.add(key);
-
-    setShowTooltip(true);
-    Animated.timing(tooltipOpacity, {
-      toValue: 1,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-
-    const timer = setTimeout(() => {
-      Animated.timing(tooltipOpacity, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => setShowTooltip(false));
-    }, TOOLTIP_DURATION);
-
-    return () => clearTimeout(timer);
-  }, [context, label, hidden, tooltipOpacity]);
-
-  // -----------------------------------------------------------------------
   // Hidden state
   // -----------------------------------------------------------------------
 
@@ -309,7 +263,6 @@ export function CoachFAB({
   // Floating draggable FAB with tooltip + long-press quick prompts
   // -----------------------------------------------------------------------
 
-  const tooltipMessage = TOOLTIP_TEXT[context] ?? TOOLTIP_TEXT.general;
   const prompts = QUICK_PROMPTS[context] ?? QUICK_PROMPTS.general;
 
   return (
@@ -319,31 +272,6 @@ export function CoachFAB({
           style={[styles.draggableContainer, animatedContainerStyle]}
           pointerEvents="box-none"
         >
-          {/* Tooltip bubble */}
-          {showTooltip && (
-            <Animated.View
-              style={[
-                styles.tooltip,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: radius.md,
-                  opacity: tooltipOpacity,
-                },
-              ]}
-            >
-              <Text style={[styles.tooltipText, { color: colors.text }]}>
-                {tooltipMessage}
-              </Text>
-              <View
-                style={[
-                  styles.tooltipCaret,
-                  { borderLeftColor: colors.surface },
-                ]}
-              />
-            </Animated.View>
-          )}
-
           {/* FAB button */}
           <View
             style={[
@@ -435,38 +363,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   labelText: {},
-
-  // Tooltip
-  tooltip: {
-    position: 'absolute',
-    bottom: 12,
-    right: 64,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-    maxWidth: 200,
-  },
-  tooltipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  tooltipCaret: {
-    position: 'absolute',
-    right: -8,
-    top: '50%',
-    marginTop: -6,
-    width: 0,
-    height: 0,
-    borderTopWidth: 6,
-    borderBottomWidth: 6,
-    borderLeftWidth: 8,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-  },
 
   // Quick-prompts overlay / menu
   overlay: {
