@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Pressable, RefreshControl } from 'react-native';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import {
   QuickActionSheet,
   SmartHeader,
   WorkoutFingerprint,
+  EmptyState,
 } from '../../src/components/ui';
 import type { QuickAction } from '../../src/components/ui/QuickActionSheet';
 import { useQuickActions } from '../../src/hooks/useQuickActions';
@@ -36,7 +37,7 @@ import { UpgradeBanner } from '../../src/components/UpgradeBanner';
 import { checkWorkoutLogLimit, incrementUsage, type UsageCheck } from '../../src/lib/usage-limits';
 import { WorkoutMilestones } from '../../src/components/WorkoutMilestones';
 import { WeeklyCalendarRow } from '../../src/components/workout/WeeklyCalendarRow';
-import { mediumImpact } from '../../src/lib/haptics';
+import { mediumImpact, pullToRefreshThreshold } from '../../src/lib/haptics';
 
 export default function WorkoutTab() {
   const router = useRouter();
@@ -58,6 +59,20 @@ export default function WorkoutTab() {
 
   // Quick actions
   const { show: showQuickActions, sheetProps } = useQuickActions();
+
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    pullToRefreshThreshold();
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        initialize(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [initialize]);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -292,7 +307,9 @@ export default function WorkoutTab() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+    >
       <Animated.View entering={FadeIn.duration(200)} style={{ flex: 1 }}>
       {/* Upgrade Banner for free users */}
       {tier === 'free' && (
@@ -745,14 +762,13 @@ export default function WorkoutTab() {
         </View>
 
         {recentWorkouts.length === 0 ? (
-          <Card>
-            <View style={styles.emptyRecent}>
-              <Ionicons name="time-outline" size={32} color={colors.textTertiary} />
-              <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>
-                No workouts yet. Start your first one!
-              </Text>
-            </View>
-          </Card>
+          <EmptyState
+            icon="barbell-outline"
+            title="No Workouts Yet"
+            description="Start your first workout to see it here"
+            actionLabel="Start Workout"
+            onAction={() => router.push('/workout/exercises')}
+          />
         ) : (
           recentWorkouts.map((session) => (
             <Pressable

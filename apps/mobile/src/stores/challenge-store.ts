@@ -1,104 +1,128 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import type {
+  ChallengeWithParticipants,
+  ChallengeMetric,
+  LeaderboardEntry,
+} from '../../../../packages/shared/src/types/compete';
+import type { CreateChallengeInput } from '../../../../packages/shared/src/schemas/compete';
+
+const STORAGE_KEYS = {
+  ACTIVE: '@challenges/active',
+  COMPLETED: '@challenges/completed',
+} as const;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type ChallengeMetric = 'volume' | 'workouts' | 'streak' | 'prs' | 'consistency';
-export type ChallengeStatus = 'pending' | 'active' | 'completed' | 'cancelled';
-export type ParticipantStatus = 'invited' | 'accepted' | 'declined';
+interface ChallengeState {
+  activeChallenges: ChallengeWithParticipants[];
+  completedChallenges: ChallengeWithParticipants[];
+  loading: boolean;
+  error: string | null;
 
-export interface ChallengeParticipant {
-  id: string;
-  challengeId: string;
-  userId: string;
-  displayName: string;
-  avatarUrl?: string;
-  status: ParticipantStatus;
-  score: number;
-  lastUpdated: string;
+  // Leaderboard
+  leaderboard: LeaderboardEntry[];
+  leaderboardMetric: ChallengeMetric;
+  leaderboardTimeframe: 'week' | 'month' | 'all';
+
+  // Actions
+  initialize: () => Promise<void>;
+  fetchChallenges: () => Promise<void>;
+  createChallenge: (input: CreateChallengeInput) => Promise<{ error: string | null }>;
+  acceptChallenge: (challengeId: string) => Promise<void>;
+  declineChallenge: (challengeId: string) => Promise<void>;
+  fetchLeaderboard: (metric: ChallengeMetric, timeframe: 'week' | 'month' | 'all') => Promise<void>;
+  reset: () => void;
 }
 
-export interface Challenge {
-  id: string;
-  creatorId: string;
-  title: string;
-  metric: ChallengeMetric;
-  startsAt: string;
-  endsAt: string;
-  status: ChallengeStatus;
-  createdAt: string;
-  participants: ChallengeParticipant[];
-}
+// ── Helpers ─────────────────────────────────────────────────────────────
 
-interface CreateChallengeParams {
-  title: string;
-  metric: ChallengeMetric;
-  durationDays: number;
-  participantIds: string[];
+function mapRowToChallenge(row: any): ChallengeWithParticipants {
+  return {
+    id: row.id,
+    creatorId: row.creator_id,
+    title: row.title,
+    metric: row.metric,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    status: row.status,
+    createdAt: row.created_at,
+    participants: (row.challenge_participants ?? []).map((p: any) => ({
+      id: p.id,
+      challengeId: p.challenge_id,
+      userId: p.user_id,
+      status: p.status,
+      score: p.score ?? 0,
+      joinedAt: p.joined_at,
+      displayName: p.profiles?.display_name ?? 'Unknown',
+      avatarUrl: p.profiles?.avatar_url ?? null,
+    })),
+  };
 }
 
 // ── Store ──────────────────────────────────────────────────────────────
 
-interface ChallengeState {
-  challenges: Challenge[];
-  isLoading: boolean;
-  isInitialized: boolean;
-
-  initialize: () => Promise<void>;
-  reset: () => void;
-  fetchChallenges: () => Promise<void>;
-  createChallenge: (params: CreateChallengeParams) => Promise<{ id: string } | null>;
-  acceptChallenge: (challengeId: string) => Promise<void>;
-  declineChallenge: (challengeId: string) => Promise<void>;
-  updateScore: (challengeId: string, userId: string, score: number) => Promise<void>;
-}
-
-const CACHE_KEY = '@formiq/challenges';
-
 export const useChallengeStore = create<ChallengeState>((set, get) => ({
-  challenges: [],
-  isLoading: false,
-  isInitialized: false,
+  activeChallenges: [],
+  completedChallenges: [],
+  loading: false,
+  error: null,
+  leaderboard: [],
+  leaderboardMetric: 'volume',
+  leaderboardTimeframe: 'week',
 
   initialize: async () => {
     // Load from cache first for instant UI
     try {
-      const cached = await AsyncStorage.getItem(CACHE_KEY);
-      if (cached) {
-        set({ challenges: JSON.parse(cached), isInitialized: true });
+      const [active, completed] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.ACTIVE),
+        AsyncStorage.getItem(STORAGE_KEYS.COMPLETED),
+      ]);
+      if (active || completed) {
+        set({
+          activeChallenges: active ? JSON.parse(active) : [],
+          completedChallenges: completed ? JSON.parse(completed) : [],
+        });
       }
     } catch (err) {
-      console.warn('[Challenges] Failed to load cached challenges:', err);
+      console.warn('[Challenges] Failed to load cached data:', err);
     }
 
-    if (!isSupabaseConfigured) { set({ isInitialized: true }); return; }
+    if (!isSupabaseConfigured) return;
     await get().fetchChallenges();
-    set({ isInitialized: true });
   },
 
   fetchChallenges: async () => {
     if (!isSupabaseConfigured) return;
-    set({ isLoading: true });
+
+    set({ loading: true, error: null });
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { set({ isLoading: false }); return; }
+      if (!user) { set({ loading: false }); return; }
 
-      // Fetch challenges where the current user is a participant
-      const { data: participantRows } = await supabase
+      // Get challenge IDs the user participates in
+      const { data: participantRows, error: pError } = await supabase
         .from('challenge_participants')
         .select('challenge_id')
         .eq('user_id', user.id);
 
-      if (!participantRows || participantRows.length === 0) {
-        set({ challenges: [], isLoading: false });
-        AsyncStorage.setItem(CACHE_KEY, JSON.stringify([])).catch(console.warn);
+      if (pError) {
+        set({ loading: false, error: pError.message });
         return;
       }
 
-      const challengeIds = participantRows.map((r: any) => r.challenge_id);
+      const challengeIds = (participantRows ?? []).map((r: any) => r.challenge_id);
 
+      if (challengeIds.length === 0) {
+        set({ activeChallenges: [], completedChallenges: [], loading: false });
+        AsyncStorage.setItem(STORAGE_KEYS.ACTIVE, '[]').catch(console.warn);
+        AsyncStorage.setItem(STORAGE_KEYS.COMPLETED, '[]').catch(console.warn);
+        return;
+      }
+
+      // Fetch challenges with participants + profile data
       const { data: rows, error } = await supabase
         .from('challenges')
         .select(`
@@ -116,7 +140,7 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
             user_id,
             status,
             score,
-            last_updated,
+            joined_at,
             profiles:profiles!challenge_participants_user_id_fkey (
               display_name,
               avatar_url
@@ -127,79 +151,65 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.warn('[Challenges] Fetch error:', error);
-        set({ isLoading: false });
+        set({ loading: false, error: error.message });
         return;
       }
 
-      if (!rows) { set({ isLoading: false }); return; }
+      const challenges = (rows ?? []).map(mapRowToChallenge);
 
-      const challenges: Challenge[] = rows.map((row: any) => ({
-        id: row.id,
-        creatorId: row.creator_id,
-        title: row.title,
-        metric: row.metric,
-        startsAt: row.starts_at,
-        endsAt: row.ends_at,
-        status: row.status,
-        createdAt: row.created_at,
-        participants: (row.challenge_participants || []).map((p: any) => ({
-          id: p.id,
-          challengeId: p.challenge_id,
-          userId: p.user_id,
-          displayName: p.profiles?.display_name ?? 'Unknown',
-          avatarUrl: p.profiles?.avatar_url,
-          status: p.status,
-          score: p.score ?? 0,
-          lastUpdated: p.last_updated,
-        })),
-      }));
+      const activeChallenges = challenges.filter(
+        (c) => c.status === 'pending' || c.status === 'active',
+      );
+      const completedChallenges = challenges.filter(
+        (c) => c.status === 'completed' || c.status === 'cancelled',
+      );
 
-      set({ challenges, isLoading: false });
+      set({ activeChallenges, completedChallenges, loading: false });
 
       // Cache for offline use
-      AsyncStorage.setItem(CACHE_KEY, JSON.stringify(challenges)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.ACTIVE, JSON.stringify(activeChallenges)).catch(console.warn);
+      AsyncStorage.setItem(STORAGE_KEYS.COMPLETED, JSON.stringify(completedChallenges)).catch(console.warn);
     } catch (err) {
-      console.warn('[Challenges] Fetch exception:', err);
-      set({ isLoading: false });
+      console.error('[Challenges] Fetch failed:', err);
+      set({ loading: false, error: 'Failed to load challenges' });
     }
   },
 
-  createChallenge: async (params) => {
-    if (!isSupabaseConfigured) return null;
+  createChallenge: async (input) => {
+    if (!isSupabaseConfigured) return { error: 'Not configured' };
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!user) return { error: 'Not authenticated' };
 
-      const startsAt = new Date().toISOString();
-      const endsAt = new Date(Date.now() + params.durationDays * 86400000).toISOString();
-
-      const { data: challenge, error } = await supabase
+      // Insert the challenge
+      const { data: challenge, error: cError } = await supabase
         .from('challenges')
         .insert({
           creator_id: user.id,
-          title: params.title,
-          metric: params.metric,
-          starts_at: startsAt,
-          ends_at: endsAt,
-          status: 'active',
+          title: input.title,
+          metric: input.metric,
+          starts_at: input.startsAt,
+          ends_at: input.endsAt,
+          status: 'pending',
         })
         .select('id')
         .single();
 
-      if (error || !challenge) {
-        console.warn('[Challenges] Create error:', error);
-        return null;
-      }
+      if (cError || !challenge) return { error: cError?.message ?? 'Failed to create challenge' };
 
-      // Insert participants: creator auto-accepted, others as invited
+      // Insert participants (creator as accepted + invitees as invited)
       const participantRows = [
-        { challenge_id: challenge.id, user_id: user.id, status: 'accepted', score: 0 },
-        ...params.participantIds.map((pid) => ({
+        {
+          challenge_id: challenge.id,
+          user_id: user.id,
+          status: 'accepted' as const,
+          score: 0,
+        },
+        ...input.participantIds.map((pid) => ({
           challenge_id: challenge.id,
           user_id: pid,
-          status: 'invited',
+          status: 'invited' as const,
           score: 0,
         })),
       ];
@@ -208,75 +218,48 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         .from('challenge_participants')
         .insert(participantRows);
 
-      if (pError) {
-        console.warn('[Challenges] Participants insert error:', pError);
-      }
+      if (pError) return { error: pError.message };
 
       await get().fetchChallenges();
-      return { id: challenge.id };
+      return { error: null };
     } catch (err) {
-      console.warn('[Challenges] Create exception:', err);
-      return null;
+      console.error('[Challenges] Create failed:', err);
+      return { error: 'Failed to create challenge' };
     }
   },
 
-  acceptChallenge: async (challengeId: string) => {
+  acceptChallenge: async (challengeId) => {
     if (!isSupabaseConfigured) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Optimistic update
-      set({
-        challenges: get().challenges.map((c) =>
-          c.id === challengeId
-            ? {
-                ...c,
-                participants: c.participants.map((p) =>
-                  p.userId === user.id ? { ...p, status: 'accepted' as ParticipantStatus } : p
-                ),
-              }
-            : c
-        ),
-      });
-
       const { error } = await supabase
         .from('challenge_participants')
-        .update({ status: 'accepted' })
+        .update({ status: 'accepted', joined_at: new Date().toISOString() })
         .eq('challenge_id', challengeId)
         .eq('user_id', user.id);
 
       if (error) {
-        console.warn('[Challenges] Accept error:', error);
-        await get().fetchChallenges();
+        console.error('[Challenges] Accept failed:', error);
+        set({ error: error.message });
+        return;
       }
-    } catch (err) {
-      console.warn('[Challenges] Accept exception:', err);
+
       await get().fetchChallenges();
+    } catch (err) {
+      console.error('[Challenges] Accept exception:', err);
+      set({ error: 'Failed to accept challenge' });
     }
   },
 
-  declineChallenge: async (challengeId: string) => {
+  declineChallenge: async (challengeId) => {
     if (!isSupabaseConfigured) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      // Optimistic update
-      set({
-        challenges: get().challenges.map((c) =>
-          c.id === challengeId
-            ? {
-                ...c,
-                participants: c.participants.map((p) =>
-                  p.userId === user.id ? { ...p, status: 'declined' as ParticipantStatus } : p
-                ),
-              }
-            : c
-        ),
-      });
 
       const { error } = await supabase
         .from('challenge_participants')
@@ -285,50 +268,73 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
         .eq('user_id', user.id);
 
       if (error) {
-        console.warn('[Challenges] Decline error:', error);
-        await get().fetchChallenges();
-      }
-    } catch (err) {
-      console.warn('[Challenges] Decline exception:', err);
-      await get().fetchChallenges();
-    }
-  },
-
-  updateScore: async (challengeId: string, userId: string, score: number) => {
-    if (!isSupabaseConfigured) return;
-
-    try {
-      const { error } = await supabase
-        .from('challenge_participants')
-        .update({ score, last_updated: new Date().toISOString() })
-        .eq('challenge_id', challengeId)
-        .eq('user_id', userId);
-
-      if (error) {
-        console.warn('[Challenges] Update score error:', error);
+        console.error('[Challenges] Decline failed:', error);
+        set({ error: error.message });
         return;
       }
 
-      // Update local state
-      set({
-        challenges: get().challenges.map((c) =>
-          c.id === challengeId
-            ? {
-                ...c,
-                participants: c.participants.map((p) =>
-                  p.userId === userId ? { ...p, score, lastUpdated: new Date().toISOString() } : p
-                ),
-              }
-            : c
-        ),
-      });
+      await get().fetchChallenges();
     } catch (err) {
-      console.warn('[Challenges] Update score exception:', err);
+      console.error('[Challenges] Decline exception:', err);
+      set({ error: 'Failed to decline challenge' });
+    }
+  },
+
+  fetchLeaderboard: async (metric, timeframe) => {
+    set({ leaderboardMetric: metric, leaderboardTimeframe: timeframe });
+
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get accepted friend IDs
+      const { data: friendRows } = await supabase
+        .from('friendships')
+        .select('requester_id, addressee_id')
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+
+      const friendIds = (friendRows ?? []).map((r: any) =>
+        r.requester_id === user.id ? r.addressee_id : r.requester_id,
+      );
+      const userIds = [user.id, ...friendIds];
+
+      // Placeholder: generate leaderboard from friend profiles with zero scores
+      // TODO: Replace with actual aggregation query once workout stats tables are ready
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url')
+        .in('id', userIds);
+
+      const leaderboard: LeaderboardEntry[] = (profiles ?? [])
+        .map((p: any, idx: number) => ({
+          userId: p.id,
+          displayName: p.display_name ?? 'Unknown',
+          avatarUrl: p.avatar_url ?? null,
+          score: 0,
+          rank: idx + 1,
+        }))
+        .sort((a, b) => a.rank - b.rank);
+
+      set({ leaderboard });
+    } catch (err) {
+      console.error('[Challenges] Leaderboard fetch failed:', err);
     }
   },
 
   reset: () => {
-    set({ challenges: [], isLoading: false, isInitialized: false });
-    AsyncStorage.removeItem(CACHE_KEY).catch(console.warn);
+    set({
+      activeChallenges: [],
+      completedChallenges: [],
+      loading: false,
+      error: null,
+      leaderboard: [],
+      leaderboardMetric: 'volume',
+      leaderboardTimeframe: 'week',
+    });
+    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE).catch(console.warn);
+    AsyncStorage.removeItem(STORAGE_KEYS.COMPLETED).catch(console.warn);
   },
 }));

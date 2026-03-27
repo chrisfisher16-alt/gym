@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
-import { ScreenContainer } from '../../src/components/ui';
+import { ScreenContainer, EmptyState } from '../../src/components/ui';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useFriendsStore, type Friendship, type FriendProfile } from '../../src/stores/friends-store';
 
@@ -304,20 +304,11 @@ export default function FriendsScreen() {
             <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
           ) : activeTab === 'friends' ? (
             friends.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="people-outline" size={48} color={colors.textTertiary} />
-                <Text style={[typography.h3, { color: colors.text, marginTop: spacing.base }]}>
-                  No friends yet
-                </Text>
-                <Text
-                  style={[
-                    typography.body,
-                    { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs },
-                  ]}
-                >
-                  Search for friends by name or email to get started
-                </Text>
-              </View>
+              <EmptyState
+                icon="people-outline"
+                title="No Friends Yet"
+                description="Search for friends or share your invite link"
+              />
             ) : (
               <FlatList
                 data={friends}
@@ -456,12 +447,11 @@ export default function FriendsScreen() {
               )}
 
               {incomingRequests.length === 0 && outgoingRequests.length === 0 && (
-                <View style={styles.emptyState}>
-                  <Ionicons name="mail-outline" size={48} color={colors.textTertiary} />
-                  <Text style={[typography.h3, { color: colors.text, marginTop: spacing.base }]}>
-                    No pending requests
-                  </Text>
-                </View>
+                <EmptyState
+                  icon="mail-outline"
+                  title="No Requests"
+                  description="When someone sends you a friend request, it will appear here"
+                />
               )}
             </View>
           )}

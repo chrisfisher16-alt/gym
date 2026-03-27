@@ -11,12 +11,14 @@ import { NetworkBanner } from '../src/components/NetworkBanner';
 import { CommandPaletteProvider, useCommandPalette } from '../src/providers/CommandPaletteProvider';
 import { CommandPalette } from '../src/components/ui/CommandPalette';
 import { CoachPeekProvider } from '../src/providers/CoachPeekProvider';
+import { CoachSheetProvider } from '../src/providers/CoachSheetProvider';
 import { CoachSheet } from '../src/components/CoachSheet';
 import { QuickInputProvider } from '../src/providers/QuickInputProvider';
 import { migrateAIConfig } from '../src/lib/ai-provider';
 import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
 import { useThemeStore } from '../src/stores/theme-store';
 import { initializeStoreBridge } from '../src/lib/store-bridge';
+import { getInitialURL, onDeepLink, parseInviteCode, handleInviteLink } from '../src/lib/deep-linking';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
@@ -49,6 +51,27 @@ function RootLayout() {
   useEffect(() => {
     const cleanup = initializeStoreBridge();
     return cleanup;
+  }, []);
+
+  // Handle deep links (invite codes)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    // Cold start: check if app was opened via a deep link
+    getInitialURL().then((url) => {
+      if (url) {
+        const code = parseInviteCode(url);
+        if (code) handleInviteLink(code);
+      }
+    });
+
+    // Warm start: listen for incoming deep links
+    const unsubscribe = onDeepLink((url) => {
+      const code = parseInviteCode(url);
+      if (code) handleInviteLink(code);
+    });
+
+    return unsubscribe;
   }, []);
 
   // Wire up Sentry as the error reporter for ErrorBoundary
@@ -127,6 +150,7 @@ function RootLayout() {
     <QueryClientProvider client={queryClient}>
     <CommandPaletteProvider>
     <CommandPaletteSheet />
+    <CoachSheetProvider>
     <CoachPeekProvider>
     <QuickInputProvider>
     <ToastProvider>
@@ -161,6 +185,7 @@ function RootLayout() {
     </ToastProvider>
     </QuickInputProvider>
     </CoachPeekProvider>
+    </CoachSheetProvider>
     </CommandPaletteProvider>
     </QueryClientProvider>
     </GestureHandlerRootView>

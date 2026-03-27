@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, Animated as RNAnimated } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, Animated as RNAnimated, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -57,6 +57,7 @@ import type { MealEntry, MealType } from '../../src/types/nutrition';
 import { generateInsights, type InsightContext as InsightCtx } from '../../src/lib/insight-engine';
 import { InsightBadge } from '../../src/components/ui';
 import { useCoachStore } from '../../src/stores/coach-store';
+import { pullToRefreshThreshold } from '../../src/lib/haptics';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const RING_SIZE = scale(160);
@@ -108,6 +109,20 @@ export default function NutritionTab() {
   const waterRipple = React.useRef(new RNAnimated.Value(0)).current;
   const history = useNutritionHistory(7);
   const { show: showQuickActions, sheetProps } = useQuickActions();
+
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    pullToRefreshThreshold();
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        initialize(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [initialize]);
 
   // ── Inline Insights (nutrition only) ─────────────────────────────
   const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
@@ -333,7 +348,9 @@ export default function NutritionTab() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+    >
       <Animated.View entering={FadeIn.duration(200)} style={{ flex: 1 }}>
       {/* Upgrade Banner for free users */}
       {tier === 'free' && (

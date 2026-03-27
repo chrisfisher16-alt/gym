@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme';
@@ -48,6 +48,7 @@ import {
 import { generateInsights, type InsightContext as InsightCtx } from '../../src/lib/insight-engine';
 import { InsightBadge } from '../../src/components/ui';
 import { useCoachStore } from '../../src/stores/coach-store';
+import { pullToRefreshThreshold } from '../../src/lib/haptics';
 
 // ── Date Range Types ──────────────────────────────────────────────
 
@@ -213,6 +214,27 @@ export default function ProgressTab() {
     ? DEMO_HEALTH_DATA.recentWeight
     : (recentWeight ?? latestMeasurementWeight);
   const displayHistory: CompletedSession[] = demo ? demoHistory : history;
+
+  // Pull-to-refresh
+  const initWorkout = useWorkoutStore((s) => s.initialize);
+  const initNutrition = useNutritionStore((s) => s.initialize);
+  const syncHealth = useHealthStore((s) => s.syncNow);
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    pullToRefreshThreshold();
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        initWorkout(),
+        initNutrition(),
+        initMeasurements(),
+        initAchievements(),
+        syncHealth(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [initWorkout, initNutrition, initMeasurements, initAchievements, syncHealth]);
 
   // Initialize sub-stores
   useEffect(() => {
@@ -671,7 +693,9 @@ export default function ProgressTab() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+    >
       <Animated.View entering={FadeIn.duration(200)} style={{ flex: 1 }}>
       <View style={[styles.header, { paddingTop: spacing.base, paddingBottom: spacing.lg }]}>
         <View style={{ flex: 1 }}>

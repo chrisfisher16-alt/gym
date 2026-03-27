@@ -14,6 +14,7 @@ import Constants from 'expo-constants';
 import { useThemeStore, type ColorMode } from '../src/stores/theme-store';
 import { KG_TO_LBS } from '../src/lib/constants';
 import { useSpaceStore, type TrainingSpace } from '../src/stores/space-store';
+import { useCoachSheet } from '../src/providers/CoachSheetProvider';
 import { SpaceSwitcher, SpaceEditor } from '../src/components/ui';
 import { checkAIMessageLimit, checkWorkoutLogLimit, checkMealLogLimit, type UsageCheck } from '../src/lib/usage-limits';
 import type { CoachTone } from '@health-coach/shared';
@@ -31,6 +32,7 @@ export default function SettingsScreen() {
   const setCoachPreferences = useAuthStore((s) => s.setCoachPreferences);
   const colorMode = useThemeStore((s) => s.colorMode);
   const setColorMode = useThemeStore((s) => s.setColorMode);
+  const { open: openCoachSheet } = useCoachSheet();
 
   // ── Space Editor state ──────────────────────────────────────────
   const [spaceEditorVisible, setSpaceEditorVisible] = useState(false);
@@ -265,6 +267,20 @@ export default function SettingsScreen() {
           spacing={spacing}
           showChevron
           onPress={() => router.push('/ai-settings')}
+        />
+        <Divider />
+        <SettingRow
+          icon="chatbubble-ellipses-outline"
+          label="Coach Chat"
+          value="Open AI coach"
+          colors={colors}
+          typography={typography}
+          spacing={spacing}
+          showChevron
+          onPress={() => {
+            router.back();
+            setTimeout(openCoachSheet, 300);
+          }}
         />
         <Divider />
         <SettingRow

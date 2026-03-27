@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { useProfileStore } from '../../src/stores/profile-store';
-import { Card, Badge } from '../../src/components/ui';
+import { Card, Badge, EmptyState } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume, formatTime } from '../../src/lib/workout-utils';
 import type { CompletedSession } from '../../src/types/workout';
 
@@ -164,13 +164,11 @@ export default function WorkoutHistoryScreen() {
           contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="time-outline" size={48} color={colors.textTertiary} />
-              <Text style={[typography.h3, { color: colors.text, marginTop: spacing.base }]}>No History</Text>
-              <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }]}>
-                Your completed workouts will appear here
-              </Text>
-            </View>
+            <EmptyState
+              icon="calendar-outline"
+              title="No Workout History"
+              description="Complete a workout to see your history"
+            />
           }
         />
       ) : (

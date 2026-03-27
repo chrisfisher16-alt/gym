@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { useProfileStore } from '../../stores/profile-store';
 import { useFeedbackStore } from '../../stores/feedback-store';
+import { useFeedStore } from '../../stores/feed-store';
 import { useWorkoutStore } from '../../stores/workout-store';
 import { BottomSheet, Button, StatCard } from '../ui';
 import { MuscleAnatomyDiagram } from '../MuscleAnatomyDiagram';
@@ -169,6 +170,8 @@ export function WorkoutSummaryModal({
   const [watchCalories, setWatchCalories] = useState<{ calories: number; source: string } | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [postedToFeed, setPostedToFeed] = useState(false);
+  const postWorkoutCompletion = useFeedStore((s) => s.postWorkoutCompletion);
   const shouldShowPrompt = useFeedbackStore((s) => s.shouldShowPrompt);
   const recordPromptShown = useFeedbackStore((s) => s.recordPromptShown);
   const showPrompt = useMemo(() => shouldShowPrompt(), [visible]);
@@ -192,9 +195,12 @@ export function WorkoutSummaryModal({
     return () => { cancelled = true; };
   }, [session?.id, visible]);
 
-  // Reset mood when modal opens with a new session
+  // Reset mood and feed post state when modal opens with a new session
   useEffect(() => {
-    if (visible) setSelectedMood(null);
+    if (visible) {
+      setSelectedMood(null);
+      setPostedToFeed(false);
+    }
   }, [visible]);
 
   // Celebration effects when modal appears
@@ -619,19 +625,65 @@ export function WorkoutSummaryModal({
           </View>
         )}
 
-        <View style={{ flexDirection: 'row', gap: spacing.md, width: '100%' }}>
-          <Button
-            title="Share"
-            variant="secondary"
-            onPress={handleShare}
-            icon={<Ionicons name="share-outline" size={18} color={colors.primary} />}
-            style={{ flex: 1 }}
-          />
-          <Button
-            title="Done"
-            onPress={onDone}
-            style={{ flex: 1 }}
-          />
+        <View style={{ gap: spacing.md, width: '100%' }}>
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <Button
+              title="Share"
+              variant="secondary"
+              onPress={handleShare}
+              icon={<Ionicons name="share-outline" size={18} color={colors.primary} />}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Done"
+              onPress={onDone}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                await postWorkoutCompletion({
+                  title: `Completed ${session.name}`,
+                  body: `${durationDisplay} \u00b7 ${exercisesDone} exercises \u00b7 ${session.totalSets} sets \u00b7 ${session.totalVolume.toLocaleString()} ${weightUnit}${session.prCount > 0 ? ` \u00b7 ${session.prCount} PR${session.prCount > 1 ? 's' : ''}` : ''}`,
+                  metadata: {
+                    durationSeconds: session.durationSeconds,
+                    exerciseCount: exercisesDone,
+                    totalSets: session.totalSets,
+                    totalVolume: session.totalVolume,
+                    prCount: session.prCount,
+                  },
+                  sessionId: session.id,
+                });
+                successNotification();
+                setPostedToFeed(true);
+              } catch {
+                // Silently handle — non-critical
+              }
+            }}
+            disabled={postedToFeed}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: postedToFeed ? colors.surfaceSecondary : colors.surface,
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+              paddingVertical: spacing.sm,
+              paddingHorizontal: spacing.md,
+              gap: spacing.xs,
+            }}
+          >
+            <Ionicons
+              name={postedToFeed ? 'checkmark-circle' : 'people-outline'}
+              size={18}
+              color={postedToFeed ? colors.completed : colors.text}
+            />
+            <Text style={[typography.body, { color: postedToFeed ? colors.completed : colors.text, fontWeight: '600' }]}>
+              {postedToFeed ? 'Posted!' : 'Post to Feed'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </BottomSheet>
 

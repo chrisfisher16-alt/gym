@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing as sp } from '../../src/theme';
-import { ScreenContainer } from '../../src/components/ui';
+import { ScreenContainer, EmptyState } from '../../src/components/ui';
 import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useFeedStore, type FeedItem } from '../../src/stores/feed-store';
 import { useFriendsStore } from '../../src/stores/friends-store';
@@ -256,30 +256,13 @@ export default function FeedScreen() {
   );
 
   const emptyState = (
-    <View style={[styles.emptyContainer, { paddingHorizontal: spacing.lg }]}>
-      <Ionicons name="newspaper-outline" size={64} color={colors.textSecondary} style={{ opacity: 0.4 }} />
-      <Text style={[typography.h3, { color: colors.text, marginTop: spacing.md, textAlign: 'center' }]}>
-        {friendCount === 0 ? 'Add Friends to See Activity' : 'No Activity Yet'}
-      </Text>
-      <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
-        {friendCount === 0
-          ? 'Connect with friends to see their workout completions and PRs in your feed.'
-          : 'Complete a workout to share it with your friends, or wait for your friends to post.'}
-      </Text>
-      {friendCount === 0 && (
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: colors.primary, borderRadius: radius.lg, marginTop: spacing.lg }]}
-          onPress={() => router.push('/social/friends')}
-          accessibilityRole="button"
-          accessibilityLabel="Find friends"
-        >
-          <Ionicons name="person-add-outline" size={18} color="#fff" />
-          <Text style={[typography.labelLarge, { color: colors.textOnPrimary, marginLeft: spacing.sm }]}>
-            Find Friends
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+    <EmptyState
+      icon="newspaper-outline"
+      title="No Activity Yet"
+      description="Complete a workout and share it, or add friends to see their activity"
+      actionLabel="Find Friends"
+      onAction={() => router.push('/social/friends')}
+    />
   );
 
   return (

@@ -46,6 +46,13 @@ function generateCode(length: number): string {
 }
 
 /**
+ * Build the full invite URL from a short code.
+ */
+export function getInviteUrl(code: string): string {
+  return `${INVITE_BASE_URL}/${code}`;
+}
+
+/**
  * Get the share message for an invite link.
  */
 export function getInviteShareMessage(inviteLink: string): string {

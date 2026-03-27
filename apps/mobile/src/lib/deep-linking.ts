@@ -14,6 +14,9 @@
 
 import { Linking, Platform, Share } from 'react-native';
 import Constants from 'expo-constants';
+import { supabase, isSupabaseConfigured } from './supabase';
+import { crossPlatformAlert } from './cross-platform-alert';
+import { useFriendsStore } from '../stores/friends-store';
 
 const SCHEME = 'health-coach';
 const WEB_HOST = 'formiq.app';
@@ -65,6 +68,73 @@ export async function getInitialURL(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Build a web (universal) invite link URL */
+export function buildInviteWebUrl(code: string): string {
+  return `https://${WEB_HOST}/invite/${code}`;
+}
+
+/**
+ * Handle an incoming invite deep link.
+ *
+ * Looks up the invite code, validates it, and shows an accept / decline
+ * dialog. On accept, redeems the code via the friends store which also
+ * triggers a friend-list refresh.
+ */
+export async function handleInviteLink(code: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+
+  const { lookupInviteCode } = await import('./share-utils');
+  const invite = await lookupInviteCode(code);
+
+  if (!invite) {
+    crossPlatformAlert('Invalid Invite', 'This invite link is not valid.');
+    return;
+  }
+  if (invite.isExpired) {
+    crossPlatformAlert('Invite Expired', 'This invite link has expired.');
+    return;
+  }
+  if (invite.isRedeemed) {
+    crossPlatformAlert('Already Used', 'This invite link has already been used.');
+    return;
+  }
+
+  crossPlatformAlert(
+    'Friend Invite',
+    `${invite.inviterName} invited you to connect on FormIQ. Accept?`,
+    [
+      { text: 'Decline', style: 'cancel' },
+      {
+        text: 'Accept',
+        onPress: async () => {
+          const result = await useFriendsStore.getState().redeemInviteCode(code);
+          if (result.success) {
+            crossPlatformAlert('Connected!', `You and ${invite.inviterName} are now connected.`);
+          } else {
+            crossPlatformAlert('Error', result.error ?? 'Failed to accept invite.');
+          }
+        },
+      },
+    ],
+  );
+}
+
+/**
+ * Parse a URL and extract the invite code if it matches the invite route.
+ * Supports both custom scheme and universal link formats:
+ *   health-coach://invite/{code}
+ *   https://formiq.app/invite/{code}
+ */
+export function parseInviteCode(url: string): string | null {
+  const schemeMatch = url.match(new RegExp(`^${SCHEME}://invite/([^/?#]+)`));
+  if (schemeMatch) return schemeMatch[1];
+
+  const webMatch = url.match(new RegExp(`^https?://${WEB_HOST}/invite/([^/?#]+)`));
+  if (webMatch) return webMatch[1];
+
+  return null;
 }
 
 /** Subscribe to incoming deep links (warm start) */
