@@ -1,9 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   useWindowDimensions,
   TouchableWithoutFeedback,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import Reanimated, {
   useSharedValue,
@@ -16,42 +19,126 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useCoachSheet } from '../providers/CoachSheetProvider';
+import { useCoachStore } from '../stores/coach-store';
 import { CoachChatUI } from './CoachChatUI';
+import { CoachAvatar } from './coach/CoachAvatar';
 import { lightImpact } from '../lib/haptics';
 
+// ── Spring config (matches existing feel) ────────────────────────────
 const SPRING_CONFIG = { damping: 25, stiffness: 200, mass: 0.8 };
+
+// ── Context-aware quick prompts ──────────────────────────────────────
+const QUICK_PROMPTS: Record<string, { text: string; icon: string }[]> = {
+  workout: [
+    { text: 'Suggest a workout for today', icon: 'barbell-outline' },
+    { text: 'How should I warm up?', icon: 'flame-outline' },
+    { text: 'Am I overtraining?', icon: 'alert-circle-outline' },
+  ],
+  nutrition: [
+    { text: 'What should I eat post-workout?', icon: 'restaurant-outline' },
+    { text: 'Help me hit my protein goal', icon: 'nutrition-outline' },
+    { text: 'Quick healthy snack ideas', icon: 'cafe-outline' },
+  ],
+  progress: [
+    { text: 'Summarize my week', icon: 'calendar-outline' },
+    { text: 'Am I on track for my goal?', icon: 'trending-up-outline' },
+    { text: 'What should I focus on next?', icon: 'bulb-outline' },
+  ],
+  general: [
+    { text: 'Give me a motivation boost', icon: 'flash-outline' },
+    { text: 'What should I work on today?', icon: 'today-outline' },
+    { text: 'Help me build a routine', icon: 'repeat-outline' },
+  ],
+};
+
+// ── Component ────────────────────────────────────────────────────────
 
 export function CoachSheet() {
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { colors, radius } = useTheme();
+  const { colors, spacing, typography, radius } = useTheme();
   const { isOpen, close } = useCoachSheet();
 
-  // Snap points as Y positions from TOP of screen
-  const FULL_SNAP = insets.top + 10; // near top, respecting safe area
-  const DEFAULT_SNAP = screenHeight * 0.3; // 70% visible (30% from top)
-  const CLOSED_SNAP = screenHeight + 50; // off-screen below
+  // Coach store — read context for prompt selection & messages for auto-expand
+  const prefilledContext = useCoachStore((s) => s.prefilledContext);
+  const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
+  const messages = useCoachStore((s) => s.messages);
+  const activeConversation = useCoachStore((s) => s.activeConversation);
+
+  const currentMessages = activeConversation
+    ? messages.filter((m) => m.conversation_id === activeConversation.id)
+    : [];
+
+  const hasMessages = currentMessages.length > 0;
+
+  // Determine context key for quick prompts
+  const contextKey = typeof prefilledContext === 'string' ? prefilledContext : 'general';
+  const prompts = QUICK_PROMPTS[contextKey] ?? QUICK_PROMPTS.general;
+
+  // ── Snap points (Y positions from TOP of screen) ─────────────────
+  const FULL_SNAP = insets.top + 10; // ~95% visible
+  const EXPANDED_SNAP = screenHeight * 0.35; // ~65% visible
+  const COMPACT_SNAP = screenHeight * 0.65; // ~35% visible
+  const CLOSED_SNAP = screenHeight + 50; // off-screen
 
   const translateY = useSharedValue(CLOSED_SNAP);
   const backdropOpacity = useSharedValue(0);
   const currentSnap = useSharedValue(CLOSED_SNAP);
 
-  // Open/close animation
+  // ── Open / close ─────────────────────────────────────────────────
   useEffect(() => {
     if (isOpen) {
-      translateY.value = withSpring(DEFAULT_SNAP, SPRING_CONFIG);
+      // If there are already messages, open at expanded; otherwise compact
+      const target = hasMessages ? EXPANDED_SNAP : COMPACT_SNAP;
+      translateY.value = withSpring(target, SPRING_CONFIG);
       backdropOpacity.value = withTiming(1, { duration: 250 });
-      currentSnap.value = DEFAULT_SNAP;
+      currentSnap.value = target;
     } else {
       translateY.value = withSpring(CLOSED_SNAP, SPRING_CONFIG);
       backdropOpacity.value = withTiming(0, { duration: 200 });
       currentSnap.value = CLOSED_SNAP;
     }
-  }, [isOpen, DEFAULT_SNAP, CLOSED_SNAP, translateY, backdropOpacity, currentSnap]);
+  }, [
+    isOpen,
+    hasMessages,
+    EXPANDED_SNAP,
+    COMPACT_SNAP,
+    CLOSED_SNAP,
+    translateY,
+    backdropOpacity,
+    currentSnap,
+  ]);
 
-  // Pan gesture for drag-to-dismiss / snap
+  // ── Auto-expand when first message is sent ────────────────────────
+  const expandToExpanded = useCallback(() => {
+    translateY.value = withSpring(EXPANDED_SNAP, SPRING_CONFIG);
+    currentSnap.value = EXPANDED_SNAP;
+    lightImpact();
+  }, [EXPANDED_SNAP, translateY, currentSnap]);
+
+  const handleMessageSent = useCallback(() => {
+    // Only auto-expand if we're currently at compact
+    if (currentSnap.value === COMPACT_SNAP) {
+      expandToExpanded();
+    }
+  }, [COMPACT_SNAP, currentSnap, expandToExpanded]);
+
+  // ── Quick prompt tap ──────────────────────────────────────────────
+  const handlePromptTap = useCallback(
+    (promptText: string) => {
+      lightImpact();
+      // Set as prefilled message so CoachChatUI picks it up and sends
+      setPrefilledContext(contextKey as any, promptText);
+      // Expand sheet
+      expandToExpanded();
+    },
+    [contextKey, setPrefilledContext, expandToExpanded],
+  );
+
+  // ── Pan gesture (handle + title area ONLY) ────────────────────────
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       const newY = currentSnap.value + e.translationY;
@@ -79,27 +166,39 @@ export function CoachSheet() {
         return;
       }
 
-      // Snap to nearest point
-      const midDefault = (FULL_SNAP + DEFAULT_SNAP) / 2;
-      const midClosed = (DEFAULT_SNAP + CLOSED_SNAP) / 2;
+      // Snap to nearest of 3 points (or dismiss)
+      const midCompactExpanded = (COMPACT_SNAP + EXPANDED_SNAP) / 2;
+      const midExpandedFull = (EXPANDED_SNAP + FULL_SNAP) / 2;
+      const dismissThreshold = COMPACT_SNAP + (CLOSED_SNAP - COMPACT_SNAP) * 0.3;
 
-      if (currentY < midDefault) {
-        // Snap to full
-        translateY.value = withSpring(FULL_SNAP, SPRING_CONFIG);
-        currentSnap.value = FULL_SNAP;
-      } else if (currentY < midClosed) {
-        // Snap to default
-        translateY.value = withSpring(DEFAULT_SNAP, SPRING_CONFIG);
-        currentSnap.value = DEFAULT_SNAP;
-      } else {
+      if (currentY > dismissThreshold) {
         // Dismiss
         translateY.value = withSpring(CLOSED_SNAP, SPRING_CONFIG);
         backdropOpacity.value = withTiming(0, { duration: 200 });
         currentSnap.value = CLOSED_SNAP;
         runOnJS(close)();
+      } else if (currentY > midCompactExpanded) {
+        // Snap to compact
+        translateY.value = withSpring(COMPACT_SNAP, SPRING_CONFIG);
+        currentSnap.value = COMPACT_SNAP;
+      } else if (currentY > midExpandedFull) {
+        // Snap to expanded
+        translateY.value = withSpring(EXPANDED_SNAP, SPRING_CONFIG);
+        currentSnap.value = EXPANDED_SNAP;
+      } else {
+        // Snap to full
+        translateY.value = withSpring(FULL_SNAP, SPRING_CONFIG);
+        currentSnap.value = FULL_SNAP;
+        runOnJS(lightImpact)();
       }
     });
 
+  // ── Derived: is sheet in compact position ─────────────────────────
+  // We use a JS-side approximation for rendering decisions.
+  // The animated value drives the actual layout.
+  const isCompact = !hasMessages && isOpen;
+
+  // ── Animated styles ───────────────────────────────────────────────
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
@@ -113,9 +212,11 @@ export function CoachSheet() {
     ),
   }));
 
+
+
   return (
     <>
-      {/* Backdrop — pointer events controlled by outer wrapper */}
+      {/* Backdrop */}
       <View
         style={StyleSheet.absoluteFill}
         pointerEvents={isOpen ? 'auto' : 'none'}
@@ -134,31 +235,125 @@ export function CoachSheet() {
       </View>
 
       {/* Sheet */}
-      <GestureDetector gesture={panGesture}>
-        <Reanimated.View
-          style={[
-            styles.sheet,
-            {
-              height: screenHeight,
-              backgroundColor: colors.background,
-              borderTopLeftRadius: radius.sheet,
-              borderTopRightRadius: radius.sheet,
-            },
-            sheetStyle,
-          ]}
-        >
-          {/* Drag handle */}
-          <View style={styles.handleContainer}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
-          </View>
+      <Reanimated.View
+        style={[
+          styles.sheet,
+          {
+            height: screenHeight,
+            backgroundColor: colors.background,
+            borderTopLeftRadius: radius.sheet,
+            borderTopRightRadius: radius.sheet,
+          },
+          sheetStyle,
+        ]}
+      >
+        {/* ── Draggable header area (handle + title) ── */}
+        <GestureDetector gesture={panGesture}>
+          <Reanimated.View style={styles.dragArea} collapsable={false}>
+            {/* Drag handle */}
+            <View style={styles.handleContainer}>
+              <View
+                style={[styles.handle, { backgroundColor: colors.border }]}
+              />
+            </View>
 
-          {/* Coach Chat — persistently mounted to preserve conversation */}
-          <CoachChatUI keyboardVerticalOffset={0} showHeader={false} />
-        </Reanimated.View>
-      </GestureDetector>
+            {/* Title row */}
+            <View
+              style={[
+                styles.titleRow,
+                { paddingHorizontal: spacing.base },
+              ]}
+            >
+              <View style={styles.titleLeft}>
+                <CoachAvatar size={24} />
+                <Text
+                  style={[
+                    typography.label,
+                    {
+                      color: colors.text,
+                      marginLeft: spacing.sm,
+                      fontSize: 15,
+                      fontWeight: '600',
+                    },
+                  ]}
+                >
+                  AI Coach
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={close}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={[
+                  styles.closeButton,
+                  { backgroundColor: colors.surfaceSecondary },
+                ]}
+              >
+                <Ionicons name="close" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </Reanimated.View>
+        </GestureDetector>
+
+        {/* ── Quick prompts (compact view, no messages) ── */}
+        {isCompact && (
+          <View style={[styles.promptsContainer, { paddingHorizontal: spacing.base }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.promptsScroll}
+            >
+              {prompts.map((prompt) => (
+                <TouchableOpacity
+                  key={prompt.text}
+                  onPress={() => handlePromptTap(prompt.text)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.promptChip,
+                    {
+                      backgroundColor: colors.surfaceSecondary,
+                      borderRadius: radius.xl,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      marginRight: spacing.sm,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={prompt.icon as any}
+                    size={16}
+                    color={colors.primary}
+                    style={{ marginRight: spacing.xs }}
+                  />
+                  <Text
+                    style={[
+                      typography.bodySmall,
+                      { color: colors.text, fontWeight: '500' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {prompt.text}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── Chat UI (always mounted to preserve conversation) ── */}
+        <View style={styles.chatContainer}>
+          <CoachChatUI
+            keyboardVerticalOffset={0}
+            showHeader={false}
+            compactMode={isCompact}
+            onMessageSent={handleMessageSent}
+          />
+        </View>
+      </Reanimated.View>
     </>
   );
 }
+
+// ── Styles ───────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   sheet: {
@@ -172,13 +367,48 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 20,
   },
+  dragArea: {
+    // Only this area responds to drag gestures
+  },
   handleContainer: {
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+  },
+  titleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  closeButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptsContainer: {
+    paddingBottom: 8,
+  },
+  promptsScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  promptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatContainer: {
+    flex: 1,
   },
 });

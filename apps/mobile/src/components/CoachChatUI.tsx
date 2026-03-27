@@ -38,6 +38,10 @@ export interface CoachChatUIProps {
   style?: StyleProp<ViewStyle>;
   /** Keyboard vertical offset (different for tab vs sheet) */
   keyboardVerticalOffset?: number;
+  /** When true, hides the empty state (avatar + description + suggested prompts) — used by CoachSheet compact mode */
+  compactMode?: boolean;
+  /** Called after a message is successfully sent (for parent to react, e.g. expand sheet) */
+  onMessageSent?: () => void;
 }
 
 export function CoachChatUI({
@@ -45,6 +49,8 @@ export function CoachChatUI({
   showHeader = false,
   style,
   keyboardVerticalOffset = 90,
+  compactMode = false,
+  onMessageSent,
 }: CoachChatUIProps) {
   const { colors, spacing, typography, radius } = useTheme();
   const [inputText, setInputText] = useState('');
@@ -108,7 +114,7 @@ export function CoachChatUI({
       showToast(truncationWarning, 'warning', 5000);
       clearTruncationWarning();
     }
-  }, [truncationWarning]);
+  }, [truncationWarning, showToast, clearTruncationWarning]);
 
   const { tier, canAccess } = useEntitlement();
   const { showPaywall } = usePaywall();
@@ -162,6 +168,7 @@ export function CoachChatUI({
             incrementUsage('ai_messages');
             setLastFailedContext(undefined);
             setLastFailedImage(null);
+            onMessageSent?.();
           } catch {
             // Store sets error state; UI already shows error banner
           }
@@ -186,13 +193,14 @@ export function CoachChatUI({
         await sendMessage(text || 'What is this?', contextToSend, imageToSend ?? undefined);
         setLastFailedContext(undefined);
         setLastFailedImage(null);
+        onMessageSent?.();
       } catch {
         // Store sets error state; UI already shows error banner
       }
     } finally {
       isSending.current = false;
     }
-  }, [inputText, attachedImage, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall]);
+  }, [inputText, attachedImage, isLoading, sendMessage, prefilledContext, canAccess, tier, showPaywall, onMessageSent]);
 
   const handlePromptSelect = useCallback(
     async (prompt: string) => {
@@ -206,6 +214,7 @@ export function CoachChatUI({
           try {
             await sendMessage(prompt);
             incrementUsage('ai_messages');
+            onMessageSent?.();
           } catch {
             // Store sets error state; UI already shows error banner
           }
@@ -223,8 +232,9 @@ export function CoachChatUI({
       }
 
       await sendMessage(prompt);
+      onMessageSent?.();
     },
-    [isLoading, sendMessage, tier, canAccess, showPaywall],
+    [isLoading, sendMessage, tier, canAccess, showPaywall, onMessageSent],
   );
 
   const handleNewConversation = useCallback(async () => {
@@ -234,9 +244,10 @@ export function CoachChatUI({
   // Scroll to bottom when messages change or streaming content updates
   useEffect(() => {
     if (currentMessages.length > 0 || streamingContent) {
-      setTimeout(() => {
+      const tid = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
+      return () => clearTimeout(tid);
     }
   }, [currentMessages.length, isLoading, streamingContent]);
 
@@ -293,8 +304,10 @@ export function CoachChatUI({
       {headerComponent}
 
       {/* Messages */}
-      {currentMessages.length === 0 && !isLoading ? (
+      {currentMessages.length === 0 && !isLoading && !compactMode ? (
         renderEmptyState()
+      ) : currentMessages.length === 0 && !isLoading && compactMode ? (
+        <View style={{ flex: 1 }} />
       ) : (
         <FlatList
           ref={flatListRef}
@@ -336,7 +349,7 @@ export function CoachChatUI({
             onPress={() => {
               clearError();
               const lastUserMsg = [...currentMessages].reverse().find((m) => m.role === 'user');
-              if (lastUserMsg) sendMessage(lastUserMsg.content);
+              if (lastUserMsg) sendMessage(lastUserMsg.content, lastFailedContext, lastFailedImage ?? undefined);
             }}
             style={{ marginRight: spacing.sm }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
