@@ -29,6 +29,7 @@ import { QuickAddWaterSheet } from '../../src/components/QuickAddWaterSheet';
 import { generateInsights, type InsightContext as InsightCtx } from '../../src/lib/insight-engine';
 import { InsightBadge } from '../../src/components/ui';
 import { useCoachStore } from '../../src/stores/coach-store';
+import { useFriendsStore } from '../../src/stores/friends-store';
 import { useCoachPeekTrigger } from '../../src/hooks/useCoachPeekTrigger';
 import { TodayTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
 
@@ -269,6 +270,7 @@ export default function TodayTab() {
 
   // ── Smart Inline Insights (rule-based) ──────────────────────────
   const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
+  const friendCount = useFriendsStore((s) => s.friends.length);
   const smartInsights = useMemo(() => {
     const ctx: InsightCtx = {
       caloriesConsumed: dC.calories,
@@ -722,6 +724,34 @@ export default function TodayTab() {
             )}
           </Card>
         )}
+
+        {/* ── SOCIAL TEASER ─────────────────────────────────────── */}
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/compete')}
+          activeOpacity={0.7}
+          style={{ marginTop: spacing.sm }}
+        >
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{
+                width: 36, height: 36, borderRadius: 18,
+                backgroundColor: colors.primaryMuted,
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+                <Ionicons name="trophy-outline" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.label, { color: colors.text }]}>Compete</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  {friendCount > 0
+                    ? `${friendCount} friend${friendCount !== 1 ? 's' : ''} · See the leaderboard`
+                    : 'Invite friends to compete'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </View>
+          </Card>
+        </TouchableOpacity>
 
         {/* ── TIMELINE LINK ─────────────────────────────────────── */}
         <TouchableOpacity

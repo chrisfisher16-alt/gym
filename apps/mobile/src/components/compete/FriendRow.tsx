@@ -32,7 +32,7 @@ export const FriendRow = React.memo(function FriendRow({
   onChallenge,
   onRemove,
 }: FriendRowProps) {
-  const { colors, typography, spacing, radius, dark } = useTheme();
+  const { colors, typography, spacing, radius } = useTheme();
 
   const leftAction = useMemo<SwipeAction>(
     () => ({
@@ -109,24 +109,7 @@ export const FriendRow = React.memo(function FriendRow({
           )}
         </View>
 
-        {/* Streak badge */}
-        {friend.streak != null && friend.streak > 0 && (
-          <View
-            style={[
-              styles.streakBadge,
-              {
-                backgroundColor: dark ? 'rgba(207, 174, 128, 0.15)' : 'rgba(184, 148, 79, 0.12)',
-                borderRadius: radius.sm,
-                paddingHorizontal: spacing.sm,
-                paddingVertical: spacing.xs,
-              },
-            ]}
-          >
-            <Text style={[typography.labelSmall, { color: colors.gold }]}>
-              🔥{friend.streak}
-            </Text>
-          </View>
-        )}
+        {/* TODO: Wire friend streaks from leaderboard RPC 'streak' metric */}
       </Pressable>
     </SwipeableRow>
   );
@@ -146,8 +129,5 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
   },
-  streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+
 });

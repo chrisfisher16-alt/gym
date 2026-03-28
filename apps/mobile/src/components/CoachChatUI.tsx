@@ -332,6 +332,23 @@ export function CoachChatUI({
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingVertical: spacing.md }}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: colors.textTertiary,
+                  textAlign: 'center',
+                  paddingHorizontal: spacing.lg,
+                  paddingBottom: spacing.sm,
+                  fontStyle: 'italic',
+                  fontSize: 11,
+                },
+              ]}
+            >
+              AI coaching — not medical advice. Consult a healthcare provider for medical concerns.
+            </Text>
+          }
           ListFooterComponent={
             isStreaming && streamingContent ? (
               <ChatBubble

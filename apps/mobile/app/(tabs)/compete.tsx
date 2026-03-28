@@ -10,6 +10,8 @@ import { ChallengeCard } from '../../src/components/compete/ChallengeCard';
 import { FriendRow } from '../../src/components/compete/FriendRow';
 import { ActivityFeedItem } from '../../src/components/compete/ActivityFeedItem';
 import { InviteFriendsSheet } from '../../src/components/InviteFriendsSheet';
+import { FriendProfileSheet } from '../../src/components/compete/FriendProfileSheet';
+import type { FriendProfile } from '../../src/stores/friends-store';
 import { useChallengeStore } from '../../src/stores/challenge-store';
 import { useFriendsStore } from '../../src/stores/friends-store';
 import { useFeedStore } from '../../src/stores/feed-store';
@@ -53,6 +55,7 @@ export default function CompeteTab() {
   // ── Local state ───────────────────────────────────────────────────
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<FriendProfile | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [category, setCategory] = useState<ChallengeMetric>(leaderboardMetric);
   const [timeframe, setTimeframe] = useState<'week' | 'month' | 'all'>(leaderboardTimeframe);
@@ -206,7 +209,7 @@ export default function CompeteTab() {
                           displayName: f.friend.displayName,
                           avatarUrl: f.friend.avatarUrl,
                         }}
-                        onPress={() => router.push('/social/friends')}
+                        onPress={() => setSelectedFriend(f.friend)}
                         onChallenge={() => router.push('/compete/create-challenge' as any)}
                         onRemove={() => removeFriend(f.id)}
                       />
@@ -303,6 +306,24 @@ export default function CompeteTab() {
         visible={inviteSheetVisible}
         onClose={() => setInviteSheetVisible(false)}
       />
+
+      {/* Friend Profile Sheet */}
+      {selectedFriend && (
+        <FriendProfileSheet
+          visible={!!selectedFriend}
+          onClose={() => setSelectedFriend(null)}
+          friend={selectedFriend}
+          onChallenge={(friendId) => {
+            setSelectedFriend(null);
+            router.push('/compete/create-challenge' as never);
+          }}
+          onRemove={(friendId) => {
+            setSelectedFriend(null);
+            const friendship = friends.find(f => f.friend.id === friendId);
+            if (friendship) removeFriend(friendship.id);
+          }}
+        />
+      )}
     </ScreenContainer>
   );
 }
