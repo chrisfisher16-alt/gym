@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../theme';
+import { useTheme, type Typography } from '../../theme';
 import { lightImpact } from '../../lib/haptics';
 import type { FeedItem } from '../../stores/feed-store';
 
@@ -41,7 +41,7 @@ function renderContent(
   item: FeedItem,
   textColor: string,
   secondaryColor: string,
-  typography: any,
+  typography: Typography,
 ): React.ReactNode {
   const meta = item.metadata || {};
 

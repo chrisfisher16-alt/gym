@@ -9,10 +9,20 @@ import { ENTITLEMENT_IDS } from './pricing-config';
 
 // ── Lazy-load native module (crashes on web) ─────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic optional dependency; native module loaded at runtime
-let Purchases: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic optional dependency; enum loaded at runtime
-let LOG_LEVEL: any = {};
+// RevenueCat native module interface — loaded dynamically, null on web
+interface RevenueCatModule {
+  setLogLevel(level: unknown): void;
+  configure(opts: { apiKey: string }): void;
+  getOfferings(): Promise<PurchasesOfferings>;
+  purchasePackage(pkg: PurchasesPackage): Promise<{ customerInfo: CustomerInfo }>;
+  restorePurchases(): Promise<CustomerInfo>;
+  getCustomerInfo(): Promise<CustomerInfo>;
+  logIn(userId: string): Promise<unknown>;
+  logOut(): Promise<unknown>;
+}
+
+let Purchases: RevenueCatModule | null = null;
+let LOG_LEVEL: Record<string, unknown> = {};
 
 if (Platform.OS !== 'web') {
   try {

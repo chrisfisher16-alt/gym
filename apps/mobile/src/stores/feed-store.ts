@@ -46,7 +46,12 @@ interface FeedState {
 
 // ── Row types (match Supabase .select() shapes) ────────────────────────
 
-interface FeedRow {
+interface SocialFeedProfileJoin {
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+interface SocialFeedRow {
   id: string;
   user_id: string;
   type: FeedItem['type'];
@@ -57,7 +62,8 @@ interface FeedRow {
   visibility: FeedItem['visibility'];
   likes_count: number;
   created_at: string;
-  profiles: { display_name: string | null; avatar_url: string | null } | null;
+  // Supabase join returns array at type-level but runtime is a single object
+  profiles: SocialFeedProfileJoin | SocialFeedProfileJoin[] | null;
 }
 
 const PAGE_SIZE = 20;
@@ -137,22 +143,24 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         likedIds = new Set((likes || []).map((l) => l.feed_item_id));
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join types return profiles as array but runtime is object
-      const mapped: FeedItem[] = (data || []).map((row: any) => ({
-        id: row.id,
-        userId: row.user_id,
-        type: row.type,
-        title: row.title,
-        body: row.body,
-        metadata: row.metadata || {},
-        sessionId: row.session_id,
-        visibility: row.visibility,
-        likesCount: row.likes_count,
-        createdAt: row.created_at,
-        userDisplayName: row.profiles?.display_name || 'Unknown',
-        userAvatarUrl: row.profiles?.avatar_url || null,
-        isLikedByMe: likedIds.has(row.id),
-      }));
+      const mapped: FeedItem[] = (data || []).map((row: SocialFeedRow) => {
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        return {
+          id: row.id,
+          userId: row.user_id,
+          type: row.type,
+          title: row.title,
+          body: row.body,
+          metadata: (row.metadata ?? {}) as Record<string, unknown>,
+          sessionId: row.session_id,
+          visibility: row.visibility,
+          likesCount: row.likes_count,
+          createdAt: row.created_at,
+          userDisplayName: profile?.display_name || 'Unknown',
+          userAvatarUrl: profile?.avatar_url || null,
+          isLikedByMe: likedIds.has(row.id),
+        };
+      });
 
       set({
         items: reset ? mapped : [...existingItems, ...mapped],
@@ -243,22 +251,24 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         likedIds = new Set((likes || []).map((l) => l.feed_item_id));
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join types return profiles as array but runtime is object
-      const mapped: FeedItem[] = (data || []).map((row: any) => ({
-        id: row.id,
-        userId: row.user_id,
-        type: row.type,
-        title: row.title,
-        body: row.body,
-        metadata: row.metadata || {},
-        sessionId: row.session_id,
-        visibility: row.visibility,
-        likesCount: row.likes_count,
-        createdAt: row.created_at,
-        userDisplayName: row.profiles?.display_name || 'Unknown',
-        userAvatarUrl: row.profiles?.avatar_url || null,
-        isLikedByMe: likedIds.has(row.id),
-      }));
+      const mapped: FeedItem[] = (data || []).map((row: SocialFeedRow) => {
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        return {
+          id: row.id,
+          userId: row.user_id,
+          type: row.type,
+          title: row.title,
+          body: row.body,
+          metadata: (row.metadata ?? {}) as Record<string, unknown>,
+          sessionId: row.session_id,
+          visibility: row.visibility,
+          likesCount: row.likes_count,
+          createdAt: row.created_at,
+          userDisplayName: profile?.display_name || 'Unknown',
+          userAvatarUrl: profile?.avatar_url || null,
+          isLikedByMe: likedIds.has(row.id),
+        };
+      });
 
       set({
         items: reset ? mapped : [...existingItems, ...mapped],
@@ -284,7 +294,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           table: 'social_feed',
         },
         (payload) => {
-          const row = payload.new as Omit<FeedRow, 'profiles'>;
+          const row = payload.new as Omit<SocialFeedRow, 'profiles'>;
           const newItem: FeedItem = {
             id: row.id,
             userId: row.user_id,

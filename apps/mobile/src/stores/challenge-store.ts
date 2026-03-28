@@ -5,6 +5,7 @@ import type {
   ChallengeWithParticipants,
   ChallengeMetric,
   LeaderboardEntry,
+  ParticipantStatus,
 } from '../../../../packages/shared/src/types/compete';
 import type { CreateChallengeInput } from '../../../../packages/shared/src/schemas/compete';
 
@@ -32,6 +33,7 @@ interface ChallengeState {
   createChallenge: (input: CreateChallengeInput) => Promise<{ error: string | null }>;
   acceptChallenge: (challengeId: string) => Promise<void>;
   declineChallenge: (challengeId: string) => Promise<void>;
+  cancelChallenge: (challengeId: string) => Promise<{ error: string | null }>;
   fetchLeaderboard: (metric: ChallengeMetric, timeframe: 'week' | 'month' | 'all') => Promise<void>;
   reset: () => void;
 }
@@ -49,21 +51,29 @@ interface ProfileRow {
   avatar_url: string | null;
 }
 
+interface ChallengeParticipantRow {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  status: ParticipantStatus;
+  score: number | null;
+  joined_at: string;
+  profiles: { display_name: string | null; avatar_url: string | null } | null;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Supabase join types are complex; row shape is validated by the .select() call */
-function mapRowToChallenge(row: Record<string, any>): ChallengeWithParticipants {
+function mapRowToChallenge(row: Record<string, unknown>): ChallengeWithParticipants {
   return {
-    id: row.id,
-    creatorId: row.creator_id,
-    title: row.title,
-    metric: row.metric,
-    startsAt: row.starts_at,
-    endsAt: row.ends_at,
-    status: row.status,
-    createdAt: row.created_at,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    participants: (row.challenge_participants ?? []).map((p: any) => ({
+    id: row.id as string,
+    creatorId: row.creator_id as string,
+    title: row.title as string,
+    metric: row.metric as ChallengeWithParticipants['metric'],
+    startsAt: row.starts_at as string,
+    endsAt: row.ends_at as string,
+    status: row.status as ChallengeWithParticipants['status'],
+    createdAt: row.created_at as string,
+    participants: ((row.challenge_participants as ChallengeParticipantRow[] | null) ?? []).map((p: ChallengeParticipantRow) => ({
       id: p.id,
       challengeId: p.challenge_id,
       userId: p.user_id,
@@ -75,7 +85,6 @@ function mapRowToChallenge(row: Record<string, any>): ChallengeWithParticipants 
     })),
   };
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ── Store ──────────────────────────────────────────────────────────────
 
@@ -172,6 +181,20 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
       }
 
       const challenges = (rows ?? []).map(mapRowToChallenge);
+
+      // Auto-complete active challenges whose ends_at has passed
+      const now = new Date();
+      for (const c of challenges) {
+        if (c.status === 'active' && new Date(c.endsAt) < now) {
+          const { error: updateErr } = await supabase
+            .from('challenges')
+            .update({ status: 'completed' })
+            .eq('id', c.id);
+          if (!updateErr) {
+            c.status = 'completed';
+          }
+        }
+      }
 
       const activeChallenges = challenges.filter(
         (c) => c.status === 'pending' || c.status === 'active',
@@ -293,6 +316,38 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
     } catch (err) {
       console.error('[Challenges] Decline exception:', err);
       set({ error: 'Failed to decline challenge' });
+    }
+  },
+
+  cancelChallenge: async (challengeId) => {
+    if (!isSupabaseConfigured) return { error: 'Not configured' };
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { error: 'Not authenticated' };
+
+      // Verify the current user is the creator
+      const challenge = [...get().activeChallenges, ...get().completedChallenges].find(
+        (c) => c.id === challengeId,
+      );
+      if (!challenge) return { error: 'Challenge not found' };
+      if (challenge.creatorId !== user.id) return { error: 'Only the creator can cancel a challenge' };
+
+      const { error } = await supabase
+        .from('challenges')
+        .update({ status: 'cancelled' })
+        .eq('id', challengeId);
+
+      if (error) {
+        console.error('[Challenges] Cancel failed:', error);
+        return { error: error.message };
+      }
+
+      await get().fetchChallenges();
+      return { error: null };
+    } catch (err) {
+      console.error('[Challenges] Cancel exception:', err);
+      return { error: 'Failed to cancel challenge' };
     }
   },
 

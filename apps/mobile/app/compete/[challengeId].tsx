@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -14,6 +15,7 @@ import { useTheme } from '../../src/theme';
 import { useChallengeStore } from '../../src/stores/challenge-store';
 import { selectionFeedback, mediumImpact } from '../../src/lib/haptics';
 import { Button } from '../../src/components/ui';
+import { useAuthStore } from '../../src/stores/auth-store';
 import type { ChallengeWithParticipants, ChallengeStatus } from '../../../../packages/shared/src/types/compete';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -72,7 +74,9 @@ export default function ChallengeDetailScreen() {
   const completedChallenges = useChallengeStore((s) => s.completedChallenges);
   const acceptChallenge = useChallengeStore((s) => s.acceptChallenge);
   const declineChallenge = useChallengeStore((s) => s.declineChallenge);
+  const cancelChallenge = useChallengeStore((s) => s.cancelChallenge);
   const storeLoading = useChallengeStore((s) => s.loading);
+  const currentUser = useAuthStore((s) => s.user);
 
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -116,6 +120,33 @@ export default function ChallengeDetailScreen() {
     setActionLoading(false);
     router.back();
   }, [challengeId, declineChallenge, router]);
+
+  const handleCancel = useCallback(() => {
+    if (!challengeId) return;
+    Alert.alert(
+      'Cancel Challenge',
+      'Are you sure you want to cancel this challenge? This cannot be undone.',
+      [
+        { text: 'Keep Challenge', style: 'cancel' },
+        {
+          text: 'Cancel Challenge',
+          style: 'destructive',
+          onPress: async () => {
+            setActionLoading(true);
+            selectionFeedback();
+            const { error } = await cancelChallenge(challengeId);
+            setActionLoading(false);
+            if (error) {
+              Alert.alert('Error', error);
+            }
+          },
+        },
+      ],
+    );
+  }, [challengeId, cancelChallenge]);
+
+  const isCreator = currentUser?.id === challenge?.creatorId;
+  const canCancel = isCreator && (challenge?.status === 'active' || challenge?.status === 'pending');
 
   // ── Loading / Not Found ────────────────────────────────────────
 
@@ -300,6 +331,19 @@ export default function ChallengeDetailScreen() {
               </View>
             );
           })
+        )}
+
+        {/* Cancel Challenge — only for the creator on active/pending challenges */}
+        {canCancel && (
+          <View style={{ marginTop: spacing.xl }}>
+            <Button
+              title="Cancel Challenge"
+              variant="danger"
+              onPress={handleCancel}
+              disabled={actionLoading}
+              fullWidth
+            />
+          </View>
         )}
       </ScrollView>
 

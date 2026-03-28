@@ -173,6 +173,7 @@ export default function CompeteTab() {
             onCategoryChange={handleCategoryChange}
             onTimeframeChange={handleTimeframeChange}
             isLoading={challengesLoading}
+            onInviteFriends={() => setInviteSheetVisible(true)}
           />
 
           {/* Section 2: Active Challenges */}

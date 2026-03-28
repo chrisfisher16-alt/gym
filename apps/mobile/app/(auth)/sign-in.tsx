@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Link, router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,8 +23,17 @@ export default function SignInScreen() {
   const { colors, spacing, typography } = useTheme();
   const signIn = useAuthStore((s) => s.signIn);
   const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
+  const signInWithApple = useAuthStore((s) => s.signInWithApple);
   const [formError, setFormError] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
+    }
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setFormError('');
@@ -37,6 +47,21 @@ export default function SignInScreen() {
       }
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setFormError('');
+    setAppleLoading(true);
+    try {
+      const { error } = await signInWithApple();
+      if (error) {
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
+      }
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -91,7 +116,7 @@ export default function SignInScreen() {
                 disabled={googleLoading}
                 activeOpacity={0.7}
                 style={[
-                  styles.googleButton,
+                  styles.socialButton,
                   {
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
@@ -105,6 +130,29 @@ export default function SignInScreen() {
                   {googleLoading ? 'Signing in...' : 'Continue with Google'}
                 </Text>
               </TouchableOpacity>
+
+              {appleAvailable && (
+                <TouchableOpacity
+                  onPress={handleAppleSignIn}
+                  disabled={appleLoading}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.socialButton,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: 12,
+                      padding: spacing.md,
+                      marginTop: spacing.sm,
+                    },
+                  ]}
+                >
+                  <Ionicons name="logo-apple" size={20} color={colors.text} />
+                  <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                    {appleLoading ? 'Signing in...' : 'Continue with Apple'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg }}>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
@@ -203,7 +251,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   errorBanner: {},
-  googleButton: {
+  socialButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

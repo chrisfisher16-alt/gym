@@ -515,14 +515,17 @@ export const useCoachStore = create<CoachState>((set, get) => ({
           ? error.message
           : 'Coach is temporarily unavailable. Please try again.';
 
-      // Add a fallback message if API fails
+      // Preserve partial streamed content if available, otherwise show fallback
+      const partialContent = get().streamingContent;
       const fallbackMessage: CoachMessage = {
         id: generateId('msg'),
         conversation_id: conversation.id,
         role: 'assistant',
-        content: errorMessage.includes('network')
-          ? "I'm having trouble connecting right now. Please check your internet connection and try again."
-          : "I'm temporarily unavailable. Please try again in a moment.",
+        content: partialContent
+          ? `${partialContent}\n\n---\n*Response was interrupted. Please try again.*`
+          : errorMessage.includes('network')
+            ? "I'm having trouble connecting right now. Please check your internet connection and try again."
+            : "I'm temporarily unavailable. Please try again in a moment.",
         created_at: new Date().toISOString(),
       };
 

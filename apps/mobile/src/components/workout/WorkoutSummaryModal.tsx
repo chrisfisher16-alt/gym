@@ -13,6 +13,7 @@ import { useTheme } from '../../theme';
 import { useProfileStore } from '../../stores/profile-store';
 import { useFeedbackStore } from '../../stores/feedback-store';
 import { useFeedStore } from '../../stores/feed-store';
+import { useFriendsStore } from '../../stores/friends-store';
 import { useWorkoutStore } from '../../stores/workout-store';
 import { BottomSheet, Button, StatCard } from '../ui';
 import { MuscleAnatomyDiagram } from '../MuscleAnatomyDiagram';
@@ -171,7 +172,10 @@ export function WorkoutSummaryModal({
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [postedToFeed, setPostedToFeed] = useState(false);
+  const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
   const postWorkoutCompletion = useFeedStore((s) => s.postWorkoutCompletion);
+  const friends = useFriendsStore((s) => s.friends);
+  const hasFriends = friends.length > 0;
   const shouldShowPrompt = useFeedbackStore((s) => s.shouldShowPrompt);
   const recordPromptShown = useFeedbackStore((s) => s.recordPromptShown);
   const showPrompt = useMemo(() => shouldShowPrompt(), [visible]);
@@ -646,6 +650,11 @@ export function WorkoutSummaryModal({
           </View>
           <TouchableOpacity
             onPress={async () => {
+              if (!hasFriends) {
+                // No friends — open invite sheet
+                onDone();
+                return;
+              }
               try {
                 await postWorkoutCompletion({
                   title: `Completed ${session.name}`,
@@ -680,12 +689,12 @@ export function WorkoutSummaryModal({
             }}
           >
             <Ionicons
-              name={postedToFeed ? 'checkmark-circle' : 'people-outline'}
+              name={postedToFeed ? 'checkmark-circle' : hasFriends ? 'people-outline' : 'person-add-outline'}
               size={18}
               color={postedToFeed ? colors.completed : colors.text}
             />
             <Text style={[typography.body, { color: postedToFeed ? colors.completed : colors.text, fontWeight: '600' }]}>
-              {postedToFeed ? 'Posted!' : 'Post to Feed'}
+              {postedToFeed ? 'Shared!' : hasFriends ? 'Share with Friends' : 'Invite Friends'}
             </Text>
           </TouchableOpacity>
         </View>

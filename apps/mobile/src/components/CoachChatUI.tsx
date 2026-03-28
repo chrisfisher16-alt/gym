@@ -292,6 +292,20 @@ export function CoachChatUI({
         Ask anything about workouts, nutrition, or your health goals. I can create plans, analyze
         meals, and track your progress.
       </Text>
+      <Text
+        style={[
+          typography.caption,
+          {
+            color: colors.textTertiary,
+            marginTop: spacing.md,
+            textAlign: 'center',
+            paddingHorizontal: spacing['2xl'],
+            fontStyle: 'italic',
+          },
+        ]}
+      >
+        AI coaching — not medical advice. Consult a healthcare provider for medical concerns.
+      </Text>
       <SuggestedPrompts onSelect={handlePromptSelect} />
     </View>
   );

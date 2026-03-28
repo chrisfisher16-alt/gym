@@ -23,6 +23,7 @@ export interface LeaderboardCardProps {
   onTimeframeChange: (tf: string) => void;
   isLoading?: boolean;
   unitLabel?: string;
+  onInviteFriends?: () => void;
 }
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ export function LeaderboardCard({
   onTimeframeChange,
   isLoading = false,
   unitLabel,
+  onInviteFriends,
 }: LeaderboardCardProps) {
   const { colors, typography, spacing, radius, dark } = useTheme();
 
@@ -193,9 +195,29 @@ export function LeaderboardCard({
       ))}
 
       {sorted.length === 0 && !isLoading && (
-        <Text style={[typography.body, { color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.base }]}>
-          No entries yet
-        </Text>
+        <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+          <Ionicons name="trophy-outline" size={48} color={colors.gold} style={{ marginBottom: spacing.sm }} />
+          <Text style={[typography.body, { color: colors.textTertiary, textAlign: 'center' }]}>
+            No entries yet
+          </Text>
+          <Text style={[typography.caption, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.xs }]}>
+            Add friends to compete on the leaderboard
+          </Text>
+          {onInviteFriends && (
+            <Pressable
+              onPress={onInviteFriends}
+              style={{
+                marginTop: spacing.md,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.lg,
+                backgroundColor: colors.primaryMuted,
+                borderRadius: 20,
+              }}
+            >
+              <Text style={[typography.bodySmall, { color: colors.primary, fontWeight: '600' }]}>Invite Friends</Text>
+            </Pressable>
+          )}
+        </View>
       )}
 
       {/* Category picker */}

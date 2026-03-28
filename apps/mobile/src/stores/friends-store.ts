@@ -179,6 +179,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { error: 'Not authenticated' };
 
+      // Prevent self-friending (DB constraint also prevents this, but show a friendly message)
+      if (addresseeId === user.id) return { error: "You can't add yourself as a friend" };
+
       // Check if friendship already exists
       const { data: existing } = await supabase
         .from('friendships')

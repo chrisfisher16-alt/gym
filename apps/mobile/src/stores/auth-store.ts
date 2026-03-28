@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -26,6 +27,7 @@ interface AuthState {
   syncProfileFromSupabase: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithApple: () => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation?: boolean }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -337,6 +339,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       return { error: null };
     } catch (error) {
+      return { error: error as Error };
+    }
+  },
+
+  signInWithApple: async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        return { error: new Error('No identity token returned from Apple Sign-In.') };
+      }
+
+      const { error, data: sessionData } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) return { error };
+
+      // Extract Apple display name from credential and persist
+      const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+        .filter(Boolean)
+        .join(' ');
+      if (fullName && sessionData?.session?.user?.id) {
+        const userId = sessionData.session.user.id;
+        try {
+          const { useProfileStore } = require('./profile-store');
+          useProfileStore.getState().updateProfile({ displayName: fullName });
+        } catch (err) {
+          console.warn('[Auth] Failed to set display name in profile store:', err);
+        }
+        supabase.from('profiles').update({ display_name: fullName }).eq('id', userId).then(({ error }) => { if (error) console.error('[AuthStore] Profile upsert failed:', error); });
+      }
+
+      await get().syncProfileFromSupabase();
+      return { error: null };
+    } catch (error: unknown) {
+      // User cancelled — not an error
+      if ((error as { code?: string }).code === 'ERR_REQUEST_CANCELED') {
+        return { error: null };
+      }
       return { error: error as Error };
     }
   },

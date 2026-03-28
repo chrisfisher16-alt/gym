@@ -22,8 +22,11 @@ import {
   getPlanList,
   PRICING_FLAGS,
   type PlanConfig,
+  type PlanDisplayPrices,
 } from '../src/lib/pricing-config';
+import { useOfferingPrices } from '../src/hooks/useOfferingPrices';
 import { APP_CONFIG } from '@health-coach/shared';
+import type { EntitlementTier } from '@health-coach/shared';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
@@ -58,6 +61,7 @@ export default function PaywallScreen() {
   const [promoSuccess, setPromoSuccess] = useState(false);
 
   const plans = getPlanList();
+  const { prices: revenueCatPrices, isLoadingPrices } = useOfferingPrices();
 
   // Auto-select highlighted plan if no required plan specified
   useEffect(() => {
@@ -355,8 +359,12 @@ export default function PaywallScreen() {
                       Save {(() => {
                         const plan = plans.find((p) => p.highlight) ?? plans[0];
                         if (!plan) return '16%';
-                        const monthly = parseFloat(plan.price.replace(/[^0-9.]/g, ''));
-                        const yearly = parseFloat(plan.priceYearly.replace(/[^0-9.]/g, ''));
+                        // Use RevenueCat prices when available, fallback to config
+                        const rc = revenueCatPrices?.[plan.id as Exclude<EntitlementTier, 'free'>];
+                        const monthlyStr = rc ? rc.monthly : plan.price;
+                        const yearlyStr = rc ? rc.yearly : plan.priceYearly;
+                        const monthly = parseFloat(monthlyStr.replace(/[^0-9.]/g, ''));
+                        const yearly = parseFloat(yearlyStr.replace(/[^0-9.]/g, ''));
                         if (!monthly || !yearly) return '16%';
                         return `${Math.round((1 - (yearly / (monthly * 12))) * 100)}%`;
                       })()}
@@ -377,6 +385,8 @@ export default function PaywallScreen() {
             isSelected={selectedPlan === plan.id}
             isCurrent={tier === plan.id}
             onSelect={() => setSelectedPlan(plan.id)}
+            displayPrices={revenueCatPrices?.[plan.id as Exclude<EntitlementTier, 'free'>] ?? null}
+            isLoadingPrices={isLoadingPrices}
           />
         ))}
 
@@ -581,19 +591,27 @@ function PlanCard({
   isSelected,
   isCurrent,
   onSelect,
+  displayPrices,
+  isLoadingPrices,
 }: {
   plan: PlanConfig;
   billingPeriod: BillingPeriod;
   isSelected: boolean;
   isCurrent: boolean;
   onSelect: () => void;
+  /** Localized prices from RevenueCat, or null if unavailable */
+  displayPrices: PlanDisplayPrices | null;
+  isLoadingPrices: boolean;
 }) {
   const { colors, spacing, radius, typography } = useTheme();
 
-  const price = billingPeriod === 'yearly' ? plan.priceYearly : plan.price;
+  // Use RevenueCat prices when available, fall back to config placeholders
+  const price = displayPrices
+    ? (billingPeriod === 'yearly' ? displayPrices.yearly : displayPrices.monthly)
+    : (billingPeriod === 'yearly' ? plan.priceYearly : plan.price);
   const monthlyEquiv =
-    billingPeriod === 'yearly' && plan.monthlyEquivalent
-      ? plan.monthlyEquivalent
+    billingPeriod === 'yearly'
+      ? (displayPrices?.monthlyEquivalent ?? plan.monthlyEquivalent ?? null)
       : null;
 
   return (
@@ -667,8 +685,12 @@ function PlanCard({
         <View style={{ flex: 1 }}>
           <Text style={[typography.h3, { color: colors.text }]}>{plan.name}</Text>
           <View style={styles.priceRow}>
-            <Text style={[typography.h1, { color: colors.text }]}>{price}</Text>
-            {monthlyEquiv && (
+            {isLoadingPrices ? (
+              <ActivityIndicator size="small" color={colors.textTertiary} />
+            ) : (
+              <Text style={[typography.h1, { color: colors.text }]}>{price}</Text>
+            )}
+            {monthlyEquiv && !isLoadingPrices && (
               <Text
                 style={[
                   typography.bodySmall,

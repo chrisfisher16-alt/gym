@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { useThemeStore, type ColorMode } from '../src/stores/theme-store';
 import { KG_TO_LBS } from '../src/lib/constants';
 import { useSpaceStore, type TrainingSpace } from '../src/stores/space-store';
 import { useCoachSheet } from '../src/providers/CoachSheetProvider';
+import { deleteAccount } from '../src/lib/supabase-api';
 import { SpaceSwitcher, SpaceEditor } from '../src/components/ui';
 import { checkAIMessageLimit, checkWorkoutLogLimit, checkMealLogLimit, type UsageCheck } from '../src/lib/usage-limits';
 import type { CoachTone } from '@health-coach/shared';
@@ -38,10 +39,46 @@ export default function SettingsScreen() {
   const [spaceEditorVisible, setSpaceEditorVisible] = useState(false);
   const [editingSpace, setEditingSpace] = useState<TrainingSpace | undefined>(undefined);
 
+  // ── Delete Account state ────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   useEffect(() => {
     useThemeStore.getState().initialize();
     useSpaceStore.getState().initialize();
   }, []);
+
+  const handleDeleteAccount = () => {
+    crossPlatformAlert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => setShowDeleteConfirm(true),
+        },
+      ],
+    );
+  };
+
+  const confirmDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return;
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      await signOut();
+      router.replace('/auth');
+    } catch (e) {
+      crossPlatformAlert('Error', 'Failed to delete account. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText('');
+    }
+  };
 
   const handleSignOut = () => {
     crossPlatformAlert('Sign Out', 'Are you sure you want to sign out?', [
@@ -325,7 +362,10 @@ export default function SettingsScreen() {
         />
       </Card>
 
-      {/* Sign Out */}
+      {/* ── Danger Zone ──────────────────────────────────────────── */}
+      <Text style={[typography.labelSmall, { color: colors.error, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
+        Danger Zone
+      </Text>
       <TouchableOpacity
         onPress={handleSignOut}
         activeOpacity={0.7}
@@ -334,8 +374,9 @@ export default function SettingsScreen() {
           {
             backgroundColor: colors.errorLight,
             borderRadius: radius.lg,
+            borderBottomLeftRadius: showDeleteConfirm ? 0 : radius.lg,
+            borderBottomRightRadius: showDeleteConfirm ? 0 : radius.lg,
             padding: spacing.base,
-            marginBottom: spacing['3xl'],
           },
         ]}
       >
@@ -344,6 +385,97 @@ export default function SettingsScreen() {
           Sign Out
         </Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        onPress={handleDeleteAccount}
+        activeOpacity={0.7}
+        style={[
+          styles.signOutBtn,
+          {
+            backgroundColor: colors.errorLight,
+            borderRadius: radius.lg,
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.error + '30',
+            padding: spacing.base,
+            marginBottom: showDeleteConfirm ? 0 : spacing['3xl'],
+          },
+        ]}
+      >
+        <Ionicons name="trash-outline" size={20} color={colors.error} />
+        <Text style={[typography.labelLarge, { color: colors.error, marginLeft: spacing.sm }]}>
+          Delete Account
+        </Text>
+      </TouchableOpacity>
+      {showDeleteConfirm && (
+        <View
+          style={{
+            backgroundColor: colors.errorLight,
+            borderBottomLeftRadius: radius.lg,
+            borderBottomRightRadius: radius.lg,
+            padding: spacing.base,
+            marginBottom: spacing['3xl'],
+          }}
+        >
+          <Text style={[typography.bodySmall, { color: colors.error, marginBottom: spacing.sm }]}>
+            Type DELETE to permanently remove your account:
+          </Text>
+          <TextInput
+            value={deleteConfirmText}
+            onChangeText={setDeleteConfirmText}
+            placeholder="Type DELETE"
+            placeholderTextColor={colors.error + '60'}
+            autoCapitalize="characters"
+            autoFocus
+            style={[
+              typography.body,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.error + '40',
+                borderRadius: radius.md,
+                padding: spacing.sm,
+                color: colors.error,
+                marginBottom: spacing.sm,
+              },
+            ]}
+          />
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowDeleteConfirm(false);
+                setDeleteConfirmText('');
+              }}
+              style={{
+                flex: 1,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                backgroundColor: colors.surface,
+              }}
+            >
+              <Text style={[typography.label, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={confirmDeleteAccount}
+              disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+              style={{
+                flex: 1,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                backgroundColor: deleteConfirmText === 'DELETE' ? colors.error : colors.error + '40',
+              }}
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color={colors.textInverse} />
+              ) : (
+                <Text style={[typography.label, { color: colors.textInverse }]}>Delete Forever</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* ── Space Editor Sheet ─────────────────────────────────── */}
       <SpaceEditor
         visible={spaceEditorVisible}
