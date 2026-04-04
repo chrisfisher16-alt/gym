@@ -1,12 +1,31 @@
 // ── AI Meal Parse Edge Function ──────────────────────────────────────
-// Dedicated meal text parsing endpoint with food database fallback.
+// Dedicated meal text parsing endpoint with food database first, AI fallback.
 
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import { createAIProvider, estimateCost } from '../_shared/ai-provider.ts';
+import { validateOutput } from '../_shared/safety.ts';
 import type { MealParseRequest, MealParseResponse, ParsedMealItem } from '../_shared/types.ts';
 
-// ── Common Food Database (fallback) ─────────────────────────────────
+// ── Rate Limiting (in-memory) ───────────────────────────────────────
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+function checkMealParseRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+// ── Common Food Database (primary lookup) ────────────────────────────
 
 const FOOD_DB: Record<string, Omit<ParsedMealItem, 'is_estimate' | 'confidence'>> = {
   'chicken breast': { name: 'Chicken Breast', calories: 248, protein_g: 46, carbs_g: 0, fat_g: 5.4, fiber_g: 0, quantity: 1, unit: 'serving (150g)' },
@@ -31,6 +50,17 @@ const FOOD_DB: Record<string, Omit<ParsedMealItem, 'is_estimate' | 'confidence'>
   'steak': { name: 'Steak (sirloin)', calories: 366, protein_g: 46, carbs_g: 0, fat_g: 19, fiber_g: 0, quantity: 1, unit: 'serving (170g)' },
 };
 
+// ── Query Complexity Detection ───────────────────────────────────────
+
+function isSimpleFoodQuery(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  // Simple if: single food, no complex modifiers
+  if (lower.includes(',') || lower.includes(' and ')) return false;
+  if (lower.length > 80) return false;
+  if (/\d+\s*(g|oz|cup|tbsp|tsp|ml|lb|serving)/i.test(lower)) return false;
+  return true;
+}
+
 // ── Main Handler ────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -41,6 +71,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { user_id, supabase } = await verifyAuth(req);
+
+    // Rate limit
+    if (!checkMealParseRateLimit(user_id)) {
+      return errorResponse('Rate limit exceeded. Please try again later.', 429);
+    }
+
     const body: MealParseRequest = await req.json();
     const { text } = body;
 
@@ -54,8 +90,18 @@ Deno.serve(async (req: Request) => {
 
     let response: MealParseResponse;
 
+    // Try local database first for simple queries
+    const simple = isSimpleFoodQuery(text);
+    if (simple) {
+      const dbResult = parseMealWithDatabase(text);
+      if (dbResult.items.length > 0) {
+        // DB had real matches — return without AI call
+        return jsonResponse(dbResult);
+      }
+    }
+
+    // Complex query or no DB matches — use AI
     try {
-      // Try AI parsing first
       const aiProvider = createAIProvider();
       const aiResponse = await aiProvider.chat(
         [
@@ -87,6 +133,13 @@ Return format: { "items": [...] }`,
         }),
       );
 
+      // Safety check: validate AI-generated item names for medical terminology
+      const itemNames = items.map((i: ParsedMealItem) => i.name).join(', ');
+      const safetyCheck = validateOutput(itemNames);
+      if (!safetyCheck.safe) {
+        console.warn(`[ai-meal-parse] Safety flagged: ${safetyCheck.reason}`);
+      }
+
       response = { items, raw_text: text, parse_method: 'ai' };
 
       // Log usage
@@ -102,11 +155,14 @@ Return format: { "items": [...] }`,
         status: 'success',
         tool_calls_count: 0,
         context: 'nutrition',
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+        cache_hit: false,
         created_at: new Date().toISOString(),
       });
     } catch {
-      // Fallback to database matching
-      response = parseMealWithDatabase(text);
+      // Fallback to database matching (includes generic fallback)
+      response = parseMealWithDatabaseFallback(text);
     }
 
     return jsonResponse(response);
@@ -119,7 +175,7 @@ Return format: { "items": [...] }`,
   }
 });
 
-// ── Database Fallback Parser ────────────────────────────────────────
+// ── Database Parser (returns real matches only) ─────────────────────
 
 function parseMealWithDatabase(text: string): MealParseResponse {
   const items: ParsedMealItem[] = [];
@@ -135,9 +191,18 @@ function parseMealWithDatabase(text: string): MealParseResponse {
     }
   }
 
-  // If no matches, return a generic estimate
-  if (items.length === 0) {
-    items.push({
+  return { items, raw_text: text, parse_method: 'database_fallback' };
+}
+
+// ── Database Fallback Parser (with generic estimate) ────────────────
+
+function parseMealWithDatabaseFallback(text: string): MealParseResponse {
+  const result = parseMealWithDatabase(text);
+  if (result.items.length > 0) return result;
+
+  // No matches — return a generic estimate
+  return {
+    items: [{
       name: text.slice(0, 50),
       calories: 300,
       protein_g: 15,
@@ -148,8 +213,8 @@ function parseMealWithDatabase(text: string): MealParseResponse {
       unit: 'serving',
       is_estimate: true,
       confidence: 0.3,
-    });
-  }
-
-  return { items, raw_text: text, parse_method: 'database_fallback' };
+    }],
+    raw_text: text,
+    parse_method: 'database_fallback',
+  };
 }

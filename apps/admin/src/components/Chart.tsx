@@ -126,8 +126,8 @@ export function Chart({
                 dataKey={dataKeys[0]?.key || 'value'}
                 nameKey={xAxisKey}
               >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                {data.map((entry, i) => (
+                  <Cell key={`cell-${entry[xAxisKey] ?? i}`} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip

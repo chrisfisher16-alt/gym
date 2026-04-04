@@ -38,7 +38,7 @@ export function MealAnalysisCard({ data }: MealAnalysisCardProps) {
       <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
         {items.map((item, index) => (
           <View
-            key={index}
+            key={`meal-${(item.name as string) ?? index}`}
             style={[
               styles.itemRow,
               {

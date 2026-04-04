@@ -1,7 +1,18 @@
+export * from './compete';
+
 // ── Enums & Literal Types ────────────────────────────────────────────
 
 export type ProductMode = 'workout_coach' | 'nutrition_coach' | 'full_health_coach';
 export type SetType = 'warmup' | 'working' | 'drop' | 'failure';
+
+export type TrackingMode =
+  | 'weight_reps' | 'bodyweight_reps' | 'duration'
+  | 'duration_distance' | 'duration_level' | 'distance_weight' | 'reps_only';
+
+export type WeightContext =
+  | 'barbell' | 'dumbbell_single' | 'dumbbell_pair' | 'dumbbell_each'
+  | 'cable_stack' | 'machine_stack' | 'machine_plates' | 'kettlebell'
+  | 'band' | 'bodyweight_added' | 'sled' | 'vest' | 'body_only' | 'custom';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type MealSource = 'manual' | 'text_parse' | 'photo' | 'barcode' | 'quick_add' | 'saved_meal';
 export type CoachContext = 'general' | 'workout' | 'nutrition' | 'progress' | 'onboarding';
@@ -76,6 +87,12 @@ export interface User {
   subscription?: Subscription;
 }
 
+export type FitnessGoal = 'build_muscle' | 'lose_fat' | 'get_stronger' | 'stay_active' | 'athletic_performance';
+export type ExperienceLevel = 'beginner' | 'less_than_1_year' | '1_to_2_years' | '2_to_4_years' | '4_plus_years';
+export type ConsistencyLevel = 'never_consistent' | 'returning_from_break' | 'struggle_with_it' | 'very_consistent';
+export type GymType = 'large_gym' | 'small_gym' | 'garage_gym' | 'at_home' | 'no_equipment';
+export type SessionDuration = '30_min' | '45_min' | '60_min' | '75_plus_min';
+
 export interface Profile {
   id: string;
   display_name: string;
@@ -86,6 +103,24 @@ export interface Profile {
   unit_preference: UnitPreference;
   avatar_url?: string;
   timezone?: string;
+  onboarding_completed?: boolean;
+  product_mode?: ProductMode;
+  // v2 onboarding fields
+  fitness_goal?: FitnessGoal;
+  experience_level?: ExperienceLevel;
+  consistency_level?: ConsistencyLevel;
+  gym_type?: GymType;
+  gym_name?: string;
+  training_days_per_week?: number;
+  specific_training_days?: string[];
+  session_duration_pref?: SessionDuration;
+  injuries?: string[];
+  user_equipment?: unknown[];
+  attribution_source?: string;
+  notification_time?: string;
+  notifications_enabled?: boolean;
+  onboarding_version?: number;
+  health_sync_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -105,10 +140,14 @@ export interface Goals {
 }
 
 export interface CoachPreferences {
+  id?: string;
   user_id: string;
-  product_mode: ProductMode;
-  coach_tone: CoachTone;
-  focus_areas: string[];
+  tone: CoachTone;
+  focus_areas?: string[];
+  reminder_frequency?: string;
+  // Legacy aliases for backward compat in app code
+  product_mode?: ProductMode;
+  coach_tone?: CoachTone;
   notification_preferences?: NotificationPreferences;
   created_at: string;
   updated_at: string;
@@ -170,6 +209,14 @@ export interface SetLog {
   reps?: number;
   duration_seconds?: number;
   rpe?: number; // 1-10
+  distance?: number;
+  distance_unit?: 'miles' | 'km' | 'meters';
+  incline?: number;
+  speed?: number;
+  speed_unit?: 'mph' | 'kph';
+  level?: number;
+  calories?: number;
+  resistance?: number;
   is_pr: boolean;
   notes?: string;
   logged_at: string;

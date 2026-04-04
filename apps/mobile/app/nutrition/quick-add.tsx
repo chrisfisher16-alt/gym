@@ -7,13 +7,21 @@ import { useTheme } from '../../src/theme';
 import { useMealLog } from '../../src/hooks/useMealLog';
 import { Button, ScreenContainer } from '../../src/components/ui';
 import { getMealTypeLabel } from '../../src/lib/nutrition-utils';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
+import { checkMealLogLimit } from '../../src/lib/usage-limits';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
 import type { MealType } from '../../src/types/nutrition';
 
 export default function QuickAddScreen() {
   const router = useRouter();
-  const { mealType = 'snack' } = useLocalSearchParams<{ mealType: string }>();
+  const { mealType: rawMealType = 'snack' } = useLocalSearchParams<{ mealType: string }>();
+  const validMealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+  const mealType = validMealTypes.includes(rawMealType as typeof validMealTypes[number]) ? rawMealType : 'snack';
   const { colors, spacing, radius, typography } = useTheme();
   const { quickAddCalories } = useMealLog();
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
@@ -21,16 +29,34 @@ export default function QuickAddScreen() {
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
 
-  const handleSave = () => {
-    const cal = parseInt(calories) || 0;
-    if (cal === 0 && !name) return;
+  const parseSafe = (v: string) => Math.max(0, parseFloat(v) || 0);
+  const parseSafeInt = (v: string) => Math.max(0, parseInt(v) || 0);
+
+  const handleSave = async () => {
+    const cal = parseSafeInt(calories);
+    if (cal <= 0) return; // #62: require calories > 0
+
+    if (!canAccess('unlimited_meals')) {
+      const usage = await checkMealLogLimit();
+      if (!usage.allowed) {
+        crossPlatformAlert(
+          'Daily Meal Limit Reached',
+          `You've logged ${usage.limit} meals today. Upgrade to Nutrition Coach for unlimited meal logging.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_meals', source: 'quick_add' }) },
+          ],
+        );
+        return;
+      }
+    }
 
     quickAddCalories(
       name || 'Quick Add',
       cal,
-      parseFloat(protein) || 0,
-      parseFloat(carbs) || 0,
-      parseFloat(fat) || 0,
+      parseSafe(protein),
+      parseSafe(carbs),
+      parseSafe(fat),
       mealType as MealType,
     );
 
@@ -106,7 +132,7 @@ export default function QuickAddScreen() {
               placeholder="0"
               placeholderTextColor={colors.textTertiary}
               value={calories}
-              onChangeText={setCalories}
+              onChangeText={(v) => { const n = parseInt(v); setCalories(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
               keyboardType="numeric"
               autoFocus
             />
@@ -177,7 +203,7 @@ export default function QuickAddScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 value={protein}
-                onChangeText={setProtein}
+                onChangeText={(v) => { const n = parseFloat(v); setProtein(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
                 keyboardType="numeric"
               />
             </View>
@@ -201,7 +227,7 @@ export default function QuickAddScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 value={carbs}
-                onChangeText={setCarbs}
+                onChangeText={(v) => { const n = parseFloat(v); setCarbs(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
                 keyboardType="numeric"
               />
             </View>
@@ -225,7 +251,7 @@ export default function QuickAddScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 value={fat}
-                onChangeText={setFat}
+                onChangeText={(v) => { const n = parseFloat(v); setFat(v === '' ? '' : isNaN(n) ? '' : String(Math.max(0, n))); }}
                 keyboardType="numeric"
               />
             </View>
@@ -234,7 +260,7 @@ export default function QuickAddScreen() {
           <Button
             title="Add"
             onPress={handleSave}
-            disabled={!(parseInt(calories) > 0 || name.trim().length > 0)}
+            disabled={!(parseInt(calories) > 0)}
             icon={<Ionicons name="flash" size={20} color={colors.textInverse} />}
           />
         </ScrollView>

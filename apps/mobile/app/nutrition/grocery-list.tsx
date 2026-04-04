@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Platform, TextInput, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Platform, TextInput, Linking } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -18,7 +19,7 @@ function confirmAction(title: string, message: string): Promise<boolean> {
     return Promise.resolve(window.confirm(`${title}\n\n${message}`));
   }
   return new Promise((resolve) => {
-    Alert.alert(title, message, [
+    crossPlatformAlert(title, message, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
       { text: 'OK', style: 'destructive', onPress: () => resolve(true) },
     ]);
@@ -167,7 +168,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
     }
     try {
       await Share.share({ message: lines.join('\n') });
-    } catch {}
+    } catch (e) { console.warn('[GroceryList] share failed:', e); }
   }, [currentList]);
 
   // ── Clear ──────────────────────────────────────────────────────
@@ -367,7 +368,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                 {progress.checked} / {progress.total} items
               </Text>
               {currentList.totalEstimatedCost != null && (
-                <Text style={[typography.label, { color: colors.success }]}>
+                <Text style={[typography.label, { color: colors.completed }]}>
                   ~${currentList.totalEstimatedCost.toFixed(2)}
                 </Text>
               )}
@@ -377,7 +378,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                 style={{
                   height: 6,
                   borderRadius: radius.sm,
-                  backgroundColor: colors.success,
+                  backgroundColor: colors.completed,
                   width: progress.total > 0 ? `${(progress.checked / progress.total) * 100}%` : '0%',
                 }}
               />
@@ -414,7 +415,7 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                     <Ionicons
                       name={item.checked ? 'checkbox' : 'square-outline'}
                       size={22}
-                      color={item.checked ? colors.success : colors.textTertiary}
+                      color={item.checked ? colors.completed : colors.textTertiary}
                     />
                     <View style={{ flex: 1, marginLeft: spacing.md }}>
                       <Text

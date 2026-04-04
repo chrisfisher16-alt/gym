@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
+  LayoutAnimation,
   Linking,
   Platform,
 } from 'react-native';
@@ -14,14 +15,18 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useEntitlement } from '../src/hooks/useEntitlement';
 import {
   getPlanList,
   PRICING_FLAGS,
   type PlanConfig,
+  type PlanDisplayPrices,
 } from '../src/lib/pricing-config';
+import { useOfferingPrices } from '../src/hooks/useOfferingPrices';
 import { APP_CONFIG } from '@health-coach/shared';
+import type { EntitlementTier } from '@health-coach/shared';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
@@ -40,6 +45,7 @@ export default function PaywallScreen() {
     isLoading,
     purchase,
     restore,
+    applyPromoCode,
   } = useSubscriptionStore();
 
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
@@ -49,8 +55,13 @@ export default function PaywallScreen() {
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoExpanded, setPromoExpanded] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoSuccess, setPromoSuccess] = useState(false);
 
   const plans = getPlanList();
+  const { prices: revenueCatPrices, isLoadingPrices } = useOfferingPrices();
 
   // Auto-select highlighted plan if no required plan specified
   useEffect(() => {
@@ -62,7 +73,7 @@ export default function PaywallScreen() {
 
   const handlePurchase = useCallback(async () => {
     if (!offerings?.current) {
-      Alert.alert(
+      crossPlatformAlert(
         'Unavailable',
         'Subscription packages are not available right now. Please try again later.',
       );
@@ -78,13 +89,13 @@ export default function PaywallScreen() {
     if (!pkg) {
       // In dev/test mode, show a simulated success
       if (__DEV__) {
-        Alert.alert(
+        crossPlatformAlert(
           'Development Mode',
           `Would purchase: ${selectedPlan} (${billingPeriod}).\nRevenueCat packages not available in dev mode.`,
         );
         return;
       }
-      Alert.alert('Error', 'Package not found. Please try again.');
+      crossPlatformAlert('Error', 'Package not found. Please try again.');
       return;
     }
 
@@ -98,7 +109,7 @@ export default function PaywallScreen() {
         router.back();
       }, 2000);
     } else if (result.error && result.error !== 'cancelled') {
-      Alert.alert('Purchase Failed', result.error);
+      crossPlatformAlert('Purchase Failed', result.error);
     }
   }, [offerings, billingPeriod, selectedPlan, purchase]);
 
@@ -108,16 +119,32 @@ export default function PaywallScreen() {
     setRestoreLoading(false);
 
     if (result.success) {
-      Alert.alert('Restored', 'Your purchases have been restored.', [
+      crossPlatformAlert('Restored', 'Your purchases have been restored.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } else {
-      Alert.alert(
+      crossPlatformAlert(
         'Restore Failed',
         result.error ?? 'No previous purchases found.',
       );
     }
   }, [restore]);
+
+  const handleApplyPromo = useCallback(async () => {
+    if (!promoCode.trim()) return;
+    setPromoError(null);
+    const result = await applyPromoCode(promoCode);
+    if (result.success) {
+      setPromoSuccess(true);
+      setPromoError(null);
+      setTimeout(() => {
+        router.back();
+      }, 2000);
+    } else {
+      setPromoError(result.error ?? 'Invalid code');
+      setPromoSuccess(false);
+    }
+  }, [promoCode, applyPromoCode]);
 
   // Success overlay
   if (showSuccess) {
@@ -127,10 +154,10 @@ export default function PaywallScreen() {
           <View
             style={[
               styles.successIcon,
-              { backgroundColor: colors.successLight, borderRadius: radius.full },
+              { backgroundColor: colors.completedMuted, borderRadius: radius.full },
             ]}
           >
-            <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+            <Ionicons name="checkmark-circle" size={64} color={colors.completed} />
           </View>
           <Text
             style={[
@@ -319,7 +346,7 @@ export default function PaywallScreen() {
                     style={[
                       styles.savingsBadge,
                       {
-                        backgroundColor: colors.success + '20',
+                        backgroundColor: colors.completed + '20',
                         borderRadius: radius.sm,
                         paddingHorizontal: spacing.xs,
                         marginLeft: spacing.xs,
@@ -327,9 +354,20 @@ export default function PaywallScreen() {
                     ]}
                   >
                     <Text
-                      style={[typography.caption, { color: colors.success, fontWeight: '600' }]}
+                      style={[typography.caption, { color: colors.completed, fontWeight: '600' }]}
                     >
-                      Save 16%
+                      Save {(() => {
+                        const plan = plans.find((p) => p.highlight) ?? plans[0];
+                        if (!plan) return '16%';
+                        // Use RevenueCat prices when available, fallback to config
+                        const rc = revenueCatPrices?.[plan.id as Exclude<EntitlementTier, 'free'>];
+                        const monthlyStr = rc ? rc.monthly : plan.price;
+                        const yearlyStr = rc ? rc.yearly : plan.priceYearly;
+                        const monthly = parseFloat(monthlyStr.replace(/[^0-9.]/g, ''));
+                        const yearly = parseFloat(yearlyStr.replace(/[^0-9.]/g, ''));
+                        if (!monthly || !yearly) return '16%';
+                        return `${Math.round((1 - (yearly / (monthly * 12))) * 100)}%`;
+                      })()}
                     </Text>
                   </View>
                 )}
@@ -347,6 +385,8 @@ export default function PaywallScreen() {
             isSelected={selectedPlan === plan.id}
             isCurrent={tier === plan.id}
             onSelect={() => setSelectedPlan(plan.id)}
+            displayPrices={revenueCatPrices?.[plan.id as Exclude<EntitlementTier, 'free'>] ?? null}
+            isLoadingPrices={isLoadingPrices}
           />
         ))}
 
@@ -418,6 +458,100 @@ export default function PaywallScreen() {
           )}
         </TouchableOpacity>
 
+        {/* Promo Code */}
+        <View style={{ marginTop: spacing.lg }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (Platform.OS !== 'web') LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setPromoExpanded(!promoExpanded);
+            }}
+            style={{ alignItems: 'center', paddingVertical: spacing.sm }}
+            activeOpacity={0.7}
+          >
+            <Text style={[typography.label, { color: colors.textSecondary }]}>
+              Have a promo code?
+            </Text>
+          </TouchableOpacity>
+
+          {promoExpanded && (
+            <View style={{ marginTop: spacing.sm }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: colors.surface,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: promoError ? colors.error : promoSuccess ? colors.completed : colors.border,
+                  paddingHorizontal: spacing.md,
+                }}
+              >
+                <Ionicons name="pricetag-outline" size={18} color={colors.textTertiary} />
+                <TextInput
+                  style={[
+                    typography.body,
+                    {
+                      color: colors.text,
+                      flex: 1,
+                      marginLeft: spacing.sm,
+                      paddingVertical: 12,
+                    },
+                  ]}
+                  placeholder="Enter promo code"
+                  placeholderTextColor={colors.textTertiary}
+                  accessibilityLabel="Promo code"
+                  value={promoCode}
+                  onChangeText={(text) => {
+                    setPromoCode(text);
+                    setPromoError(null);
+                    setPromoSuccess(false);
+                  }}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={handleApplyPromo}
+                  disabled={!promoCode.trim()}
+                  style={{
+                    backgroundColor: promoCode.trim() ? colors.primary : colors.disabled,
+                    borderRadius: radius.sm,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.xs,
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      typography.label,
+                      { color: promoCode.trim() ? colors.textInverse : colors.disabledText },
+                    ]}
+                  >
+                    Apply
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {promoError && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
+                  <Ionicons name="alert-circle" size={14} color={colors.error} />
+                  <Text style={[typography.caption, { color: colors.error, marginLeft: 4 }]}>
+                    {promoError}
+                  </Text>
+                </View>
+              )}
+
+              {promoSuccess && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.completed} />
+                  <Text style={[typography.caption, { color: colors.completed, marginLeft: 4 }]}>
+                    Promo code applied! Activating your plan...
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
         {/* Legal */}
         <View style={[styles.legalLinks, { marginTop: spacing.lg, marginBottom: spacing['3xl'] }]}>
           <TouchableOpacity onPress={() => router.push('/terms')}>
@@ -457,19 +591,27 @@ function PlanCard({
   isSelected,
   isCurrent,
   onSelect,
+  displayPrices,
+  isLoadingPrices,
 }: {
   plan: PlanConfig;
   billingPeriod: BillingPeriod;
   isSelected: boolean;
   isCurrent: boolean;
   onSelect: () => void;
+  /** Localized prices from RevenueCat, or null if unavailable */
+  displayPrices: PlanDisplayPrices | null;
+  isLoadingPrices: boolean;
 }) {
   const { colors, spacing, radius, typography } = useTheme();
 
-  const price = billingPeriod === 'yearly' ? plan.priceYearly : plan.price;
+  // Use RevenueCat prices when available, fall back to config placeholders
+  const price = displayPrices
+    ? (billingPeriod === 'yearly' ? displayPrices.yearly : displayPrices.monthly)
+    : (billingPeriod === 'yearly' ? plan.priceYearly : plan.price);
   const monthlyEquiv =
-    billingPeriod === 'yearly' && plan.monthlyEquivalent
-      ? plan.monthlyEquivalent
+    billingPeriod === 'yearly'
+      ? (displayPrices?.monthlyEquivalent ?? plan.monthlyEquivalent ?? null)
       : null;
 
   return (
@@ -524,7 +666,7 @@ function PlanCard({
           style={[
             styles.currentBadge,
             {
-              backgroundColor: colors.successLight,
+              backgroundColor: colors.completedMuted,
               borderRadius: radius.sm,
               paddingHorizontal: spacing.sm,
               paddingVertical: 2,
@@ -533,7 +675,7 @@ function PlanCard({
             },
           ]}
         >
-          <Text style={[typography.caption, { color: colors.success, fontWeight: '600' }]}>
+          <Text style={[typography.caption, { color: colors.completed, fontWeight: '600' }]}>
             Current Plan
           </Text>
         </View>
@@ -543,8 +685,12 @@ function PlanCard({
         <View style={{ flex: 1 }}>
           <Text style={[typography.h3, { color: colors.text }]}>{plan.name}</Text>
           <View style={styles.priceRow}>
-            <Text style={[typography.h1, { color: colors.text }]}>{price}</Text>
-            {monthlyEquiv && (
+            {isLoadingPrices ? (
+              <ActivityIndicator size="small" color={colors.textTertiary} />
+            ) : (
+              <Text style={[typography.h1, { color: colors.text }]}>{price}</Text>
+            )}
+            {monthlyEquiv && !isLoadingPrices && (
               <Text
                 style={[
                   typography.bodySmall,
@@ -596,7 +742,7 @@ function PlanCard({
             <Ionicons
               name="checkmark-circle"
               size={18}
-              color={colors.success}
+              color={colors.completed}
               style={{ marginRight: spacing.sm }}
             />
             <Text style={[typography.body, { color: colors.textSecondary, flex: 1 }]}>

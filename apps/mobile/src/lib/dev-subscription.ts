@@ -35,7 +35,6 @@ export function setDevTier(tier: EntitlementTier): void {
   };
 
   notifyListeners();
-  console.log(`[DevSubscription] Tier set to: ${tier}`);
 }
 
 export function setDevTrial(tier: EntitlementTier, daysRemaining: number): void {
@@ -51,7 +50,6 @@ export function setDevTrial(tier: EntitlementTier, daysRemaining: number): void 
   };
 
   notifyListeners();
-  console.log(`[DevSubscription] Trial set: ${tier}, ends in ${daysRemaining} days`);
 }
 
 export function resetDevSubscription(): void {
@@ -64,7 +62,6 @@ export function resetDevSubscription(): void {
   };
 
   notifyListeners();
-  console.log('[DevSubscription] Reset to free');
 }
 
 export function onDevSubscriptionChange(

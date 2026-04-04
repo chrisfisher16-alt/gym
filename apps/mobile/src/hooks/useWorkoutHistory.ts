@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useWorkoutStore } from '../stores/workout-store';
 import type { CompletedSession, DayVolume } from '../types/workout';
 import { getWeeklyVolume } from '../lib/workout-utils';
+import { getDateString } from '../lib/nutrition-utils';
 
 export function useWorkoutHistory() {
   const history = useWorkoutStore((s) => s.history);
@@ -45,7 +46,7 @@ export function useWorkoutHistory() {
   const historyByDate = useMemo(() => {
     const map = new Map<string, CompletedSession[]>();
     for (const session of sortedHistory) {
-      const dateKey = new Date(session.completedAt).toISOString().split('T')[0];
+      const dateKey = getDateString(new Date(session.completedAt));
       const existing = map.get(dateKey) ?? [];
       existing.push(session);
       map.set(dateKey, existing);

@@ -5,7 +5,6 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -18,16 +17,24 @@ import { useMealLog } from '../../src/hooks/useMealLog';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { calculateMealTotals, generateNutritionId, getMealTypeLabel, formatMealTime } from '../../src/lib/nutrition-utils';
 import type { MealItemEntry } from '../../src/types/nutrition';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MealDetailScreen() {
   const router = useRouter();
   const { mealId } = useLocalSearchParams<{ mealId: string }>();
   const { colors, spacing, radius, typography } = useTheme();
-  const { getMealById, deleteMeal, addMealItem, editMealItem, removeMealItem } = useMealLog();
+  const { deleteMeal, addMealItem, editMealItem, removeMealItem } = useMealLog();
   const saveMealAsTemplate = useNutritionStore((s) => s.saveMealAsTemplate);
 
-  const meal = getMealById(mealId ?? '');
+  // Derive meal and its date reactively from the store to avoid stale data (#58)
+  const { meal, mealDate } = useNutritionStore((state) => {
+    for (const [dateKey, log] of Object.entries(state.dailyLogs)) {
+      const found = log.meals.find((m) => m.id === mealId);
+      if (found) return { meal: found, mealDate: dateKey };
+    }
+    return { meal: undefined, mealDate: undefined };
+  });
   const [editing, setEditing] = useState(false);
 
   if (!meal) {
@@ -48,13 +55,13 @@ export default function MealDetailScreen() {
   const totals = calculateMealTotals(meal.items);
 
   const handleDelete = () => {
-    Alert.alert('Delete Meal', 'Are you sure you want to delete this meal?', [
+    crossPlatformAlert('Delete Meal', 'Are you sure you want to delete this meal?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          deleteMeal(meal.id);
+          deleteMeal(meal.id, mealDate);
           router.back();
         },
       },
@@ -63,16 +70,16 @@ export default function MealDetailScreen() {
 
   const handleSaveAsTemplate = () => {
     saveMealAsTemplate(meal);
-    Alert.alert('Saved', `"${meal.name}" has been saved as a meal template.`);
+    crossPlatformAlert('Saved', `"${meal.name}" has been saved as a meal template.`);
   };
 
   const handleRemoveItem = (itemId: string) => {
-    Alert.alert('Remove Item', 'Remove this item from the meal?', [
+    crossPlatformAlert('Remove Item', 'Remove this item from the meal?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => removeMealItem(meal.id, itemId),
+        onPress: () => removeMealItem(meal.id, itemId, mealDate),
       },
     ]);
   };
@@ -90,7 +97,7 @@ export default function MealDetailScreen() {
       unit: 'serving',
       is_estimate: true,
     };
-    addMealItem(meal.id, newItem);
+    addMealItem(meal.id, newItem, mealDate);
   };
 
   return (
@@ -173,7 +180,7 @@ export default function MealDetailScreen() {
                     <TextInput
                       style={[typography.label, { color: colors.text, padding: 0 }]}
                       value={item.name}
-                      onChangeText={(v) => editMealItem(meal.id, item.id, { name: v })}
+                      onChangeText={(v) => editMealItem(meal.id, item.id, { name: v }, mealDate)}
                     />
                   ) : (
                     <Text style={[typography.label, { color: colors.text }]}>{item.name}</Text>
@@ -203,7 +210,7 @@ export default function MealDetailScreen() {
                         <TextInput
                           style={[styles.editField, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, color: colors.text, ...typography.label }]}
                           value={String(item[field])}
-                          onChangeText={(v) => editMealItem(meal.id, item.id, { [field]: parseFloat(v) || 0 })}
+                          onChangeText={(v) => editMealItem(meal.id, item.id, { [field]: parseFloat(v) || 0 }, mealDate)}
                           keyboardType="numeric"
                         />
                       </View>

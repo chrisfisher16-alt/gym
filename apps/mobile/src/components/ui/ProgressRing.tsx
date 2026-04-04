@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { useTheme } from '../../theme';
 
 interface ProgressRingProps {
@@ -17,15 +18,12 @@ interface ProgressRingProps {
   sublabel?: string;
   /** Optional override for the track (background ring) color */
   trackColor?: string;
+  /** Custom content rendered in the center of the ring */
+  children?: React.ReactNode;
+  /** Gradient colors for the progress arc (accepted but not yet implemented) */
+  gradientColors?: string[];
 }
 
-/**
- * Circular progress ring built with pure RN views (no SVG dependency).
- *
- * Technique: four quarter-circle segments clipped by two half-view masks.
- * The progress value (0–1) is converted to degrees (0–360) and each
- * quarter-segment is revealed with a rotate transform.
- */
 export function ProgressRing({
   progress: rawProgress,
   size = 64,
@@ -34,84 +32,48 @@ export function ProgressRing({
   label,
   sublabel,
   trackColor: trackColorProp,
+  children,
+  gradientColors: _gradientColors,
 }: ProgressRingProps) {
   const { colors, typography } = useTheme();
   const progress = Math.max(0, Math.min(rawProgress, 1));
-  const degrees = progress * 360;
-  const half = size / 2;
   const trackColor = trackColorProp ?? colors.borderLight;
 
-  // Each half renders a semicircle that can rotate 0-180°.
-  const renderHalf = (startDeg: number, isRight: boolean) => {
-    const rotation = Math.min(Math.max(degrees - startDeg, 0), 180);
-    return (
-      <View
-        style={[
-          styles.halfMask,
-          {
-            width: half,
-            height: size,
-            left: isRight ? half : 0,
-            overflow: 'hidden',
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.halfCircle,
-            {
-              width: size,
-              height: size,
-              borderWidth: strokeWidth,
-              borderColor: color,
-              borderRadius: half,
-              left: isRight ? -half : 0,
-              transform: [
-                { translateX: isRight ? -half : half },
-                { rotate: `${isRight ? rotation : rotation}deg` },
-                { translateX: isRight ? half : -half },
-              ],
-            },
-            isRight
-              ? { borderLeftColor: 'transparent', borderBottomColor: 'transparent' }
-              : { borderRightColor: 'transparent', borderTopColor: 'transparent' },
-          ]}
-        />
-      </View>
-    );
-  };
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progress);
+  const center = size / 2;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      {/* Background track ring */}
-      <View
-        style={[
-          styles.track,
-          {
-            width: size,
-            height: size,
-            borderRadius: half,
-            borderWidth: strokeWidth,
-            borderColor: trackColor,
-          },
-        ]}
-      />
-
-      {/* Progress arcs — right half (0-180°), then left half (180-360°) */}
-      {renderHalf(0, true)}
-      {renderHalf(180, false)}
-
+      <Svg width={size} height={size}>
+        {/* Background track */}
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={trackColor}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        {/* Progress arc */}
+        {progress > 0 && (
+          <Circle
+            cx={center}
+            cy={center}
+            r={radius}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeDasharray={`${circumference}`}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        )}
+      </Svg>
       {/* Center content */}
-      <View
-        style={[
-          styles.center,
-          {
-            width: size - strokeWidth * 2 - 4,
-            height: size - strokeWidth * 2 - 4,
-            borderRadius: (size - strokeWidth * 2 - 4) / 2,
-          },
-        ]}
-      >
+      <View style={[styles.center, StyleSheet.absoluteFill]}>
         {label != null && (
           <Text
             style={[
@@ -134,6 +96,7 @@ export function ProgressRing({
             {sublabel}
           </Text>
         )}
+        {children}
       </View>
     </View>
   );
@@ -144,17 +107,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  track: {
-    position: 'absolute',
-  },
-  halfMask: {
-    position: 'absolute',
-    top: 0,
-  },
-  halfCircle: {
-    position: 'absolute',
-    top: 0,
   },
   center: {
     alignItems: 'center',

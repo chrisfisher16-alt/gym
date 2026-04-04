@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import type {
   NutritionTargets,
   DailyNutritionLog,
@@ -15,6 +16,29 @@ import type {
 } from '../types/nutrition';
 import { calculateDailyTotals, generateNutritionId, getDateString } from '../lib/nutrition-utils';
 import { getSeedRecipes, getSeedRecipeIds } from '../lib/seed-recipes';
+import { incrementUsage } from '../lib/usage-limits';
+import { useSubscriptionStore } from './subscription-store';
+
+// ── Flush Persistence ─────────────────────────────────────────────
+
+let _persistTimeout: ReturnType<typeof setTimeout> | null = null;
+
+export function flushPersist() {
+  if (_persistTimeout) {
+    clearTimeout(_persistTimeout);
+    _persistTimeout = null;
+  }
+  useNutritionStore.getState().persistAll().catch((err) => {
+    console.warn('Nutrition persist failed:', err);
+    useNutritionStore.setState({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+  });
+}
+
+AppState.addEventListener('change', (state) => {
+  if (state === 'background' || state === 'inactive') {
+    flushPersist();
+  }
+});
 
 // ── Storage Keys ──────────────────────────────────────────────────
 
@@ -168,6 +192,22 @@ function getSeedDayMeals(): MealEntry[] {
   ];
 }
 
+// ── Evict Old Logs ────────────────────────────────────────────────
+
+function evictOldLogs(logs: Record<string, DailyNutritionLog>): Record<string, DailyNutritionLog> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffStr = cutoff.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+
+  const filtered: Record<string, DailyNutritionLog> = {};
+  for (const [date, log] of Object.entries(logs)) {
+    if (date >= cutoffStr) {
+      filtered[date] = log;
+    }
+  }
+  return filtered;
+}
+
 // ── State ─────────────────────────────────────────────────────────
 
 interface NutritionState {
@@ -180,11 +220,17 @@ interface NutritionState {
   recipes: RecipeEntry[];
   targets: NutritionTargets;
   isInitialized: boolean;
+  persistError: string | null;
+
+  // Actions - Persist Error
+  clearPersistError: () => void;
 
   // Computed getters
-  todayLog: () => DailyNutritionLog;
+  currentTargets: () => NutritionTargets;
+  selectedDateLog: () => DailyNutritionLog;
   todayMeals: () => MealEntry[];
   todayConsumed: () => MacroTotals;
+  todayRemaining: () => MacroTotals;
   todayWater: () => number;
 
   // Actions - Initialization
@@ -194,11 +240,11 @@ interface NutritionState {
   setSelectedDate: (date: string) => void;
 
   // Actions - Meals
-  logMeal: (meal: Omit<MealEntry, 'id' | 'userId' | 'date'>) => void;
-  addMealItem: (mealId: string, item: MealItemEntry) => void;
-  editMealItem: (mealId: string, itemId: string, updates: Partial<MealItemEntry>) => void;
-  removeMealItem: (mealId: string, itemId: string) => void;
-  deleteMeal: (mealId: string) => void;
+  logMeal: (meal: Omit<MealEntry, 'id' | 'userId' | 'date'>, targetDate?: string) => void;
+  addMealItem: (mealId: string, item: MealItemEntry, date?: string) => void;
+  editMealItem: (mealId: string, itemId: string, updates: Partial<MealItemEntry>, date?: string) => void;
+  removeMealItem: (mealId: string, itemId: string, date?: string) => void;
+  deleteMeal: (mealId: string, date?: string) => void;
   quickAddCalories: (name: string, calories: number, protein_g: number, carbs_g: number, fat_g: number, mealType: MealType) => void;
 
   // Actions - Saved Meals
@@ -239,10 +285,15 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   recipes: [],
   targets: DEFAULT_TARGETS,
   isInitialized: false,
+  persistError: null,
 
   // ── Computed ────────────────────────────────────────────────────
 
-  todayLog: () => {
+  currentTargets: () => {
+    return get().targets;
+  },
+
+  selectedDateLog: () => {
     const state = get();
     const date = state.selectedDate;
     return state.dailyLogs[date] ?? {
@@ -267,6 +318,18 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     return calculateDailyTotals(meals);
   },
 
+  todayRemaining: () => {
+    const targets = get().targets;
+    const consumed = get().todayConsumed();
+    return {
+      calories: Math.max(0, targets.calories - consumed.calories),
+      protein_g: Math.max(0, targets.protein_g - consumed.protein_g),
+      carbs_g: Math.max(0, targets.carbs_g - consumed.carbs_g),
+      fat_g: Math.max(0, targets.fat_g - consumed.fat_g),
+      fiber_g: Math.max(0, targets.fiber_g - consumed.fiber_g),
+    };
+  },
+
   todayWater: () => {
     const state = get();
     const log = state.dailyLogs[state.selectedDate];
@@ -286,7 +349,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       ]);
 
       const dailyLogs: Record<string, DailyNutritionLog> = storedLogs
-        ? JSON.parse(storedLogs)
+        ? evictOldLogs(JSON.parse(storedLogs))
         : {};
 
       const savedMeals: SavedMealEntry[] = storedSaved
@@ -399,11 +462,19 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
   // ── Meals ───────────────────────────────────────────────────────
 
-  logMeal: (mealData) => {
+  logMeal: (mealData, targetDate) => {
     const state = get();
-    const date = state.selectedDate;
+    const date = targetDate ?? state.selectedDate;
+
+    // When an explicit targetDate is provided, align the timestamp to noon
+    // of that date to avoid timezone-induced date-key mismatches (#57)
+    const timestamp = targetDate
+      ? new Date(targetDate + 'T12:00:00').toISOString()
+      : (mealData.timestamp || new Date().toISOString());
+
     const meal: MealEntry = {
       ...mealData,
+      timestamp,
       id: generateNutritionId('meal'),
       userId: 'local_user',
       date,
@@ -428,12 +499,21 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     };
 
     set({ dailyLogs });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
+
+    // Increment usage counter for free tier (after successful save)
+    const tier = useSubscriptionStore.getState().tier;
+    if (tier === 'free') {
+      incrementUsage('meal_logs').catch(console.warn);
+    }
   },
 
-  addMealItem: (mealId, item) => {
+  addMealItem: (mealId, item, date) => {
     const state = get();
-    const date = state.selectedDate;
+    date = date || state.selectedDate;
     const log = state.dailyLogs[date];
     if (!log) return;
 
@@ -448,12 +528,15 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
-  editMealItem: (mealId, itemId, updates) => {
+  editMealItem: (mealId, itemId, updates, date) => {
     const state = get();
-    const date = state.selectedDate;
+    date = date || state.selectedDate;
     const log = state.dailyLogs[date];
     if (!log) return;
 
@@ -474,12 +557,15 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
-  removeMealItem: (mealId, itemId) => {
+  removeMealItem: (mealId, itemId, date) => {
     const state = get();
-    const date = state.selectedDate;
+    date = date || state.selectedDate;
     const log = state.dailyLogs[date];
     if (!log) return;
 
@@ -495,12 +581,15 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
-  deleteMeal: (mealId) => {
+  deleteMeal: (mealId, date) => {
     const state = get();
-    const date = state.selectedDate;
+    date = date || state.selectedDate;
     const log = state.dailyLogs[date];
     if (!log) return;
 
@@ -513,7 +602,10 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, meals, consumed },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   quickAddCalories: (name, calories, protein_g, carbs_g, fat_g, mealType) => {
@@ -557,14 +649,20 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set((state) => ({
       savedMeals: [...state.savedMeals, saved],
     }));
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   deleteSavedMeal: (savedMealId) => {
     set((state) => ({
       savedMeals: state.savedMeals.filter((m) => m.id !== savedMealId),
     }));
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   logSavedMeal: (savedMealId, mealType) => {
@@ -617,14 +715,20 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set((state) => ({
       userSupplements: [...state.userSupplements, supp],
     }));
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   removeUserSupplement: (userSupplementId) => {
     set((state) => ({
       userSupplements: state.userSupplements.filter((s) => s.id !== userSupplementId),
     }));
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   logSupplement: (userSupplementId) => {
@@ -644,10 +748,12 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
     const supplementsTaken = [...log.supplementsTaken, userSupplementId];
 
-    // Update streak
+    // Update streak (relative to the selected date, not today)
     const userSupplements = state.userSupplements.map((s) => {
       if (s.id !== userSupplementId) return s;
-      const wasYesterdayTaken = s.lastTakenDate === getDateString(new Date(Date.now() - 86400000));
+      const yesterday = new Date(date);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const wasYesterdayTaken = s.lastTakenDate === getDateString(yesterday);
       return {
         ...s,
         streak: wasYesterdayTaken ? s.streak + 1 : 1,
@@ -662,7 +768,10 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       },
       userSupplements,
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   unlogSupplement: (userSupplementId) => {
@@ -680,7 +789,10 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   // ── Water ───────────────────────────────────────────────────────
@@ -701,10 +813,13 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set({
       dailyLogs: {
         ...state.dailyLogs,
-        [date]: { ...log, waterIntake_oz: log.waterIntake_oz + amount_oz },
+        [date]: { ...log, waterIntake_oz: Math.max(0, (log.waterIntake_oz ?? 0) + amount_oz) },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   setWater: (amount_oz) => {
@@ -726,7 +841,10 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
         [date]: { ...log, waterIntake_oz: Math.max(0, amount_oz) },
       },
     });
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   // ── Targets ─────────────────────────────────────────────────────
@@ -747,8 +865,14 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     } else {
       set({ targets });
     }
-    AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(targets));
-    get().persistAll();
+    AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(targets)).catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   // ── Recipes ─────────────────────────────────────────────────────
@@ -767,14 +891,20 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     set((state) => ({
       recipes: [...state.recipes, recipe],
     }));
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   deleteRecipe: (recipeId) => {
     set((state) => ({
       recipes: state.recipes.filter((r) => r.id !== recipeId),
     }));
-    get().persistAll();
+    get().persistAll().catch((err) => {
+      console.warn('Nutrition persist failed:', err);
+      set({ persistError: 'Failed to save nutrition data. Changes may be lost.' });
+    });
   },
 
   logRecipe: (recipeId, mealType) => {
@@ -785,13 +915,17 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     get().logMeal({
       mealType,
       name: recipe.name,
-      source: 'manual',
+      source: 'recipe',
       timestamp: new Date().toISOString(),
       items: recipe.items.map((item) => ({
         ...item,
         id: generateNutritionId('mi'),
       })),
     });
+  },
+
+  clearPersistError: () => {
+    set({ persistError: null });
   },
 
   // ── Persistence ─────────────────────────────────────────────────
@@ -803,6 +937,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       AsyncStorage.setItem(STORAGE_KEYS.SAVED_MEALS, JSON.stringify(state.savedMeals)),
       AsyncStorage.setItem(STORAGE_KEYS.SUPPLEMENTS, JSON.stringify(state.userSupplements)),
       AsyncStorage.setItem(STORAGE_KEYS.RECIPES, JSON.stringify(state.recipes)),
+      AsyncStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(state.targets)),
     ]);
   },
 }));

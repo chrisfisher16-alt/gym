@@ -5,21 +5,42 @@ import type { EntitlementTier, PricingConfig } from '@health-coach/shared';
 export interface PlanConfig {
   id: EntitlementTier;
   name: string;
+  /** FALLBACK ONLY — displayed while loading real prices from StoreKit/RevenueCat */
   price: string;
+  /** FALLBACK ONLY — displayed while loading real prices from StoreKit/RevenueCat */
   priceYearly: string;
+  /** FALLBACK ONLY — displayed while loading real prices from StoreKit/RevenueCat */
   monthlyEquivalent?: string;
   features: string[];
   highlight: boolean;
   badge?: string;
 }
 
+/**
+ * Resolved display prices for a single plan.
+ * When RevenueCat prices are available these replace the fallback strings in PlanConfig.
+ */
+export interface PlanDisplayPrices {
+  monthly: string;
+  yearly: string;
+  monthlyEquivalent: string | null;
+}
+
+/**
+ * IMPORTANT — Apple App Store Review Requirement:
+ * The price strings below are FALLBACK / placeholder values shown ONLY while
+ * the app is loading real prices from StoreKit via RevenueCat. In production,
+ * `useOfferingPrices()` overlays localized prices from `product.priceString`.
+ * Do NOT rely on these values for display — they exist only to avoid an empty
+ * UI during the brief loading window.
+ */
 export const PLANS: Record<Exclude<EntitlementTier, 'free'>, PlanConfig> = {
   workout_coach: {
     id: 'workout_coach',
     name: 'Workout Coach',
-    price: '$1.99/mo',
-    priceYearly: '$19.99/yr',
-    monthlyEquivalent: '$1.67/mo',
+    price: '$1.99/mo',           // FALLBACK — real price from RevenueCat
+    priceYearly: '$19.99/yr',    // FALLBACK — real price from RevenueCat
+    monthlyEquivalent: '$1.67/mo', // FALLBACK — real price from RevenueCat
     features: [
       'Unlimited workouts',
       'AI workout planning',
@@ -32,9 +53,9 @@ export const PLANS: Record<Exclude<EntitlementTier, 'free'>, PlanConfig> = {
   nutrition_coach: {
     id: 'nutrition_coach',
     name: 'Nutrition Coach',
-    price: '$1.99/mo',
-    priceYearly: '$19.99/yr',
-    monthlyEquivalent: '$1.67/mo',
+    price: '$1.99/mo',           // FALLBACK — real price from RevenueCat
+    priceYearly: '$19.99/yr',    // FALLBACK — real price from RevenueCat
+    monthlyEquivalent: '$1.67/mo', // FALLBACK — real price from RevenueCat
     features: [
       'Unlimited meal logging',
       'AI meal analysis',
@@ -47,9 +68,9 @@ export const PLANS: Record<Exclude<EntitlementTier, 'free'>, PlanConfig> = {
   full_health_coach: {
     id: 'full_health_coach',
     name: 'Full Health Coach',
-    price: '$2.99/mo',
-    priceYearly: '$29.99/yr',
-    monthlyEquivalent: '$2.50/mo',
+    price: '$2.99/mo',           // FALLBACK — real price from RevenueCat
+    priceYearly: '$29.99/yr',    // FALLBACK — real price from RevenueCat
+    monthlyEquivalent: '$2.50/mo', // FALLBACK — real price from RevenueCat
     features: [
       'Everything in Workout + Nutrition',
       'Unlimited AI coaching',

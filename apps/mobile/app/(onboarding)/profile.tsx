@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
@@ -42,11 +43,15 @@ export default function ProfileScreen() {
     },
   });
 
+  const isNavigating = useRef(false);
   const onSubmit: SubmitHandler<ProfileForm> = (data) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     store.setDisplayName(data.displayName);
     store.setDateOfBirth(data.dateOfBirth);
     store.setGender(data.gender as Gender);
     router.push('/(onboarding)/body');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   return (

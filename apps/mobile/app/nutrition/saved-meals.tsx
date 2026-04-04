@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { useSavedMeals } from '../../src/hooks/useSavedMeals';
 import { Card, ScreenContainer, Badge, EmptyState } from '../../src/components/ui';
+import { useToast } from '../../src/components/Toast';
 import { getMealTypeLabel, calculateMealTotals } from '../../src/lib/nutrition-utils';
 import type { MealType } from '../../src/types/nutrition';
 
@@ -14,14 +16,17 @@ export default function SavedMealsScreen() {
   const { colors, spacing, radius, typography } = useTheme();
   const { sortedByUse, logSavedMeal, deleteSavedMeal, getSavedMealTotals } = useSavedMeals();
 
+  const { showToast } = useToast();
+
   const handleLogSavedMeal = (savedMealId: string, defaultType: MealType) => {
     const type = (mealType as MealType) || defaultType;
     logSavedMeal(savedMealId, type);
+    showToast('Meal logged successfully', 'success', 1500);
     router.dismiss();
   };
 
   const handleDelete = (savedMealId: string, name: string) => {
-    Alert.alert('Delete Saved Meal', `Remove "${name}" from saved meals?`, [
+    crossPlatformAlert('Delete Saved Meal', `Remove "${name}" from saved meals?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

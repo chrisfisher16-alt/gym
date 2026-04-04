@@ -2,6 +2,7 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.2';
 import type { SafetyCheckResult, RateLimitConfig, CoachContext } from './types.ts';
+import { rateLimitCache } from './context-cache.ts';
 
 // ── Configuration ───────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ const MEDICAL_DIAGNOSIS_PATTERNS = [
 const DANGEROUS_CALORIE_PATTERNS = [
   /eat (?:only |just )?([\d,]+)\s*(?:cal|kcal|calories)/i,
   /(?:restrict|limit) (?:yourself )?to ([\d,]+)\s*(?:cal|kcal|calories)/i,
-  /(\d{2,3})\s*(?:cal|kcal|calories)\s*(?:per |a )?day/i,
+  /(\d{2,4})\s*(?:cal|kcal|calories)\s*(?:per |a )?day/i,
 ];
 
 const EATING_DISORDER_PATTERNS = [
@@ -100,7 +101,7 @@ export function validateOutput(content: string, userGender?: string): SafetyChec
     const match = content.match(pattern);
     if (match) {
       const calories = parseInt(match[1].replace(',', ''), 10);
-      const minCalories = userGender === 'female' ? 1200 : 1500;
+      const minCalories = userGender === 'male' ? 1500 : 1200;
       if (calories > 0 && calories < minCalories) {
         return {
           safe: false,
@@ -143,6 +144,9 @@ export function validateOutput(content: string, userGender?: string): SafetyChec
 
 /**
  * Check if the user has exceeded their rate limit.
+ * Uses in-memory TTL cache (1-min) to avoid re-querying DB on every message.
+ * Cache errs on the side of allowing requests through — at worst counts are
+ * 1 minute stale, which is acceptable for rate limiting.
  */
 export async function checkRateLimit(
   supabase: SupabaseClient,
@@ -151,6 +155,27 @@ export async function checkRateLimit(
 ): Promise<SafetyCheckResult> {
   const limits = RATE_LIMITS[tier] ?? RATE_LIMITS.free;
 
+  // Check cache first — if cached counts are within limits, skip DB query
+  const cacheKey = `rate:${userId}`;
+  const cached = rateLimitCache.get(cacheKey);
+  if (cached) {
+    // Cached counts are from within the last minute.
+    // Optimistically add 1 for the current request.
+    if (cached.hourly + 1 >= limits.max_per_hour) {
+      // Close to limit — fall through to fresh DB query for accuracy
+    } else if (cached.daily + 1 >= limits.max_per_day) {
+      // Close to limit — fall through to fresh DB query for accuracy
+    } else {
+      // Safely within limits — update cached counts and return
+      rateLimitCache.set(cacheKey, {
+        hourly: cached.hourly + 1,
+        daily: cached.daily + 1,
+      });
+      return { safe: true, flagged: false };
+    }
+  }
+
+  // Cache miss or near limit — query DB for accurate counts
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -163,17 +188,34 @@ export async function checkRateLimit(
   const convIds = userConvos?.map((c: { id: string }) => c.id) ?? [];
 
   // No conversations means no messages — rate limit passes
-  if (convIds.length === 0) return { safe: true, flagged: false };
+  if (convIds.length === 0) {
+    rateLimitCache.set(cacheKey, { hourly: 0, daily: 0 });
+    return { safe: true, flagged: false };
+  }
 
-  // Count messages in the last hour
-  const { count: hourCount } = await supabase
-    .from('coach_messages')
-    .select('*', { count: 'exact', head: true })
-    .in('conversation_id', convIds)
-    .eq('role', 'user')
-    .gte('created_at', oneHourAgo);
+  // Count messages in the last hour and today in parallel
+  const [{ count: hourCount }, { count: dayCount }] = await Promise.all([
+    supabase
+      .from('coach_messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', convIds)
+      .eq('role', 'user')
+      .gte('created_at', oneHourAgo),
+    supabase
+      .from('coach_messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', convIds)
+      .eq('role', 'user')
+      .gte('created_at', dayStart),
+  ]);
 
-  if ((hourCount ?? 0) >= limits.max_per_hour) {
+  const hourly = hourCount ?? 0;
+  const daily = dayCount ?? 0;
+
+  // Update cache with fresh counts
+  rateLimitCache.set(cacheKey, { hourly, daily });
+
+  if (hourly >= limits.max_per_hour) {
     return {
       safe: false,
       flagged: false,
@@ -182,15 +224,7 @@ export async function checkRateLimit(
     };
   }
 
-  // Count messages today
-  const { count: dayCount } = await supabase
-    .from('coach_messages')
-    .select('*', { count: 'exact', head: true })
-    .in('conversation_id', convIds)
-    .eq('role', 'user')
-    .gte('created_at', dayStart);
-
-  if ((dayCount ?? 0) >= limits.max_per_day) {
+  if (daily >= limits.max_per_day) {
     return {
       safe: false,
       flagged: false,

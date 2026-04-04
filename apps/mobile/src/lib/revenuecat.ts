@@ -9,15 +9,27 @@ import { ENTITLEMENT_IDS } from './pricing-config';
 
 // ── Lazy-load native module (crashes on web) ─────────────────────────
 
-let Purchases: any = null;
-let LOG_LEVEL: any = {};
+// RevenueCat native module interface — loaded dynamically, null on web
+interface RevenueCatModule {
+  setLogLevel(level: unknown): void;
+  configure(opts: { apiKey: string }): void;
+  getOfferings(): Promise<PurchasesOfferings>;
+  purchasePackage(pkg: PurchasesPackage): Promise<{ customerInfo: CustomerInfo }>;
+  restorePurchases(): Promise<CustomerInfo>;
+  getCustomerInfo(): Promise<CustomerInfo>;
+  logIn(userId: string): Promise<unknown>;
+  logOut(): Promise<unknown>;
+}
+
+let Purchases: RevenueCatModule | null = null;
+let LOG_LEVEL: Record<string, unknown> = {};
 
 if (Platform.OS !== 'web') {
   try {
     const mod = require('react-native-purchases');
     Purchases = mod.default;
     LOG_LEVEL = mod.LOG_LEVEL;
-  } catch {}
+  } catch (e) { console.warn('[RevenueCat] module unavailable:', e); }
 }
 
 // ── Configuration ─────────────────────────────────────────────────────
@@ -35,9 +47,6 @@ export async function initRevenueCat(): Promise<boolean> {
   const apiKey = Platform.OS === 'ios' ? API_KEY_IOS : API_KEY_ANDROID;
 
   if (!apiKey) {
-    if (__DEV__) {
-      console.log('[RevenueCat] No API key configured — running in development mode');
-    }
     return false;
   }
 
@@ -48,11 +57,6 @@ export async function initRevenueCat(): Promise<boolean> {
 
     Purchases.configure({ apiKey });
     isConfigured = true;
-
-    if (__DEV__) {
-      console.log('[RevenueCat] Initialized successfully');
-    }
-
     return true;
   } catch (error) {
     console.warn('[RevenueCat] Failed to initialize:', error);

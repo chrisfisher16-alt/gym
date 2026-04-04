@@ -44,7 +44,10 @@ function daysAgo(n: number): string {
 function dateStr(daysAgo: number): string {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 // ── Demo User Profile ───────────────────────────────────────────────
@@ -66,6 +69,7 @@ export const DEMO_PROFILE = {
 
 export const DEMO_COACH_PREFERENCES = {
   user_id: 'demo-user-001',
+  tone: 'balanced' as const,
   coach_tone: 'balanced' as const,
   focus_areas: ['gain_muscle', 'build_lean_muscle'],
   dietary_restrictions: [] as string[],

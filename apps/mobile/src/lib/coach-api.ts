@@ -3,8 +3,9 @@
 // of Supabase Edge Functions.
 
 import { sendAIMessage, sendWorkoutCoachMessage, sendNutritionCoachMessage, type AIClientResponse } from './ai-client';
+import { loadSummaries } from './conversation-summarizer';
 import { buildExerciseAdjustmentSystemPrompt } from './coach-system-prompt';
-import type { AIMessage } from './ai-provider';
+import type { AIMessage, AIContentBlock } from './ai-provider';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -37,13 +38,22 @@ export interface ParsedMealItem {
  */
 export async function sendChatMessage(
   conversationId: string | undefined,
-  message: string,
+  message: string | AIContentBlock[],
   context: string = 'general',
   history: AIMessage[] = [],
+  onToken?: (token: string) => void,
+  signal?: AbortSignal,
 ): Promise<ChatResponse> {
+  // Load any existing conversation summaries for context continuity
+  const summaries = conversationId ? await loadSummaries(conversationId) : [];
+
   const response = await sendAIMessage(message, {
     history,
     context: context as 'general' | 'workout' | 'nutrition',
+    conversationId,
+    conversationSummaries: summaries.length > 0 ? summaries : undefined,
+    onToken,
+    signal,
   });
 
   return {
@@ -74,6 +84,126 @@ export async function sendNutritionQuickMessage(
   return sendNutritionCoachMessage(message);
 }
 
+// ── SSE Edge Function Path ──────────────────────────────────────────
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+/**
+ * Send a chat message via the Edge Function with SSE streaming.
+ * Falls back to the full response if streaming is not available.
+ */
+export async function sendChatMessageSSE(
+  conversationId: string | undefined,
+  message: string,
+  context: string = 'general',
+  onToken?: (token: string) => void,
+  signal?: AbortSignal,
+): Promise<ChatResponse> {
+  // Import supabase client to get the current session token
+  const { supabase } = await import('./supabase');
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token ?? '';
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/coach-chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId,
+      context,
+      stream: true,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Coach API error (${response.status}): ${errorText.slice(0, 200)}`);
+  }
+
+  // If response body is null (React Native limitation), fall back to
+  // parsing the response as JSON (non-streaming edge function response).
+  if (!response.body) {
+    const data = await response.json();
+    if (data.content && onToken) {
+      onToken(data.content);
+    }
+    return {
+      conversation_id: data.conversation_id ?? conversationId ?? '',
+      message_id: data.message_id ?? '',
+      content: data.content ?? '',
+      model: data.model ?? '',
+      isDemo: false,
+    };
+  }
+
+  // Parse SSE stream
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalData: {
+    conversation_id?: string;
+    message_id?: string;
+    content?: string;
+    model?: string;
+    tokens?: { input: number; output: number; total: number };
+  } = {};
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    let currentEvent = '';
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        const dataStr = line.slice(6).trim();
+        try {
+          const data = JSON.parse(dataStr);
+
+          switch (currentEvent) {
+            case 'stream_start':
+              if (data.conversation_id) finalData.conversation_id = data.conversation_id;
+              if (data.message_id) finalData.message_id = data.message_id;
+              break;
+            case 'token':
+              if (data.text && onToken) {
+                onToken(data.text);
+              }
+              break;
+            case 'content_final':
+              finalData.content = data.content;
+              finalData.model = data.model;
+              finalData.tokens = data.tokens;
+              break;
+            case 'done':
+              break;
+          }
+        } catch { /* skip malformed SSE data */ }
+        currentEvent = '';
+      }
+    }
+  }
+
+  return {
+    conversation_id: finalData.conversation_id ?? conversationId ?? '',
+    message_id: finalData.message_id ?? '',
+    content: finalData.content ?? '',
+    model: finalData.model ?? '',
+    isDemo: false,
+  };
+}
+
 // ── Exercise Adjustment ─────────────────────────────────────────────
 
 export interface ExerciseAdjustmentReplace {
@@ -91,7 +221,32 @@ export interface ExerciseAdjustmentSets {
   reason: string;
 }
 
-export type ExerciseAdjustment = ExerciseAdjustmentReplace | ExerciseAdjustmentSets;
+export interface ExerciseAdjustmentAdd {
+  action: 'add_exercise';
+  exerciseName: string;
+  sets: number;
+  reps: string;
+  reason: string;
+}
+
+export interface ExerciseAdjustmentRemove {
+  action: 'remove_exercise';
+  currentExercise: string;
+  reason: string;
+}
+
+export interface ExerciseAdjustmentSuperset {
+  action: 'create_superset';
+  exercises: string[];
+  reason: string;
+}
+
+export type ExerciseAdjustment =
+  | ExerciseAdjustmentReplace
+  | ExerciseAdjustmentSets
+  | ExerciseAdjustmentAdd
+  | ExerciseAdjustmentRemove
+  | ExerciseAdjustmentSuperset;
 
 export interface ExerciseAdjustmentResponse {
   content: string;
@@ -122,6 +277,29 @@ function parseSingleAdjustment(obj: Record<string, unknown>, fallbackCurrentExer
       currentExercise,
       sets: obj.sets as number | undefined,
       reps: obj.reps as string | undefined,
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'add_exercise' && obj.exerciseName) {
+    return {
+      action: 'add_exercise',
+      exerciseName: obj.exerciseName as string,
+      sets: (obj.sets as number) ?? 3,
+      reps: (obj.reps as string) ?? '8-12',
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'remove_exercise') {
+    return {
+      action: 'remove_exercise',
+      currentExercise,
+      reason: (obj.reason as string) ?? '',
+    };
+  }
+  if (obj.action === 'create_superset' && Array.isArray(obj.exercises)) {
+    return {
+      action: 'create_superset',
+      exercises: obj.exercises as string[],
       reason: (obj.reason as string) ?? '',
     };
   }

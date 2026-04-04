@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   StyleSheet,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
@@ -35,6 +37,12 @@ interface InWorkoutCoachProps {
   onReplaceExercise?: (exerciseInstanceId: string, newExerciseName: string) => void;
   /** Called when the user applies an AI-suggested set/rep adjustment. */
   onAdjustSets?: (exerciseInstanceId: string, sets?: number, reps?: string) => void;
+  /** Called when the user applies an AI-suggested exercise addition. */
+  onAddExercise?: (exerciseName: string, sets: number, reps: string) => void;
+  /** Called when the user applies an AI-suggested exercise removal. */
+  onRemoveExercise?: (exerciseInstanceId: string) => void;
+  /** Called when the user applies an AI-suggested superset grouping. */
+  onCreateSuperset?: (exerciseInstanceIds: string[]) => void;
 }
 
 // ── Per-adjustment status tracking ─────────────────────────────────────
@@ -52,6 +60,10 @@ const ADJUSTMENT_KEYWORDS = [
   'replace', 'swap', 'alternative', 'substitute', 'instead',
   'easier', 'harder', 'home', 'bodyweight', 'no equipment',
   'adjust', 'modify', 'change', 'make it',
+  'add', 'more exercise', 'another exercise', 'extra exercise',
+  'remove', 'drop', 'skip', 'take out', 'get rid of',
+  'superset', 'super set', 'pair', 'back to back', 'back-to-back',
+  'circuit', 'compound set',
 ];
 
 function isAdjustmentRequest(message: string): boolean {
@@ -69,6 +81,9 @@ export function InWorkoutCoach({
   exerciseLibrary,
   onReplaceExercise,
   onAdjustSets,
+  onAddExercise,
+  onRemoveExercise,
+  onCreateSuperset,
 }: InWorkoutCoachProps) {
   const { colors, spacing, radius, typography } = useTheme();
   const [customInput, setCustomInput] = useState('');
@@ -87,6 +102,10 @@ export function InWorkoutCoach({
     (adj: ExerciseAdjustment): string | null => {
       if (!activeSession) return null;
 
+      // For add_exercise and create_superset, there's no single target exercise
+      if (adj.action === 'add_exercise') return null;
+      if (adj.action === 'create_superset') return null;
+
       // Try to match by name
       const targetName = adj.currentExercise;
       if (targetName) {
@@ -100,6 +119,22 @@ export function InWorkoutCoach({
       return currentExercise?.id ?? null;
     },
     [activeSession, currentExercise],
+  );
+
+  // Resolve multiple exercise instance IDs from names (for supersets)
+  const resolveExerciseInstanceIds = useCallback(
+    (exerciseNames: string[]): string[] => {
+      if (!activeSession) return [];
+      return exerciseNames
+        .map((name) => {
+          const match = activeSession.exercises.find(
+            (e) => e.exerciseName.toLowerCase() === name.toLowerCase() && !e.isSkipped,
+          );
+          return match?.id;
+        })
+        .filter((id): id is string => !!id);
+    },
+    [activeSession],
   );
 
   const handleSend = useCallback(
@@ -156,20 +191,32 @@ export function InWorkoutCoach({
       if (!tracked || tracked.status !== 'pending') return;
 
       const adj = tracked.adjustment;
-      const instanceId = resolveExerciseInstanceId(adj);
-      if (!instanceId) return;
 
       if (adj.action === 'replace' && onReplaceExercise) {
+        const instanceId = resolveExerciseInstanceId(adj);
+        if (!instanceId) return;
         onReplaceExercise(instanceId, adj.exerciseName);
       } else if (adj.action === 'adjust_sets' && onAdjustSets) {
+        const instanceId = resolveExerciseInstanceId(adj);
+        if (!instanceId) return;
         onAdjustSets(instanceId, adj.sets, adj.reps);
+      } else if (adj.action === 'add_exercise' && onAddExercise) {
+        onAddExercise(adj.exerciseName, adj.sets, adj.reps);
+      } else if (adj.action === 'remove_exercise' && onRemoveExercise) {
+        const instanceId = resolveExerciseInstanceId(adj);
+        if (!instanceId) return;
+        onRemoveExercise(instanceId);
+      } else if (adj.action === 'create_superset' && onCreateSuperset) {
+        const instanceIds = resolveExerciseInstanceIds(adj.exercises);
+        if (instanceIds.length < 2) return;
+        onCreateSuperset(instanceIds);
       }
 
       setTrackedAdjustments((prev) =>
         prev.map((t, i) => (i === index ? { ...t, status: 'applied' } : t)),
       );
     },
-    [trackedAdjustments, resolveExerciseInstanceId, onReplaceExercise, onAdjustSets],
+    [trackedAdjustments, resolveExerciseInstanceId, resolveExerciseInstanceIds, onReplaceExercise, onAdjustSets, onAddExercise, onRemoveExercise, onCreateSuperset],
   );
 
   const handleSkipAdjustment = useCallback((index: number) => {
@@ -181,25 +228,9 @@ export function InWorkoutCoach({
   const handleApplyAll = useCallback(() => {
     trackedAdjustments.forEach((tracked, index) => {
       if (tracked.status !== 'pending') return;
-      const adj = tracked.adjustment;
-      const instanceId = resolveExerciseInstanceId(adj);
-      if (!instanceId) return;
-
-      if (adj.action === 'replace' && onReplaceExercise) {
-        onReplaceExercise(instanceId, adj.exerciseName);
-      } else if (adj.action === 'adjust_sets' && onAdjustSets) {
-        onAdjustSets(instanceId, adj.sets, adj.reps);
-      }
+      handleApplyAdjustment(index);
     });
-
-    setTrackedAdjustments((prev) =>
-      prev.map((t) => (t.status === 'pending' ? { ...t, status: 'applied' } : t)),
-    );
-  }, [trackedAdjustments, resolveExerciseInstanceId, onReplaceExercise, onAdjustSets]);
-
-  const handleDismissAdjustments = useCallback(() => {
-    setTrackedAdjustments([]);
-  }, []);
+  }, [trackedAdjustments, handleApplyAdjustment]);
 
   const pendingCount = trackedAdjustments.filter((t) => t.status === 'pending').length;
   const allResolved = trackedAdjustments.length > 0 && pendingCount === 0;
@@ -217,7 +248,15 @@ export function InWorkoutCoach({
     quickPrompts.push('General form tips');
   }
 
-  if (activeSession && activeSession.exercises.filter((e) => !e.isSkipped).length > 1) {
+  // Add exercise chip
+  quickPrompts.push('Add two more exercises to this workout');
+
+  // Superset chips
+  if (activeSession && activeSession.exercises.filter((e) => !e.isSkipped).length >= 2) {
+    quickPrompts.push('Suggest supersets for this workout');
+    if (currentExerciseName) {
+      quickPrompts.push(`Pair ${currentExerciseName} in a superset`);
+    }
     quickPrompts.push('Replace all dumbbell exercises with barbell');
   }
 
@@ -226,6 +265,124 @@ export function InWorkoutCoach({
     setCustomInput('');
     setTrackedAdjustments([]);
     onClose();
+  };
+
+  // ── Render adjustment card ────────────────────────────────────────
+  const renderAdjustmentCard = (tracked: TrackedAdjustment, index: number) => {
+    const adj = tracked.adjustment;
+    const isApplied = tracked.status === 'applied';
+    const isSkipped = tracked.status === 'skipped';
+    const isPending = tracked.status === 'pending';
+
+    let icon: keyof typeof Ionicons.glyphMap = 'options';
+    let label = '';
+    let detail = '';
+
+    if (adj.action === 'replace') {
+      icon = isApplied ? 'checkmark-circle' : 'swap-horizontal';
+      label = isApplied ? 'Replaced' : isSkipped ? 'Skipped' : 'Replace';
+      detail = `${adj.currentExercise}  →  ${adj.exerciseName}`;
+    } else if (adj.action === 'adjust_sets') {
+      icon = isApplied ? 'checkmark-circle' : 'options';
+      label = `${isApplied ? 'Adjusted' : isSkipped ? 'Skipped' : 'Adjust'} ${adj.currentExercise}`;
+      const parts: string[] = [];
+      if (adj.sets != null) parts.push(`${adj.sets} sets`);
+      if (adj.reps) parts.push(`${adj.reps} reps`);
+      detail = parts.join(' × ');
+    } else if (adj.action === 'add_exercise') {
+      icon = isApplied ? 'checkmark-circle' : 'add-circle';
+      label = isApplied ? 'Added' : isSkipped ? 'Skipped' : 'Add Exercise';
+      detail = `${adj.exerciseName} — ${adj.sets} sets × ${adj.reps} reps`;
+    } else if (adj.action === 'remove_exercise') {
+      icon = isApplied ? 'checkmark-circle' : 'remove-circle';
+      label = isApplied ? 'Removed' : isSkipped ? 'Skipped' : 'Remove';
+      detail = adj.currentExercise;
+    } else if (adj.action === 'create_superset') {
+      icon = isApplied ? 'checkmark-circle' : 'git-merge';
+      label = isApplied ? 'Superset Created' : isSkipped ? 'Skipped' : 'Create Superset';
+      detail = adj.exercises.join(' + ');
+    }
+
+    return (
+      <View
+        key={`${adj.action}-${index}`}
+        style={[
+          styles.adjustmentCard,
+          {
+            backgroundColor: isApplied
+              ? colors.completedMuted
+              : colors.surfaceSecondary,
+            borderRadius: radius.lg,
+            marginBottom: spacing.sm,
+            padding: spacing.md,
+            borderWidth: isPending ? 1 : 0,
+            borderColor: colors.primary,
+            opacity: isSkipped ? 0.5 : 1,
+          },
+        ]}
+      >
+        <View style={styles.adjustmentHeader}>
+          <Ionicons
+            name={icon}
+            size={18}
+            color={isApplied ? colors.completed : colors.primary}
+          />
+          <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
+            {label}
+          </Text>
+        </View>
+        {detail ? (
+          <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+            {detail}
+          </Text>
+        ) : null}
+
+        {adj.reason ? (
+          <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
+            {adj.reason}
+          </Text>
+        ) : null}
+
+        {/* Per-item action buttons */}
+        {isPending && (
+          <View style={[styles.adjustmentActions, { marginTop: spacing.sm }]}>
+            <TouchableOpacity
+              onPress={() => handleSkipAdjustment(index)}
+              style={[
+                styles.adjustmentBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.xs,
+                  marginRight: spacing.sm,
+                },
+              ]}
+            >
+              <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>Skip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleApplyAdjustment(index)}
+              style={[
+                styles.adjustmentBtn,
+                {
+                  backgroundColor: colors.completed,
+                  borderRadius: radius.md,
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.xs,
+                  flex: 1,
+                },
+              ]}
+            >
+              <Ionicons name="checkmark" size={14} color={colors.textOnPrimary} style={{ marginRight: 3 }} />
+              <Text style={[typography.labelSmall, { color: colors.textOnPrimary }]}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
@@ -350,115 +507,7 @@ export function InWorkoutCoach({
                 paddingBottom: spacing.sm,
               }}
             >
-              {trackedAdjustments.map((tracked, index) => {
-                const adj = tracked.adjustment;
-                const isApplied = tracked.status === 'applied';
-                const isSkipped = tracked.status === 'skipped';
-                const isPending = tracked.status === 'pending';
-
-                return (
-                  <View
-                    key={index}
-                    style={[
-                      styles.adjustmentCard,
-                      {
-                        backgroundColor: isApplied
-                          ? colors.successLight
-                          : isSkipped
-                            ? colors.surfaceSecondary
-                            : colors.surfaceSecondary,
-                        borderRadius: radius.lg,
-                        marginBottom: spacing.sm,
-                        padding: spacing.md,
-                        borderWidth: isPending ? 1 : 0,
-                        borderColor: colors.primary,
-                        opacity: isSkipped ? 0.5 : 1,
-                      },
-                    ]}
-                  >
-                    {adj.action === 'replace' ? (
-                      <>
-                        <View style={styles.adjustmentHeader}>
-                          <Ionicons
-                            name={isApplied ? 'checkmark-circle' : 'swap-horizontal'}
-                            size={18}
-                            color={isApplied ? colors.success : colors.primary}
-                          />
-                          <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-                            {isApplied ? 'Replaced' : isSkipped ? 'Skipped' : 'Replace'}
-                          </Text>
-                        </View>
-                        <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-                          {adj.currentExercise}  →  {adj.exerciseName}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <View style={styles.adjustmentHeader}>
-                          <Ionicons
-                            name={isApplied ? 'checkmark-circle' : 'options'}
-                            size={18}
-                            color={isApplied ? colors.success : colors.primary}
-                          />
-                          <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-                            {isApplied ? 'Adjusted' : isSkipped ? 'Skipped' : 'Adjust'} {adj.currentExercise}
-                          </Text>
-                        </View>
-                        <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-                          {adj.sets != null ? `${adj.sets} sets` : ''}
-                          {adj.sets != null && adj.reps ? ' × ' : ''}
-                          {adj.reps ? `${adj.reps} reps` : ''}
-                        </Text>
-                      </>
-                    )}
-
-                    {adj.reason ? (
-                      <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' }]}>
-                        {adj.reason}
-                      </Text>
-                    ) : null}
-
-                    {/* Per-item action buttons */}
-                    {isPending && (
-                      <View style={[styles.adjustmentActions, { marginTop: spacing.sm }]}>
-                        <TouchableOpacity
-                          onPress={() => handleSkipAdjustment(index)}
-                          style={[
-                            styles.adjustmentBtn,
-                            {
-                              backgroundColor: colors.surface,
-                              borderRadius: radius.md,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                              paddingHorizontal: spacing.md,
-                              paddingVertical: spacing.xs,
-                              marginRight: spacing.sm,
-                            },
-                          ]}
-                        >
-                          <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>Skip</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => handleApplyAdjustment(index)}
-                          style={[
-                            styles.adjustmentBtn,
-                            {
-                              backgroundColor: colors.success,
-                              borderRadius: radius.md,
-                              paddingHorizontal: spacing.md,
-                              paddingVertical: spacing.xs,
-                              flex: 1,
-                            },
-                          ]}
-                        >
-                          <Ionicons name="checkmark" size={14} color="#fff" style={{ marginRight: 3 }} />
-                          <Text style={[typography.labelSmall, { color: '#fff' }]}>Apply</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
+              {trackedAdjustments.map((tracked, index) => renderAdjustmentCard(tracked, index))}
 
               {/* Apply All / Dismiss buttons */}
               {pendingCount > 1 && (
@@ -467,15 +516,15 @@ export function InWorkoutCoach({
                   style={[
                     styles.applyAllBtn,
                     {
-                      backgroundColor: colors.success,
+                      backgroundColor: colors.completed,
                       borderRadius: radius.md,
                       paddingVertical: spacing.sm,
                       marginBottom: spacing.sm,
                     },
                   ]}
                 >
-                  <Ionicons name="checkmark-done" size={18} color="#fff" style={{ marginRight: spacing.xs }} />
-                  <Text style={[typography.label, { color: '#fff' }]}>Apply All ({pendingCount})</Text>
+                  <Ionicons name="checkmark-done" size={18} color={colors.textOnPrimary} style={{ marginRight: spacing.xs }} />
+                  <Text style={[typography.label, { color: colors.textOnPrimary }]}>Apply All ({pendingCount})</Text>
                 </TouchableOpacity>
               )}
 
@@ -484,15 +533,15 @@ export function InWorkoutCoach({
                   style={[
                     styles.successBanner,
                     {
-                      backgroundColor: colors.successLight,
+                      backgroundColor: colors.completedMuted,
                       borderRadius: radius.lg,
                       marginBottom: spacing.sm,
                       padding: spacing.md,
                     },
                   ]}
                 >
-                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                  <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.completed} />
+                  <Text style={[typography.label, { color: colors.completed, marginLeft: spacing.sm }]}>
                     All changes resolved!
                   </Text>
                 </View>
@@ -521,7 +570,7 @@ export function InWorkoutCoach({
               returnKeyType="send"
               onSubmitEditing={() => handleSend(customInput)}
               blurOnSubmit={false}
-              onKeyPress={(e: any) => {
+              onKeyPress={(e: NativeSyntheticEvent<TextInputKeyPressEventData & { shiftKey?: boolean }>) => {
                 if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
                   e.preventDefault?.();
                   handleSend(customInput);

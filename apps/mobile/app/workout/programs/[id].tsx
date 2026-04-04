@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { crossPlatformAlert } from '../../../src/lib/cross-platform-alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,12 +8,18 @@ import { useTheme } from '../../../src/theme';
 import { useWorkoutPrograms } from '../../../src/hooks/useWorkoutPrograms';
 import { useActiveWorkout } from '../../../src/hooks/useActiveWorkout';
 import { Card, Badge, Button } from '../../../src/components/ui';
+import { useEntitlement } from '../../../src/hooks/useEntitlement';
+import { usePaywall } from '../../../src/hooks/usePaywall';
+import { checkWorkoutLogLimit, incrementUsage } from '../../../src/lib/usage-limits';
+import { WorkoutSummaryModal } from '../../../src/components/workout/WorkoutSummaryModal';
+import { successNotification } from '../../../src/lib/haptics';
 import {
   DayType,
   DAY_TYPE_LABELS,
   DAY_TYPE_COLORS,
   DAY_TYPE_ICONS,
   CardioSuggestion,
+  CompletedSession,
   WorkoutDayLocal,
   ProgramExercise,
 } from '../../../src/types/workout';
@@ -22,7 +29,12 @@ export default function ProgramDetailScreen() {
   const router = useRouter();
   const { colors, spacing, radius, typography } = useTheme();
   const { programs, setActiveProgram, deleteProgram } = useWorkoutPrograms();
-  const { startWorkout, isActive } = useActiveWorkout();
+  const { startWorkout, isActive, completeWorkout, cancelWorkout } = useActiveWorkout();
+  const [completedSession, setCompletedSession] = useState<CompletedSession | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [pendingDayIndex, setPendingDayIndex] = useState<number | null>(null);
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const program = programs.find((p) => p.id === id);
 
@@ -43,36 +55,95 @@ export default function ProgramDetailScreen() {
 
   const launchDay = (dayIndex: number) => {
     const day = program.days[dayIndex];
-    // Always set this program as active when starting one of its workouts
-    if (!program.isActive) {
-      setActiveProgram(program.id);
+
+    const doStart = () => {
+      // Always set this program as active when starting one of its workouts
+      if (!program.isActive) {
+        setActiveProgram(program.id);
+      }
+      startWorkout({
+        name: `${program.name} — ${day.name}`,
+        programId: program.id,
+        dayId: day.id,
+        exercises: day.exercises.map((e) => ({
+          exerciseId: e.exerciseId,
+          exerciseName: e.exerciseName,
+          targetSets: e.targetSets,
+          targetReps: e.targetReps,
+          restSeconds: e.restSeconds,
+          supersetGroupId: e.supersetGroupId,
+        })),
+      });
+      router.push('/workout/active');
+    };
+
+    if (canAccess('unlimited_workouts')) {
+      doStart();
+      return;
     }
-    startWorkout({
-      name: `${program.name} — ${day.name}`,
-      programId: program.id,
-      dayId: day.id,
-      exercises: day.exercises.map((e) => ({
-        exerciseId: e.exerciseId,
-        exerciseName: e.exerciseName,
-        targetSets: e.targetSets,
-        targetReps: e.targetReps,
-        restSeconds: e.restSeconds,
-        supersetGroupId: e.supersetGroupId,
-      })),
+    // Free tier — check usage
+    checkWorkoutLogLimit().then((usage) => {
+      if (usage.allowed) {
+        incrementUsage('workout_logs');
+        doStart();
+      } else {
+        crossPlatformAlert(
+          'Workout Limit Reached',
+          `You've used all ${usage.limit} free workouts this month. Upgrade to Workout Coach for unlimited workouts.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_workouts', source: 'program_detail' }) },
+          ],
+        );
+      }
     });
-    router.push('/workout/active');
   };
 
   const handleStartDay = (dayIndex: number) => {
     if (isActive) {
-      Alert.alert('Workout in Progress', 'Please finish or cancel your current workout first.');
+      crossPlatformAlert('Workout in Progress', 'You have an active workout. What would you like to do?', [
+        { text: 'Go Back', style: 'cancel' },
+        {
+          text: 'Discard & Start New',
+          style: 'destructive',
+          onPress: () => {
+            cancelWorkout();
+            launchDay(dayIndex);
+          },
+        },
+        {
+          text: 'Finish & Start New',
+          onPress: async () => {
+            const result = await completeWorkout();
+            if (result) {
+              successNotification();
+              setCompletedSession(result);
+              setShowSummary(true);
+              setPendingDayIndex(dayIndex);
+            } else {
+              // No completed sets — discard instead
+              cancelWorkout();
+              launchDay(dayIndex);
+            }
+          },
+        },
+      ]);
       return;
     }
     launchDay(dayIndex);
   };
 
+  const handleSummaryDone = () => {
+    setShowSummary(false);
+    setCompletedSession(null);
+    if (pendingDayIndex !== null) {
+      launchDay(pendingDayIndex);
+      setPendingDayIndex(null);
+    }
+  };
+
   const handleDelete = () => {
-    Alert.alert('Delete Program', `Are you sure you want to delete "${program.name}"?`, [
+    crossPlatformAlert('Delete Program', `Are you sure you want to delete "${program.name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -339,9 +410,9 @@ export default function ProgramDetailScreen() {
             </Text>
           ) : null}
           {program.isActive ? (
-            <View style={[styles.activeProgramBanner, { backgroundColor: colors.successLight, borderRadius: radius.md, marginTop: spacing.md }]}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-              <Text style={[typography.label, { color: colors.success, marginLeft: spacing.sm }]}>Active Program</Text>
+            <View style={[styles.activeProgramBanner, { backgroundColor: colors.activeMuted, borderRadius: radius.md, marginTop: spacing.md }]}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+              <Text style={[typography.label, { color: colors.primary, marginLeft: spacing.sm }]}>Active Program</Text>
             </View>
           ) : (
             <Button
@@ -354,7 +425,7 @@ export default function ProgramDetailScreen() {
                   const ok = window.confirm('Switch your active program? This will replace your current program on the workout tab.');
                   if (ok) doSwitch();
                 } else {
-                  Alert.alert(
+                  crossPlatformAlert(
                     'Switch Program',
                     'Switch your active program? This will replace your current program on the workout tab.',
                     [
@@ -372,6 +443,12 @@ export default function ProgramDetailScreen() {
         {/* Days */}
         {program.days.map((day, dayIndex) => renderDayCard(day, dayIndex))}
       </ScrollView>
+
+      <WorkoutSummaryModal
+        visible={showSummary}
+        session={completedSession}
+        onDone={handleSummaryDone}
+      />
     </SafeAreaView>
   );
 }

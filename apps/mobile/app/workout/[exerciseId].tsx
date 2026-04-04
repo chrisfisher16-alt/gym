@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,12 +7,17 @@ import { useTheme } from '../../src/theme';
 import { useExerciseLibrary } from '../../src/hooks/useExerciseLibrary';
 import { usePersonalRecords } from '../../src/hooks/usePersonalRecords';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
-import { Badge, Card, Button } from '../../src/components/ui';
+import { Badge, Card, Button, BottomSheet } from '../../src/components/ui';
 import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import { getExerciseHistory } from '../../src/lib/workout-db';
 import { useWorkoutStore } from '../../src/stores/workout-store';
+import { useProfileStore } from '../../src/stores/profile-store';
 import { formatFullDate, formatWeight } from '../../src/lib/workout-utils';
 import { ExerciseIllustration } from '../../src/components/ExerciseIllustration';
+import { useEntitlement } from '../../src/hooks/useEntitlement';
+import { usePaywall } from '../../src/hooks/usePaywall';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
+import { checkWorkoutLogLimit, incrementUsage } from '../../src/lib/usage-limits';
 
 export default function ExerciseDetailScreen() {
   const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
@@ -22,11 +27,16 @@ export default function ExerciseDetailScreen() {
   const { getRecordForExercise, getExercisePRHistory } = usePersonalRecords();
   const { isActive, addExerciseToSession } = useActiveWorkout();
   const history = useWorkoutStore((s) => s.history);
+  const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
+  const [showStartSheet, setShowStartSheet] = useState(false);
+  const { canAccess } = useEntitlement();
+  const { showPaywall } = usePaywall();
 
   const exercise = getExerciseById(exerciseId ?? '');
   const record = getRecordForExercise(exerciseId ?? '');
   const recentHistory = getExerciseHistory(exerciseId ?? '', history, 5);
-  const unit = 'lbs'; // TODO: from user prefs
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
   if (!exercise) {
     return (
@@ -51,6 +61,42 @@ export default function ExerciseDetailScreen() {
     } else {
       router.replace('/workout/active');
     }
+  };
+
+  const handleBuildOwn = () => {
+    setShowStartSheet(false);
+
+    const doStart = () => {
+      startEmptyWorkout();
+      addExerciseToSession(exercise);
+      router.push('/workout/active');
+    };
+
+    if (canAccess('unlimited_workouts')) {
+      doStart();
+      return;
+    }
+    // Free tier — check usage
+    checkWorkoutLogLimit().then((usage) => {
+      if (usage.allowed) {
+        incrementUsage('workout_logs');
+        doStart();
+      } else {
+        crossPlatformAlert(
+          'Workout Limit Reached',
+          `You've used all ${usage.limit} free workouts this month. Upgrade to Workout Coach for unlimited workouts.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => showPaywall({ feature: 'unlimited_workouts', source: 'exercise_detail' }) },
+          ],
+        );
+      }
+    });
+  };
+
+  const handleBuildForMuscles = () => {
+    setShowStartSheet(false);
+    router.push('/workout/ai-generate');
   };
 
   const handleWatchTutorial = () => {
@@ -145,7 +191,7 @@ export default function ExerciseDetailScreen() {
         <Card style={{ marginBottom: spacing.base }}>
           <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>Instructions</Text>
           {exercise.instructions.map((step, i) => (
-            <View key={i} style={[styles.instructionRow, { marginBottom: spacing.xs }]}>
+            <View key={`step-${i}`} style={[styles.instructionRow, { marginBottom: spacing.xs }]}>
               <View style={[styles.stepNumber, { backgroundColor: colors.primaryMuted }]}>
                 <Text style={[typography.labelSmall, { color: colors.primary }]}>{i + 1}</Text>
               </View>
@@ -172,7 +218,7 @@ export default function ExerciseDetailScreen() {
             )}
             {record.highestVolume && (
               <View style={[styles.prRow, { marginBottom: spacing.xs }]}>
-                <Ionicons name="trending-up" size={16} color={colors.success} />
+                <Ionicons name="trending-up" size={16} color={colors.completed} />
                 <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm }]}>
                   Best Volume: {record.highestVolume.volume.toLocaleString()} {unit}
                 </Text>
@@ -205,7 +251,7 @@ export default function ExerciseDetailScreen() {
                     .filter((s) => s.setType !== 'warmup')
                     .map((s, i) => (
                       <View
-                        key={i}
+                        key={`set-${i}-${s.weight ?? 0}x${s.reps ?? 0}`}
                         style={[
                           styles.setChip,
                           {
@@ -247,12 +293,56 @@ export default function ExerciseDetailScreen() {
         </Card>
       </ScrollView>
 
-      {/* Add to Workout FAB */}
-      {isActive && (
-        <View style={[styles.fab, { paddingHorizontal: spacing.base, paddingBottom: spacing.xl }]}>
+      {/* Add to Workout / Start Workout FAB */}
+      <View style={[styles.fab, { paddingHorizontal: spacing.base, paddingBottom: spacing.xl }]}>
+        {isActive ? (
           <Button title="Add to Workout" onPress={handleAddToWorkout} />
+        ) : (
+          <Button title="Start Workout" onPress={() => setShowStartSheet(true)} />
+        )}
+      </View>
+
+      <BottomSheet visible={showStartSheet} onClose={() => setShowStartSheet(false)} maxHeight={0.4} scrollable={false}>
+        <View style={{ padding: spacing.base }}>
+          <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.base }]}>
+            Start a Workout
+          </Text>
+
+          <TouchableOpacity
+            onPress={handleBuildOwn}
+            style={[styles.optionRow, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.sm }]}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: colors.primaryMuted }]}>
+              <Ionicons name="barbell-outline" size={24} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={[typography.label, { color: colors.text }]}>Build My Own Workout</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Start with {exercise.name} and add more exercises
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleBuildForMuscles}
+            style={[styles.optionRow, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base }]}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: colors.completedMuted || colors.primaryMuted }]}>
+              <Ionicons name="body-outline" size={24} color={colors.completed || colors.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={[typography.label, { color: colors.text }]}>Build for Muscle Groups</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Select target muscles and we'll build your workout
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
         </View>
-      )}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -338,5 +428,16 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  optionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

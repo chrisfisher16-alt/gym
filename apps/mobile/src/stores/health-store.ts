@@ -50,6 +50,7 @@ interface HealthState {
   toggleSync: (type: HealthDataType, enabled: boolean) => void;
   syncNow: () => Promise<void>;
   getLatestData: () => Promise<void>;
+  setRecentWeight: (weight: number) => void;
   disconnect: () => Promise<void>;
 }
 
@@ -127,7 +128,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
       set({
         syncEnabled,
-        lastSyncAt: storedLastSync ? new Date(storedLastSync) : null,
+        lastSyncAt: storedLastSync && !isNaN(new Date(storedLastSync).getTime()) ? new Date(storedLastSync) : null,
         isConnected,
         provider,
         todaySteps: storedSteps ? Number(storedSteps) : 0,
@@ -285,6 +286,14 @@ export const useHealthStore = create<HealthState>((set, get) => ({
     } catch {
       // Silently fail — cached data will be shown
     }
+  },
+
+  // ── Set Recent Weight ─────────────────────────────────────────
+
+  setRecentWeight: (weight) => {
+    const rounded = Math.round(weight * 10) / 10;
+    set({ recentWeight: rounded });
+    AsyncStorage.setItem(STORAGE_KEYS.RECENT_WEIGHT, String(rounded));
   },
 
   // ── Disconnect ────────────────────────────────────────────────

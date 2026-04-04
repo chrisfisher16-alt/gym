@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { EntitlementTier, PricingConfig } from '@health-coach/shared';
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 import {
@@ -15,6 +16,8 @@ import {
 } from '../lib/revenuecat';
 import { isDevMode, getDevSubscription, onDevSubscriptionChange } from '../lib/dev-subscription';
 import { mapPricingConfig, PLANS } from '../lib/pricing-config';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from './auth-store';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -33,6 +36,7 @@ interface SubscriptionState {
   initialize: (userId?: string) => Promise<void>;
   purchase: (pkg: PurchasesPackage) => Promise<{ success: boolean; error?: string }>;
   restore: () => Promise<{ success: boolean; error?: string }>;
+  applyPromoCode: (code: string) => Promise<{ success: boolean; error?: string }>;
   checkEntitlements: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   logout: () => Promise<void>;
@@ -55,6 +59,67 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   initialize: async (userId) => {
     if (get().isInitialized) return;
     set({ isLoading: true, error: null });
+
+    // Restore persisted promo grant (if any)
+    try {
+      const raw = await AsyncStorage.getItem('formiq_promo_grant');
+      if (raw) {
+        const grant = JSON.parse(raw) as {
+          tier: EntitlementTier;
+          code: string;
+          grantedAt?: number;
+          expiresAt?: number;
+        };
+
+        // Check if the promo grant has expired
+        if (grant.expiresAt && Date.now() > grant.expiresAt) {
+          await AsyncStorage.removeItem('formiq_promo_grant');
+          // Fall through to normal initialization below
+        } else {
+          const plan = mapPricingConfig(grant.tier as Exclude<EntitlementTier, 'free'>);
+          set({
+            tier: grant.tier,
+            isSubscribed: true,
+            isTrial: false,
+            trialEndsAt: null,
+            currentPlan: plan,
+            isLoading: false,
+            isInitialized: true,
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Subscriptions] Failed to restore promo grant:', err);
+    }
+
+    // Check Supabase entitlements table as source of truth
+    try {
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) {
+        const { data: entitlement } = await supabase
+          .from('entitlements')
+          .select('tier, is_trial, trial_ends_at')
+          .eq('user_id', userId)
+          .single();
+
+        if (entitlement && entitlement.tier !== 'free') {
+          const plan = mapPricingConfig(entitlement.tier as Exclude<EntitlementTier, 'free'>);
+          set({
+            tier: entitlement.tier as EntitlementTier,
+            isSubscribed: true,
+            isTrial: entitlement.is_trial ?? false,
+            trialEndsAt: entitlement.trial_ends_at ? new Date(entitlement.trial_ends_at) : null,
+            currentPlan: plan,
+            isLoading: false,
+            isInitialized: true,
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Subscriptions] Supabase entitlements query failed, continuing to other sources:', err);
+    }
 
     try {
       // In dev mode without RevenueCat, use dev mock
@@ -213,8 +278,82 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     }
   },
 
+  applyPromoCode: async (code) => {
+    try {
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) {
+        return { success: false, error: 'You must be signed in to redeem a promo code' };
+      }
+
+      const { data: rpcResult, error } = await supabase.rpc('redeem_promo_code', {
+        promo_code: code.trim().toUpperCase(),
+        redeemer_id: userId,
+      });
+
+      // rpc returns an array of rows; grab the first
+      const data = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+
+      if (error) {
+        console.warn('[SubscriptionStore] Promo RPC error:', error);
+        return { success: false, error: 'Failed to validate promo code' };
+      }
+      if (!data?.success) {
+        return { success: false, error: data?.error_message ?? 'Invalid promo code' };
+      }
+
+      const plan = mapPricingConfig(data.tier as Exclude<EntitlementTier, 'free'>);
+
+      set({
+        tier: data.tier,
+        isSubscribed: true,
+        isTrial: false,
+        trialEndsAt: null,
+        currentPlan: plan,
+      });
+
+      // Persist promo grant so it survives app restart (expires after 30 days)
+      const PROMO_GRANT_DAYS = 30;
+      AsyncStorage.setItem(
+        'formiq_promo_grant',
+        JSON.stringify({
+          tier: data.tier,
+          code: code.trim().toUpperCase(),
+          grantedAt: Date.now(),
+          expiresAt: Date.now() + PROMO_GRANT_DAYS * 24 * 60 * 60 * 1000,
+        }),
+      ).catch((e) => console.warn('[SubscriptionStore] persist promo grant failed:', e));
+
+      return { success: true };
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed to validate promo code' };
+    }
+  },
+
   checkEntitlements: async () => {
     try {
+      // Check Supabase entitlements first (covers promo grants and webhook-synced purchases)
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) {
+        const { data: entitlement } = await supabase
+          .from('entitlements')
+          .select('tier, is_trial, trial_ends_at')
+          .eq('user_id', userId)
+          .single();
+
+        if (entitlement && entitlement.tier !== 'free') {
+          const plan = mapPricingConfig(entitlement.tier as Exclude<EntitlementTier, 'free'>);
+          set({
+            tier: entitlement.tier as EntitlementTier,
+            isSubscribed: true,
+            isTrial: entitlement.is_trial ?? false,
+            trialEndsAt: entitlement.trial_ends_at ? new Date(entitlement.trial_ends_at) : null,
+            currentPlan: plan,
+          });
+          return;
+        }
+      }
+
+      // Fall through to RevenueCat for App Store / Play Store subscriptions
       const customerInfo = await getCustomerInfo();
       if (!customerInfo) return;
 
@@ -245,6 +384,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   logout: async () => {
     await rcLogout();
+    await AsyncStorage.removeItem('formiq_promo_grant').catch((e) => console.warn('[SubscriptionStore] remove promo grant failed:', e));
     set({
       tier: 'free',
       isSubscribed: false,

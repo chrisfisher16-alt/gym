@@ -1,6 +1,7 @@
 // ── Health Settings Screen ────────────────────────────────────────────
 
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Platform, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Platform, Linking } from 'react-native';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
@@ -45,7 +46,7 @@ export default function HealthSettingsScreen() {
   const canConnect = isHealthPlatform();
 
   const handleDisconnect = () => {
-    Alert.alert(
+    crossPlatformAlert(
       'Disconnect Health Data',
       `Stop syncing data from ${providerName ?? 'Health'}? Your previously imported data will remain in the app.`,
       [
@@ -120,7 +121,7 @@ export default function HealthSettingsScreen() {
             </View>
           </View>
           {isConnected ? (
-            <Badge label="Active" variant="success" />
+            <Badge label="Active" variant="active" />
           ) : (
             <Button
               title="Connect"

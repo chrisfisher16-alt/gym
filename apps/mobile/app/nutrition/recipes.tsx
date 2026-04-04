@@ -5,12 +5,13 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Switch,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,12 +19,13 @@ import { useTheme } from '../../src/theme';
 import { useNutritionStore } from '../../src/stores/nutrition-store';
 import { useGroceryStore } from '../../src/stores/grocery-store';
 import { Card, Button, ScreenContainer, EmptyState } from '../../src/components/ui';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { calculateMealTotals, generateNutritionId } from '../../src/lib/nutrition-utils';
 import { generateRecipe } from '../../src/lib/ai-recipe-generator';
 import type { MealItemEntry, MealType, RecipeDifficulty, RecipeEntry } from '../../src/types/nutrition';
 
 const DIFFICULTY_COLORS: Record<RecipeDifficulty, string> = {
-  Easy: '#10B981',
+  Easy: '#7A9A65',
   Medium: '#F59E0B',
   Hard: '#EF4444',
 };
@@ -31,7 +33,7 @@ const DIFFICULTY_COLORS: Record<RecipeDifficulty, string> = {
 const SOURCE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
   seed: { label: 'Suggested', color: '#6366F1', icon: 'library-outline' },
   ai: { label: 'AI Generated', color: '#8B5CF6', icon: 'sparkles-outline' },
-  user: { label: 'Custom', color: '#10B981', icon: 'person-outline' },
+  user: { label: 'Custom', color: '#B8944F', icon: 'person-outline' },
 };
 
 const FILTER_OPTIONS = ['All', 'Easy', 'Medium', 'Hard', 'AI', 'My Recipes'] as const;
@@ -144,7 +146,7 @@ export default function RecipesScreen() {
 
   const handleSaveRecipe = () => {
     if (!recipeName.trim() || items.length === 0) {
-      Alert.alert('Missing Info', 'Please add a name and at least one ingredient.');
+      crossPlatformAlert('Missing Info', 'Please add a name and at least one ingredient.');
       return;
     }
 
@@ -196,10 +198,32 @@ export default function RecipesScreen() {
 
   // ── Common Handlers ────────────────────────────────────────────────
 
-  const handleLogRecipe = (recipeId: string) => {
-    logRecipe(recipeId, 'lunch' as MealType);
+  const pickMealType = (): Promise<MealType | ''> => {
+    const options = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Cancel'];
+    return new Promise((resolve) => {
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          { options, cancelButtonIndex: 4, title: 'Log as...' },
+          (idx) => resolve(idx < 4 ? (options[idx].toLowerCase() as MealType) : ''),
+        );
+      } else {
+        Alert.alert('Log as...', undefined, [
+          ...options.slice(0, 4).map((opt) => ({
+            text: opt,
+            onPress: () => resolve(opt.toLowerCase() as MealType),
+          })),
+          { text: 'Cancel', style: 'cancel' as const, onPress: () => resolve('') },
+        ]);
+      }
+    });
+  };
+
+  const handleLogRecipe = async (recipeId: string) => {
+    const mealType = await pickMealType();
+    if (!mealType) return;
+    logRecipe(recipeId, mealType);
     if (Platform.OS !== 'web') {
-      Alert.alert('Logged', 'Recipe has been logged as a meal.');
+      crossPlatformAlert('Logged', `Recipe has been logged as ${mealType}.`);
     }
   };
 
@@ -207,7 +231,7 @@ export default function RecipesScreen() {
     if (Platform.OS === 'web') {
       if (window.confirm(`Remove "${name}"?`)) deleteRecipe(recipeId);
     } else {
-      Alert.alert('Delete Recipe', `Remove "${name}"?`, [
+      crossPlatformAlert('Delete Recipe', `Remove "${name}"?`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => deleteRecipe(recipeId) },
       ]);
@@ -237,11 +261,11 @@ export default function RecipesScreen() {
       }));
     }
     if (groceryItems.length === 0) {
-      Alert.alert('No ingredients', 'This recipe has no ingredient data to add.');
+      crossPlatformAlert('No ingredients', 'This recipe has no ingredient data to add.');
       return;
     }
     mergeRecipeItems(recipe.name, groceryItems);
-    Alert.alert('Added', `${groceryItems.length} ingredient${groceryItems.length !== 1 ? 's' : ''} added to your grocery list.`);
+    crossPlatformAlert('Added', `${groceryItems.length} ingredient${groceryItems.length !== 1 ? 's' : ''} added to your grocery list.`);
   }, [mergeRecipeItems]);
 
   // ── Render: AI Generate View ───────────────────────────────────────

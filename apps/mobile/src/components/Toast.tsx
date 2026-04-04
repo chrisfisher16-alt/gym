@@ -1,8 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Animated,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -43,11 +52,12 @@ const VARIANT_ICONS: Record<ToastVariant, keyof typeof Ionicons.glyphMap> = {
 function ToastView({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () => void }) {
   const { colors, spacing, radius, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReducedMotion();
+  const translateY = useRef(new Animated.Value(reduceMotion ? 0 : -100)).current;
+  const opacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   const variantColors: Record<ToastVariant, { bg: string; text: string; icon: string }> = {
-    success: { bg: colors.successLight, text: colors.success, icon: colors.success },
+    success: { bg: colors.completedMuted, text: colors.completed, icon: colors.completed },
     error: { bg: colors.errorLight, text: colors.error, icon: colors.error },
     info: { bg: colors.infoLight, text: colors.info, icon: colors.info },
     warning: { bg: colors.warningLight, text: colors.warning, icon: colors.warning },
@@ -56,6 +66,17 @@ function ToastView({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () =>
   const vc = variantColors[toast.variant];
 
   useEffect(() => {
+    AccessibilityInfo.announceForAccessibility(toast.message);
+
+    if (reduceMotion) {
+      // Skip entrance animation — already visible via initial values
+      const timer = setTimeout(() => {
+        opacity.setValue(0);
+        onDismiss();
+      }, toast.duration ?? 3000);
+      return () => clearTimeout(timer);
+    }
+
     // Slide in
     Animated.parallel([
       Animated.spring(translateY, {
@@ -92,6 +113,8 @@ function ToastView({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () =>
 
   return (
     <Animated.View
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
       style={[
         styles.toast,
         {
@@ -118,7 +141,12 @@ function ToastView({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () =>
       >
         {toast.message}
       </Text>
-      <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity
+        onPress={onDismiss}
+        hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss"
+      >
         <Ionicons name="close" size={18} color={vc.text} />
       </TouchableOpacity>
     </Animated.View>

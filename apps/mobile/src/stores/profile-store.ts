@@ -60,10 +60,14 @@ export interface UserProfile {
   healthGoalDescription?: string;
   // Fitness
   primaryGoal?: string;
+  fitnessGoal?: string;
   targetWeightKg?: number;
   activityLevel?: number; // 1-5
   trainingDaysPerWeek?: number;
   trainingExperience?: 'beginner' | 'intermediate' | 'advanced';
+  consistencyLevel?: string;
+  sessionDuration?: string;
+  gymType?: string;
   injuriesOrLimitations?: string;
   fitnessEquipment: string[];
   preferredTrainingTime?: string;
@@ -93,6 +97,7 @@ interface ProfileState {
   profile: UserProfile;
   updateProfile: (updates: Partial<UserProfile>) => void;
   initialize: () => void;
+  reset: () => void;
 }
 
 export const useProfileStore = create<ProfileState>()(
@@ -109,6 +114,10 @@ export const useProfileStore = create<ProfileState>()(
       initialize: () => {
         // Hydration is handled by zustand/persist automatically.
         // This is a no-op hook for explicit initialization if needed.
+      },
+
+      reset: () => {
+        set({ profile: { ...DEFAULT_PROFILE } });
       },
     }),
     {
@@ -130,6 +139,8 @@ export const useProfileStore = create<ProfileState>()(
             p.fitnessEquipment = Array.isArray(p.availableEquipment) ? p.availableEquipment : [];
           }
           if (!Array.isArray(p.preferredWorkoutDays)) p.preferredWorkoutDays = [];
+          // Ensure unitPreference has a default for profiles created before this field existed
+          if (!p.unitPreference) p.unitPreference = 'imperial';
         }
         return state as { profile: UserProfile };
       },

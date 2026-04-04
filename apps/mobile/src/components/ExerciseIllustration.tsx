@@ -41,6 +41,7 @@ const MOVEMENT_LABELS: Record<MovementType, string> = {
   carry: 'Carry',
   rotation: 'Rotation',
   isometric: 'Isometric',
+  cardio: 'Cardio',
 };
 
 // ── Component ───────────────────────────────────────────────────────

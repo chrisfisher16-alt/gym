@@ -1,16 +1,20 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Link, router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { isSupabaseConfigured } from '../../src/lib/supabase';
+import { friendlyAuthError } from '../../src/lib/auth-utils';
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 type SignInForm = z.infer<typeof signInSchema>;
@@ -18,7 +22,48 @@ type SignInForm = z.infer<typeof signInSchema>;
 export default function SignInScreen() {
   const { colors, spacing, typography } = useTheme();
   const signIn = useAuthStore((s) => s.signIn);
+  const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
+  const signInWithApple = useAuthStore((s) => s.signInWithApple);
   const [formError, setFormError] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
+    }
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setFormError('');
+    setGoogleLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setFormError('');
+    setAppleLoading(true);
+    try {
+      const { error } = await signInWithApple();
+      if (error) {
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  };
 
   const {
     control,
@@ -31,11 +76,15 @@ export default function SignInScreen() {
 
   const onSubmit = async (data: SignInForm) => {
     setFormError('');
-    const { error } = await signIn(data.email, data.password);
-    if (error) {
-      setFormError(error.message || 'Failed to sign in. Please try again.');
-    } else {
-      router.replace('/');
+    try {
+      const { error } = await signIn(data.email, data.password);
+      if (error) {
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
+      }
+    } catch (e: unknown) {
+      setFormError(friendlyAuthError(e instanceof Error ? e.message : 'Something went wrong. Please try again.'));
     }
   };
 
@@ -59,6 +108,59 @@ export default function SignInScreen() {
               Welcome back. Sign in to continue.
             </Text>
           </View>
+
+          {isSupabaseConfigured && (
+            <>
+              <TouchableOpacity
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                activeOpacity={0.7}
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    padding: spacing.md,
+                  },
+                ]}
+              >
+                <Ionicons name="logo-google" size={20} color={colors.text} />
+                <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                  {googleLoading ? 'Signing in...' : 'Continue with Google'}
+                </Text>
+              </TouchableOpacity>
+
+              {appleAvailable && (
+                <TouchableOpacity
+                  onPress={handleAppleSignIn}
+                  disabled={appleLoading}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.socialButton,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: 12,
+                      padding: spacing.md,
+                      marginTop: spacing.sm,
+                    },
+                  ]}
+                >
+                  <Ionicons name="logo-apple" size={20} color={colors.text} />
+                  <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                    {appleLoading ? 'Signing in...' : 'Continue with Apple'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
+                <Text style={[typography.caption, { color: colors.textTertiary, marginHorizontal: spacing.md }]}>or</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
+              </View>
+            </>
+          )}
 
           <View style={[styles.form, { gap: spacing.base }]}>
             {formError ? (
@@ -110,6 +212,15 @@ export default function SignInScreen() {
               loading={isSubmitting}
               style={{ marginTop: spacing.sm }}
             />
+
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/forgot-password')}
+              style={{ alignSelf: 'center', marginTop: spacing.md }}
+            >
+              <Text style={[typography.bodySmall, { color: colors.primary }]}>
+                Forgot password?
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.footer, { marginTop: spacing['2xl'] }]}>
@@ -140,6 +251,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   errorBanner: {},
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    minHeight: 48,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

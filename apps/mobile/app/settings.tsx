@@ -1,14 +1,24 @@
-import { View, Text, StyleSheet, TouchableOpacity, Switch, Alert } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
-import { Card, ScreenContainer, Badge, Divider } from '../src/components/ui';
+import { Card, ScreenContainer, Badge, Divider, ExpandableCard } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/auth-store';
 import { useProfileStore } from '../src/stores/profile-store';
 import { useNotificationStore } from '../src/stores/notification-store';
-import { useSubscriptionStore } from '../src/stores/subscription-store';
 import { useEntitlement } from '../src/hooks/useEntitlement';
 import { APP_CONFIG } from '@health-coach/shared';
+import Constants from 'expo-constants';
+import { useThemeStore, type ColorMode } from '../src/stores/theme-store';
+import { KG_TO_LBS } from '../src/lib/constants';
+import { useSpaceStore, type TrainingSpace } from '../src/stores/space-store';
+import { useCoachSheet } from '../src/providers/CoachSheetProvider';
+import { deleteAccount } from '../src/lib/supabase-api';
+import { SpaceSwitcher, SpaceEditor } from '../src/components/ui';
+import { checkAIMessageLimit, checkWorkoutLogLimit, checkMealLogLimit, type UsageCheck } from '../src/lib/usage-limits';
+import type { CoachTone } from '@health-coach/shared';
 
 export default function SettingsScreen() {
   const { colors, spacing, typography, radius } = useTheme();
@@ -16,79 +26,175 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const coachPreferences = useAuthStore((s) => s.coachPreferences);
   const signOut = useAuthStore((s) => s.signOut);
-  const logoutSubscription = useSubscriptionStore((s) => s.logout);
   const notificationStatus = useNotificationStore((s) => s.preferences.permissionStatus);
   const { tier, tierName, isSubscribed, isTrial } = useEntitlement();
   const profileData = useProfileStore((s) => s.profile);
+  const updateAuthProfile = useAuthStore((s) => s.updateProfile);
+  const setCoachPreferences = useAuthStore((s) => s.setCoachPreferences);
+  const colorMode = useThemeStore((s) => s.colorMode);
+  const setColorMode = useThemeStore((s) => s.setColorMode);
+  const { open: openCoachSheet } = useCoachSheet();
+
+  // ── Space Editor state ──────────────────────────────────────────
+  const [spaceEditorVisible, setSpaceEditorVisible] = useState(false);
+  const [editingSpace, setEditingSpace] = useState<TrainingSpace | undefined>(undefined);
+
+  // ── Delete Account state ────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    useThemeStore.getState().initialize();
+    useSpaceStore.getState().initialize();
+  }, []);
+
+  const handleDeleteAccount = () => {
+    crossPlatformAlert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => setShowDeleteConfirm(true),
+        },
+      ],
+    );
+  };
+
+  const confirmDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return;
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      await signOut();
+      router.replace('/auth');
+    } catch (e) {
+      crossPlatformAlert('Error', 'Failed to delete account. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText('');
+    }
+  };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    crossPlatformAlert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await logoutSubscription();
           await signOut();
-          router.replace('/');
         },
       },
     ]);
   };
 
+  // ── Computed profile values ────────────────────────────────────────
+
+  const heightDisplay = profileData.heightCm
+    ? profileData.unitPreference === 'imperial'
+      ? (() => { let ft = Math.floor(profileData.heightCm / 2.54 / 12); let inc = Math.round(profileData.heightCm / 2.54 % 12); if (inc === 12) { ft += 1; inc = 0; } return `${ft}' ${inc}"`; })()
+      : `${profileData.heightCm} cm`
+    : null;
+
+  const weightDisplay = profileData.weightKg
+    ? profileData.unitPreference === 'imperial'
+      ? `${Math.round(profileData.weightKg * KG_TO_LBS)} lbs`
+      : `${profileData.weightKg} kg`
+    : null;
+
+  const statsLine = [heightDisplay, weightDisplay].filter(Boolean).join(' · ');
+
+  // BMI calculation
+  const bmi =
+    profileData.heightCm && profileData.weightKg
+      ? (profileData.weightKg / (profileData.heightCm / 100) ** 2).toFixed(1)
+      : null;
+
+  // BMR (Mifflin-St Jeor) — use profile age and gender when available
+  const profileAge = profileData.dateOfBirth
+    ? Math.floor((Date.now() - new Date(profileData.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : 30;
+  const genderOffset = profileData.gender === 'female' ? -161 : 5;
+  const bmr =
+    profileData.heightCm && profileData.weightKg
+      ? Math.round(10 * profileData.weightKg + 6.25 * profileData.heightCm - 5 * profileAge + genderOffset)
+      : null;
+
   return (
     <ScreenContainer edges={[]}>
-      {/* Profile Section */}
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => router.push('/profile')}
+      {/* ── Profile Section (Expandable) ──────────────────────────── */}
+      <ExpandableCard
+        style={{ marginTop: spacing.base, marginBottom: spacing.base }}
+        expandedContent={
+          <ProfileExpandedContent
+            profileData={profileData}
+            heightDisplay={heightDisplay}
+            weightDisplay={weightDisplay}
+            bmi={bmi}
+            bmr={bmr}
+            email={user?.email ?? ''}
+          />
+        }
       >
-        <Card style={{ marginTop: spacing.base, marginBottom: spacing.base }}>
-          <View style={styles.profileRow}>
-            <View
-              style={[
-                styles.avatar,
-                { backgroundColor: colors.primaryMuted, borderRadius: radius.full },
-              ]}
-            >
-              <Ionicons name="person" size={28} color={colors.primary} />
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={[typography.h3, { color: colors.text }]}>
-                {profile?.display_name ?? 'User'}
-              </Text>
-              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
-                {user?.email ?? ''}
-              </Text>
-              {(profileData.heightCm || profileData.weightKg) && (
-                <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: 2 }]}>
-                  {[
-                    profileData.heightCm
-                      ? profileData.unitPreference === 'imperial'
-                        ? `${Math.floor(profileData.heightCm / 2.54 / 12)}' ${Math.round(profileData.heightCm / 2.54 % 12)}"`
-                        : `${profileData.heightCm} cm`
-                      : null,
-                    profileData.weightKg
-                      ? profileData.unitPreference === 'imperial'
-                        ? `${Math.round(profileData.weightKg * 2.205)} lbs`
-                        : `${profileData.weightKg} kg`
-                      : null,
-                  ].filter(Boolean).join(' · ')}
-                </Text>
-              )}
-            </View>
-            <Badge label={tierName} variant={isSubscribed ? 'pro' : 'default'} />
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textTertiary}
-              style={{ marginLeft: spacing.sm }}
-            />
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => router.push('/profile')}
+          style={styles.profileRow}
+        >
+          <View
+            style={[
+              styles.avatar,
+              { backgroundColor: colors.primaryMuted, borderRadius: radius.full },
+            ]}
+          >
+            <Ionicons name="person" size={28} color={colors.primary} />
           </View>
-        </Card>
-      </TouchableOpacity>
+          <View style={styles.profileInfo}>
+            <Text style={[typography.h3, { color: colors.text }]}>
+              {profile?.display_name ?? 'User'}
+            </Text>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+              {user?.email ?? ''}
+            </Text>
+            {statsLine ? (
+              <Text style={[typography.bodySmall, { color: colors.textTertiary, marginTop: 2 }]}>
+                {statsLine}
+              </Text>
+            ) : null}
+          </View>
+          <Badge label={tierName} variant={isSubscribed ? 'pro' : 'default'} />
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={colors.textTertiary}
+            style={{ marginLeft: spacing.sm }}
+          />
+        </TouchableOpacity>
+      </ExpandableCard>
 
-      {/* Preferences */}
+      {/* ── Training Spaces ───────────────────────────────────────── */}
+      <Text style={[typography.labelSmall, { color: colors.textTertiary, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
+        Training Spaces
+      </Text>
+      <Card style={{ marginBottom: spacing.base, padding: spacing.md }}>
+        <SpaceSwitcher
+          onCreatePress={() => {
+            setEditingSpace(undefined);
+            setSpaceEditorVisible(true);
+          }}
+          onEditPress={(space) => {
+            setEditingSpace(space);
+            setSpaceEditorVisible(true);
+          }}
+        />
+      </Card>
+
+      {/* ── Preferences ───────────────────────────────────────────── */}
       <Text style={[typography.labelSmall, { color: colors.textTertiary, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
         Preferences
       </Text>
@@ -96,90 +202,78 @@ export default function SettingsScreen() {
         <SettingRow
           icon="scale-outline"
           label="Units"
-          value={profile?.unit_preference === 'metric' ? 'Metric' : 'Imperial'}
+          value={(profileData.unitPreference ?? 'imperial') === 'metric' ? 'Metric' : 'Imperial'}
           colors={colors}
           typography={typography}
           spacing={spacing}
+          showChevron
+          onPress={() => {
+            const current = profileData.unitPreference ?? 'imperial';
+            const newValue = current === 'imperial' ? 'metric' : 'imperial';
+            updateAuthProfile({ unit_preference: newValue });
+            useProfileStore.getState().updateProfile({ unitPreference: newValue });
+          }}
         />
         <Divider />
-        <SettingRow
-          icon="chatbubble-outline"
-          label="Coach Tone"
-          value={coachPreferences?.coach_tone
-            ? coachPreferences.coach_tone.charAt(0).toUpperCase() + coachPreferences.coach_tone.slice(1)
-            : 'Balanced'
-          }
-          colors={colors}
-          typography={typography}
-          spacing={spacing}
+
+        {/* Coach Tone — Expandable */}
+        <CoachToneExpandable
+          coachPreferences={coachPreferences}
+          setCoachPreferences={setCoachPreferences}
         />
+
         <Divider />
         <View style={[styles.settingRow, { paddingVertical: spacing.md }]}>
           <View style={styles.settingLeft}>
             <Ionicons name="moon-outline" size={20} color={colors.textSecondary} />
             <Text style={[typography.body, { color: colors.text, marginLeft: spacing.md }]}>
-              Dark Mode
+              Appearance
             </Text>
           </View>
-          <Switch
-            value={false}
-            onValueChange={() => {}}
-            trackColor={{ true: colors.primary, false: colors.border }}
-          />
+          <View style={{ flexDirection: 'row', backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, overflow: 'hidden' }}>
+            {(['light', 'dark', 'auto'] as ColorMode[]).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => setColorMode(mode)}
+                style={{
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.xs,
+                  backgroundColor: colorMode === mode ? colors.primary : 'transparent',
+                  borderRadius: radius.md,
+                }}
+              >
+                <Text style={[
+                  typography.label,
+                  {
+                    color: colorMode === mode ? colors.textInverse : colors.textSecondary,
+                    textTransform: 'capitalize',
+                  },
+                ]}>
+                  {mode}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </Card>
 
-      {/* Subscription */}
+      {/* ── Subscription (Expandable) ─────────────────────────────── */}
       <Text style={[typography.labelSmall, { color: colors.textTertiary, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
         Subscription
       </Text>
-      <Card style={{ marginBottom: spacing.base }}>
-        <SettingRow
-          icon="diamond-outline"
-          label="Plan"
-          value={tierName + (isTrial ? ' (Trial)' : '')}
-          colors={colors}
-          typography={typography}
-          spacing={spacing}
-          showChevron
-          onPress={() => isSubscribed ? {} : router.push('/paywall')}
-        />
-        {!isSubscribed && (
-          <>
-            <Divider />
-            <SettingRow
-              icon="arrow-up-circle-outline"
-              label="Upgrade"
-              value="View plans"
-              colors={colors}
-              typography={typography}
-              spacing={spacing}
-              showChevron
-              onPress={() => router.push('/paywall')}
-            />
-          </>
-        )}
-        {isSubscribed && (
-          <>
-            <Divider />
-            <SettingRow
-              icon="settings-outline"
-              label="Manage Subscription"
-              colors={colors}
-              typography={typography}
-              spacing={spacing}
-              showChevron
-              onPress={() => router.push('/paywall')}
-            />
-          </>
-        )}
-      </Card>
+      <SubscriptionExpandable
+        tier={tier}
+        tierName={tierName}
+        isSubscribed={isSubscribed}
+        isTrial={isTrial}
+      />
 
-      {/* More */}
+      {/* ── More ──────────────────────────────────────────────────── */}
       <Text style={[typography.labelSmall, { color: colors.textTertiary, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
         More
       </Text>
       <Card style={{ marginBottom: spacing.base }}>
+
         <SettingRow
           icon="notifications-outline"
           label="Notifications"
@@ -213,21 +307,38 @@ export default function SettingsScreen() {
         />
         <Divider />
         <SettingRow
+          icon="chatbubble-ellipses-outline"
+          label="Coach Chat"
+          value="Open AI coach"
+          colors={colors}
+          typography={typography}
+          spacing={spacing}
+          showChevron
+          onPress={() => {
+            router.back();
+            setTimeout(openCoachSheet, 300);
+          }}
+        />
+        <Divider />
+        <SettingRow
           icon="help-circle-outline"
           label="Support"
           value={APP_CONFIG.supportEmail}
           colors={colors}
           typography={typography}
           spacing={spacing}
+          showChevron
+          onPress={() => Linking.openURL(`mailto:${APP_CONFIG.supportEmail}`)}
         />
         <Divider />
         <SettingRow
           icon="information-circle-outline"
           label="About"
-          value="v1.0.0"
+          value={`v${Constants.expoConfig?.version ?? '1.0.0'}`}
           colors={colors}
           typography={typography}
           spacing={spacing}
+          onPress={() => crossPlatformAlert('About', `Health Coach\nVersion ${Constants.expoConfig?.version ?? '1.0.0'}\nBuild ${Constants.expoConfig?.extra?.buildNumber ?? '1'}`)}
         />
         <Divider />
         <SettingRow
@@ -251,7 +362,10 @@ export default function SettingsScreen() {
         />
       </Card>
 
-      {/* Sign Out */}
+      {/* ── Danger Zone ──────────────────────────────────────────── */}
+      <Text style={[typography.labelSmall, { color: colors.error, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }]}>
+        Danger Zone
+      </Text>
       <TouchableOpacity
         onPress={handleSignOut}
         activeOpacity={0.7}
@@ -260,8 +374,9 @@ export default function SettingsScreen() {
           {
             backgroundColor: colors.errorLight,
             borderRadius: radius.lg,
+            borderBottomLeftRadius: showDeleteConfirm ? 0 : radius.lg,
+            borderBottomRightRadius: showDeleteConfirm ? 0 : radius.lg,
             padding: spacing.base,
-            marginBottom: spacing['3xl'],
           },
         ]}
       >
@@ -270,9 +385,479 @@ export default function SettingsScreen() {
           Sign Out
         </Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        onPress={handleDeleteAccount}
+        activeOpacity={0.7}
+        style={[
+          styles.signOutBtn,
+          {
+            backgroundColor: colors.errorLight,
+            borderRadius: radius.lg,
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.error + '30',
+            padding: spacing.base,
+            marginBottom: showDeleteConfirm ? 0 : spacing['3xl'],
+          },
+        ]}
+      >
+        <Ionicons name="trash-outline" size={20} color={colors.error} />
+        <Text style={[typography.labelLarge, { color: colors.error, marginLeft: spacing.sm }]}>
+          Delete Account
+        </Text>
+      </TouchableOpacity>
+      {showDeleteConfirm && (
+        <View
+          style={{
+            backgroundColor: colors.errorLight,
+            borderBottomLeftRadius: radius.lg,
+            borderBottomRightRadius: radius.lg,
+            padding: spacing.base,
+            marginBottom: spacing['3xl'],
+          }}
+        >
+          <Text style={[typography.bodySmall, { color: colors.error, marginBottom: spacing.sm }]}>
+            Type DELETE to permanently remove your account:
+          </Text>
+          <TextInput
+            value={deleteConfirmText}
+            onChangeText={setDeleteConfirmText}
+            placeholder="Type DELETE"
+            placeholderTextColor={colors.error + '60'}
+            autoCapitalize="characters"
+            autoFocus
+            style={[
+              typography.body,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.error + '40',
+                borderRadius: radius.md,
+                padding: spacing.sm,
+                color: colors.error,
+                marginBottom: spacing.sm,
+              },
+            ]}
+          />
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowDeleteConfirm(false);
+                setDeleteConfirmText('');
+              }}
+              style={{
+                flex: 1,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                backgroundColor: colors.surface,
+              }}
+            >
+              <Text style={[typography.label, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={confirmDeleteAccount}
+              disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+              style={{
+                flex: 1,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                backgroundColor: deleteConfirmText === 'DELETE' ? colors.error : colors.error + '40',
+              }}
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color={colors.textInverse} />
+              ) : (
+                <Text style={[typography.label, { color: colors.textInverse }]}>Delete Forever</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {/* ── Space Editor Sheet ─────────────────────────────────── */}
+      <SpaceEditor
+        visible={spaceEditorVisible}
+        onClose={() => {
+          setSpaceEditorVisible(false);
+          setEditingSpace(undefined);
+        }}
+        editingSpace={editingSpace}
+      />
     </ScreenContainer>
   );
 }
+
+// ── Profile Expanded Content ─────────────────────────────────────────
+
+function ProfileExpandedContent({
+  profileData,
+  heightDisplay,
+  weightDisplay,
+  bmi,
+  bmr,
+  email,
+}: {
+  profileData: ReturnType<typeof useProfileStore.getState>['profile'];
+  heightDisplay: string | null;
+  weightDisplay: string | null;
+  bmi: string | null;
+  bmr: number | null;
+  email: string;
+}) {
+  const { colors, spacing, radius, typography } = useTheme();
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      {/* Physical stats */}
+      <View style={{ gap: spacing.xs }}>
+        <Text style={[typography.caption, { color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+          Body Stats
+        </Text>
+        {heightDisplay && <ProfileDetailRow label="Height" value={heightDisplay} />}
+        {weightDisplay && <ProfileDetailRow label="Weight" value={weightDisplay} />}
+        {bmi && <ProfileDetailRow label="BMI" value={bmi} />}
+        {bmr && <ProfileDetailRow label="Est. BMR" value={`${bmr} cal/day`} />}
+      </View>
+
+      {/* Goals & preferences */}
+      {(profileData.primaryGoal || profileData.activityLevel || profileData.trainingExperience) && (
+        <View style={{ gap: spacing.xs }}>
+          <Text style={[typography.caption, { color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+            Goals & Activity
+          </Text>
+          {profileData.primaryGoal && (
+            <ProfileDetailRow label="Primary Goal" value={profileData.primaryGoal.replace(/_/g, ' ')} />
+          )}
+          {profileData.activityLevel != null && (
+            <ProfileDetailRow label="Activity Level" value={`Level ${profileData.activityLevel}`} />
+          )}
+          {profileData.trainingExperience && (
+            <ProfileDetailRow label="Experience" value={profileData.trainingExperience} />
+          )}
+          {profileData.trainingDaysPerWeek != null && (
+            <ProfileDetailRow label="Training Days/Week" value={`${profileData.trainingDaysPerWeek}`} />
+          )}
+        </View>
+      )}
+
+      {/* Edit profile CTA */}
+      <TouchableOpacity
+        onPress={() => router.push('/profile')}
+        activeOpacity={0.7}
+        style={{
+          borderWidth: 1,
+          borderColor: colors.primary,
+          borderRadius: radius.md,
+          paddingVertical: spacing.sm,
+          alignItems: 'center',
+        }}
+      >
+        <Text style={[typography.label, { color: colors.primary }]}>
+          Edit Profile
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ProfileDetailRow({ label, value }: { label: string; value: string }) {
+  const { colors, typography } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+      <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[typography.bodySmall, { color: colors.text, fontWeight: '600', textTransform: 'capitalize' }]}>{value}</Text>
+    </View>
+  );
+}
+
+// ── Coach Tone Expandable ────────────────────────────────────────────
+
+const TONE_DATA: Record<CoachTone, { description: string; example: string }> = {
+  direct: {
+    description: 'Straight to the point. No fluff, no hand-holding.',
+    example: '"You skipped legs again. Add squats today or your program stalls."',
+  },
+  balanced: {
+    description: 'Friendly but focused. Encouragement with accountability.',
+    example: '"Good effort this week! Let\'s tighten up your protein — you\'re about 30g short today."',
+  },
+  encouraging: {
+    description: 'Maximum hype. Celebrates every win, gently nudges on misses.',
+    example: '"You crushed that workout! 💪 For dinner, let\'s aim for something protein-rich to fuel recovery."',
+  },
+};
+
+function CoachToneExpandable({
+  coachPreferences,
+  setCoachPreferences,
+}: {
+  coachPreferences: ReturnType<typeof useAuthStore.getState>['coachPreferences'];
+  setCoachPreferences: ReturnType<typeof useAuthStore.getState>['setCoachPreferences'];
+}) {
+  const { colors, spacing, radius, typography } = useTheme();
+  const currentTone: CoachTone = coachPreferences?.tone ?? coachPreferences?.coach_tone ?? 'balanced';
+  const tones: CoachTone[] = ['direct', 'balanced', 'encouraging'];
+
+  const selectTone = (tone: CoachTone) => {
+    const now = new Date().toISOString();
+    const currentPrefs = coachPreferences || {
+      user_id: useAuthStore.getState().user?.id ?? '',
+      tone: 'balanced' as CoachTone,
+      created_at: now,
+      updated_at: now,
+    };
+    setCoachPreferences({ ...currentPrefs, tone, coach_tone: tone, updated_at: now });
+  };
+
+  return (
+    <ExpandableCard
+      style={{ borderWidth: 0, shadowOpacity: 0, elevation: 0 }}
+      expandedContent={
+        <View style={{ gap: spacing.md }}>
+          {tones.map((tone) => {
+            const data = TONE_DATA[tone];
+            const isActive = tone === currentTone;
+            return (
+              <TouchableOpacity
+                key={tone}
+                onPress={() => selectTone(tone)}
+                activeOpacity={0.7}
+                style={{
+                  backgroundColor: isActive ? colors.primaryMuted : colors.surfaceSecondary,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  borderWidth: isActive ? 1 : 0,
+                  borderColor: isActive ? colors.primary : 'transparent',
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
+                  <Text style={[typography.label, { color: isActive ? colors.primary : colors.text, textTransform: 'capitalize' }]}>
+                    {tone}
+                  </Text>
+                  {isActive && (
+                    <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                  )}
+                </View>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+                  {data.description}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textTertiary, fontStyle: 'italic' }]}>
+                  {data.example}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      }
+    >
+      {/* Collapsed: same as original SettingRow layout */}
+      <View style={[settingStyles.row, { paddingVertical: 0 }]}>
+        <View style={settingStyles.left}>
+          <Ionicons name="chatbubble-outline" size={20} color={colors.textSecondary} />
+          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.md }]}>Coach Tone</Text>
+        </View>
+        <View style={settingStyles.right}>
+          <Text style={[typography.bodySmall, { color: colors.textTertiary, marginRight: spacing.xs }]}>
+            {currentTone.charAt(0).toUpperCase() + currentTone.slice(1)}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+        </View>
+      </View>
+    </ExpandableCard>
+  );
+}
+
+// ── Subscription Expandable ──────────────────────────────────────────
+
+function SubscriptionExpandable({
+  tier,
+  tierName,
+  isSubscribed,
+  isTrial,
+}: {
+  tier: string;
+  tierName: string;
+  isSubscribed: boolean;
+  isTrial: boolean;
+}) {
+  const { colors, spacing, radius, typography } = useTheme();
+  const [aiUsage, setAIUsage] = useState<UsageCheck | null>(null);
+  const [workoutUsage, setWorkoutUsage] = useState<UsageCheck | null>(null);
+  const [mealUsage, setMealUsage] = useState<UsageCheck | null>(null);
+
+  useEffect(() => {
+    if (tier === 'free') {
+      Promise.all([
+        checkAIMessageLimit(),
+        checkWorkoutLogLimit(),
+        checkMealLogLimit(),
+      ]).then(([ai, wk, ml]) => {
+        setAIUsage(ai);
+        setWorkoutUsage(wk);
+        setMealUsage(ml);
+      });
+    }
+  }, [tier]);
+
+  return (
+    <ExpandableCard
+      style={{ marginBottom: spacing.base }}
+      expandedContent={
+        <View style={{ gap: spacing.md }}>
+          {/* Feature comparison */}
+          <View style={{ gap: spacing.xs }}>
+            <Text style={[typography.caption, { color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+              Feature Comparison
+            </Text>
+            <FeatureCompareRow label="AI Coach Messages" free="5/day" pro="Unlimited" isSubscribed={isSubscribed} />
+            <FeatureCompareRow label="Workout Logs" free="10/month" pro="Unlimited" isSubscribed={isSubscribed} />
+            <FeatureCompareRow label="Meal Logs" free="3/day" pro="Unlimited" isSubscribed={isSubscribed} />
+            <FeatureCompareRow label="Meal Photo AI" free="—" pro="Included" isSubscribed={isSubscribed} />
+            <FeatureCompareRow label="Advanced Analytics" free="—" pro="Included" isSubscribed={isSubscribed} />
+          </View>
+
+          {/* Usage breakdown for free users */}
+          {tier === 'free' && (aiUsage || workoutUsage || mealUsage) && (
+            <View style={{ gap: spacing.xs }}>
+              <Text style={[typography.caption, { color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+                Current Usage
+              </Text>
+              {aiUsage && (
+                <SubUsageRow label="AI Messages" used={aiUsage.used} limit={aiUsage.limit} />
+              )}
+              {workoutUsage && (
+                <SubUsageRow label="Workout Logs" used={workoutUsage.used} limit={workoutUsage.limit} />
+              )}
+              {mealUsage && (
+                <SubUsageRow label="Meal Logs" used={mealUsage.used} limit={mealUsage.limit} />
+              )}
+            </View>
+          )}
+
+          {/* CTA */}
+          {!isSubscribed && (
+            <TouchableOpacity
+              onPress={() => router.push('/paywall')}
+              activeOpacity={0.7}
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.sm,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={[typography.label, { color: colors.textInverse }]}>
+                Upgrade to Pro
+              </Text>
+            </TouchableOpacity>
+          )}
+          {isSubscribed && (
+            <TouchableOpacity
+              onPress={() => router.push('/paywall')}
+              activeOpacity={0.7}
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+                paddingVertical: spacing.sm,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={[typography.label, { color: colors.textSecondary }]}>
+                Manage Subscription
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      }
+    >
+      {/* Collapsed: plan name */}
+      <View style={[settingStyles.row, { paddingVertical: 0 }]}>
+        <View style={settingStyles.left}>
+          <Ionicons name="diamond-outline" size={20} color={colors.textSecondary} />
+          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.md }]}>Plan</Text>
+        </View>
+        <View style={settingStyles.right}>
+          <Text style={[typography.bodySmall, { color: colors.textTertiary, marginRight: spacing.xs }]}>
+            {tierName}{isTrial ? ' (Trial)' : ''}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+        </View>
+      </View>
+    </ExpandableCard>
+  );
+}
+
+function FeatureCompareRow({
+  label,
+  free,
+  pro,
+  isSubscribed,
+}: {
+  label: string;
+  free: string;
+  pro: string;
+  isSubscribed: boolean;
+}) {
+  const { colors, spacing, typography } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Text style={[typography.bodySmall, { color: colors.textSecondary, flex: 1 }]}>{label}</Text>
+      <Text
+        style={[
+          typography.caption,
+          {
+            color: !isSubscribed ? colors.textTertiary : colors.textSecondary,
+            width: 70,
+            textAlign: 'center',
+          },
+        ]}
+      >
+        {free}
+      </Text>
+      <Text
+        style={[
+          typography.caption,
+          {
+            color: isSubscribed ? colors.primary : colors.textSecondary,
+            fontWeight: isSubscribed ? '600' : '400',
+            width: 70,
+            textAlign: 'center',
+          },
+        ]}
+      >
+        {pro}
+      </Text>
+    </View>
+  );
+}
+
+function SubUsageRow({ label, used, limit }: { label: string; used: number; limit: number }) {
+  const { colors, spacing, radius, typography } = useTheme();
+  const ratio = limit > 0 ? used / limit : 0;
+  return (
+    <View style={{ gap: 3 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>{label}</Text>
+        <Text style={[typography.caption, { color: colors.textTertiary }]}>{used}/{limit}</Text>
+      </View>
+      <View style={{ height: 4, backgroundColor: colors.surfaceSecondary, borderRadius: radius.full, overflow: 'hidden' }}>
+        <View
+          style={{
+            height: '100%',
+            width: `${Math.min(ratio * 100, 100)}%`,
+            backgroundColor: ratio >= 0.8 ? colors.warning : colors.primary,
+            borderRadius: radius.full,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+// ── SettingRow (unchanged) ───────────────────────────────────────────
 
 function SettingRow({
   icon,

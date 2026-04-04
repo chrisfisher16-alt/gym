@@ -3,9 +3,30 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Sentry from '@sentry/react-native';
+import { ErrorBoundary, setErrorReporter } from '../src/components/ErrorBoundary';
 import { ToastProvider } from '../src/components/Toast';
+import { NetworkBanner } from '../src/components/NetworkBanner';
+import { CommandPaletteProvider, useCommandPalette } from '../src/providers/CommandPaletteProvider';
+import { CommandPalette } from '../src/components/ui/CommandPalette';
+import { CoachPeekProvider } from '../src/providers/CoachPeekProvider';
+import { CoachSheetProvider } from '../src/providers/CoachSheetProvider';
+import { CoachSheet } from '../src/components/CoachSheet';
+import { QuickInputProvider } from '../src/providers/QuickInputProvider';
 import { migrateAIConfig } from '../src/lib/ai-provider';
 import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
+import { useThemeStore } from '../src/stores/theme-store';
+import { darkColors, lightColors } from '../src/theme/colors';
+import { initializeStoreBridge } from '../src/lib/store-bridge';
+import { getInitialURL, onDeepLink, parseInviteCode, handleInviteLink } from '../src/lib/deep-linking';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  enabled: !__DEV__,
+  tracesSampleRate: 0.2,
+  enableAutoPerformanceTracing: true,
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,13 +37,66 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function RootLayout() {
+/** Renders CommandPalette using context — avoids require cycle between component & provider */
+function CommandPaletteSheet() {
+  const { isOpen, close } = useCommandPalette();
+  return <CommandPalette visible={isOpen} onClose={close} />;
+}
+
+function RootLayout() {
   const colorScheme = useColorScheme();
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const [ready, setReady] = useState(false);
 
+  // Set up cross-store reactive subscriptions
   useEffect(() => {
+    const cleanup = initializeStoreBridge();
+    return cleanup;
+  }, []);
+
+  // Handle deep links (invite codes) — wait for auth to be ready
+  useEffect(() => {
+    if (Platform.OS === 'web' || !ready) return;
+
+    // Cold start: check if app was opened via a deep link
+    getInitialURL().then((url) => {
+      if (url) {
+        const code = parseInviteCode(url);
+        if (code) handleInviteLink(code);
+      }
+    });
+
+    // Warm start: listen for incoming deep links
+    const unsubscribe = onDeepLink((url) => {
+      const code = parseInviteCode(url);
+      if (code) handleInviteLink(code);
+    });
+
+    return unsubscribe;
+  }, [ready]);
+
+  // Wire up Sentry as the error reporter for ErrorBoundary
+  useEffect(() => {
+    setErrorReporter((error, extra) => {
+      Sentry.captureException(error, { extra });
+    });
+  }, []);
+
+  useEffect(() => {
+    // Hide the floating dev menu button in development
+    if (__DEV__) {
+      try {
+        const { requireOptionalNativeModule } = require('expo-modules-core');
+        const devMenuPrefs = requireOptionalNativeModule('DevMenuPreferences');
+        devMenuPrefs?.setPreferencesAsync?.({ showFloatingActionButton: false });
+      } catch (e) { console.warn('[Layout] dev menu prefs failed:', e); }
+    }
+
     // Migrate AI config on all platforms (clears stale cached API key)
-    migrateAIConfig().catch(() => {});
+    migrateAIConfig().catch((e) => console.warn('[Layout] AI config migration failed:', e));
+
+    // Initialize theme store (loads persisted color mode)
+    useThemeStore.getState().initialize();
 
     // On web, skip all native initialization and just render
     if (Platform.OS === 'web') {
@@ -35,6 +109,12 @@ export default function RootLayout() {
       try {
         const { useAuthStore } = require('../src/stores/auth-store');
         await useAuthStore.getState().initialize();
+
+        // Initialize subscription store so promo grants, entitlements, and RevenueCat are loaded
+        const { useSubscriptionStore } = require('../src/stores/subscription-store');
+        const userId = useAuthStore.getState().user?.id;
+        await useSubscriptionStore.getState().initialize(userId);
+
         // Bootstrap notification categories, re-sync reminders, and set up response listener
         await bootstrapNotifications();
       } catch (e) {
@@ -44,49 +124,79 @@ export default function RootLayout() {
         try {
           const SplashScreen = require('expo-splash-screen');
           SplashScreen.hideAsync();
-        } catch {}
+        } catch (e) { console.warn('[Layout] splash hide failed:', e); }
       }
     }
     
     try {
       const SplashScreen = require('expo-splash-screen');
       SplashScreen.preventAutoHideAsync();
-    } catch {}
+    } catch (e) { console.warn('[Layout] splash prevent hide failed:', e); }
     
     init();
   }, []);
 
   if (!ready) {
+    // Use system color scheme for the loading screen to avoid a flash
+    const isDark = colorScheme === 'dark';
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#0891B2" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#0D0D0D' : '#FAFAFA' }}>
+        <ActivityIndicator size="large" color="#C4A265" />
       </View>
     );
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <QueryClientProvider client={queryClient}>
+    <CommandPaletteProvider>
+    <CommandPaletteSheet />
+    <CoachSheetProvider>
+    <CoachPeekProvider>
+    <QuickInputProvider>
     <ToastProvider>
-      <Stack screenOptions={{ headerShown: false }}>
+      <ErrorBoundary>
+      <NetworkBanner />
+      <Stack screenOptions={{
+        headerShown: false,
+        animation: 'ios_from_right',
+        gestureEnabled: true,
+        animationMatchesGesture: true,
+        headerStyle: {
+          backgroundColor: resolvedScheme === 'dark' ? darkColors.background : lightColors.background,
+        },
+        headerTintColor: resolvedScheme === 'dark' ? darkColors.text : lightColors.text,
+        headerShadowVisible: false,
+      }}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="workout" />
         <Stack.Screen name="nutrition" />
-        <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings', presentation: 'modal' }} />
-        <Stack.Screen name="profile" options={{ headerShown: true, title: 'Profile', presentation: 'modal' }} />
-        <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications', presentation: 'modal' }} />
-        <Stack.Screen name="paywall" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="profile" options={{ headerShown: true, title: 'Profile', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="paywall" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="progress" options={{ headerShown: false }} />
-        <Stack.Screen name="health-connect" options={{ headerShown: true, title: 'Connect Health', presentation: 'modal' }} />
-        <Stack.Screen name="health-settings" options={{ headerShown: true, title: 'Health Integrations', presentation: 'modal' }} />
-        <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI Settings', presentation: 'modal' }} />
-        <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy', presentation: 'modal' }} />
-        <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal' }} />
+        <Stack.Screen name="social" options={{ headerShown: false }} />
+        <Stack.Screen name="health-connect" options={{ headerShown: true, title: 'Connect Health', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="health-settings" options={{ headerShown: true, title: 'Health Integrations', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI Settings', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy', presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service', presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <CoachSheet />
+      <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      </ErrorBoundary>
     </ToastProvider>
+    </QuickInputProvider>
+    </CoachPeekProvider>
+    </CoachSheetProvider>
+    </CommandPaletteProvider>
     </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);

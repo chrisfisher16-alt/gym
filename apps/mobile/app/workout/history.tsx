@@ -5,7 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
-import { Card, Badge } from '../../src/components/ui';
+import { useProfileStore } from '../../src/stores/profile-store';
+import { Card, Badge, EmptyState } from '../../src/components/ui';
 import { formatSessionDate, formatDuration, formatVolume, formatTime } from '../../src/lib/workout-utils';
 import type { CompletedSession } from '../../src/types/workout';
 
@@ -15,6 +16,8 @@ export default function WorkoutHistoryScreen() {
   const router = useRouter();
   const { colors, spacing, radius, typography } = useTheme();
   const { history, historyByDate } = useWorkoutHistory();
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const renderSession = ({ item }: { item: CompletedSession }): React.ReactElement => (
@@ -49,7 +52,7 @@ export default function WorkoutHistoryScreen() {
           <View style={styles.stat}>
             <Ionicons name="trending-up-outline" size={14} color={colors.textTertiary} />
             <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: 4 }]}>
-              {formatVolume(item.totalVolume)} lbs
+              {formatVolume(item.totalVolume)} {unit}
             </Text>
           </View>
           {item.prCount > 0 && (
@@ -161,13 +164,11 @@ export default function WorkoutHistoryScreen() {
           contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="time-outline" size={48} color={colors.textTertiary} />
-              <Text style={[typography.h3, { color: colors.text, marginTop: spacing.base }]}>No History</Text>
-              <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }]}>
-                Your completed workouts will appear here
-              </Text>
-            </View>
+            <EmptyState
+              icon="calendar-outline"
+              title="No Workout History"
+              description="Complete a workout to see your history"
+            />
           }
         />
       ) : (

@@ -5,6 +5,24 @@ import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { verifyAuth, AuthError } from '../_shared/auth.ts';
 import type { WeeklySummaryRequest } from '../_shared/types.ts';
 
+// ── Rate Limiting (in-memory) ───────────────────────────────────────
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+function checkSummaryRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
 // ── Main Handler ────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -13,6 +31,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { user_id, supabase } = await verifyAuth(req);
+
+    // Rate limit
+    if (!checkSummaryRateLimit(user_id)) {
+      return errorResponse('Rate limit exceeded. Please try again later.', 429);
+    }
 
     let body: WeeklySummaryRequest = {};
     try {
@@ -58,7 +81,7 @@ Deno.serve(async (req: Request) => {
           .lte('date', weekEndStr)
           .order('date', { ascending: true }),
         supabase.from('coach_preferences').select('*').eq('user_id', user_id).single(),
-        supabase.from('profiles').select('*').eq('user_id', user_id).single(),
+        supabase.from('profiles').select('*').eq('id', user_id).single(),
         supabase.from('goals').select('*').eq('user_id', user_id).eq('status', 'active').single(),
         supabase
           .from('workout_programs')

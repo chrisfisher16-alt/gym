@@ -77,7 +77,7 @@ export function DataTable<T extends Record<string, unknown>>({
           ) : (
             sortedData.map((row, i) => (
               <tr
-                key={i}
+                key={String(row['id'] ?? row['_id'] ?? i)}
                 onClick={() => onRowClick?.(row)}
                 className={onRowClick ? styles.clickable : undefined}
               >

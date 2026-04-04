@@ -7,7 +7,7 @@ import { getAIConfig, callAI, type AIMessage } from './ai-provider';
 import { useProfileStore } from '../stores/profile-store';
 import { useWorkoutStore } from '../stores/workout-store';
 import { useNutritionStore } from '../stores/nutrition-store';
-import { calculateDailyTotals } from './nutrition-utils';
+import { calculateDailyTotals, getDateString } from './nutrition-utils';
 
 // ── Storage ──────────────────────────────────────────────────────────
 
@@ -27,6 +27,8 @@ export async function getCachedBriefing(date: string): Promise<string | null> {
 
 export async function cacheBriefing(date: string, text: string): Promise<void> {
   try {
+    // Don't cache empty strings — they'd be returned as a valid cached briefing
+    if (!text || text.trim().length === 0) return;
     await AsyncStorage.setItem(getBriefingKey(date), text);
   } catch {
     // Ignore storage errors
@@ -50,8 +52,13 @@ function gatherBriefingContext(): string {
   const profileInfo = [
     profile.displayName ? `Name: ${profile.displayName}` : null,
     profile.primaryGoal ? `Goal: ${profile.primaryGoal}` : null,
+    profile.fitnessGoal ? `Fitness goal: ${profile.fitnessGoal.replace(/_/g, ' ')}` : null,
     profile.trainingExperience ? `Experience: ${profile.trainingExperience}` : null,
     profile.trainingDaysPerWeek ? `Training days/week: ${profile.trainingDaysPerWeek}` : null,
+    profile.consistencyLevel ? `Consistency: ${profile.consistencyLevel.replace(/_/g, ' ')}` : null,
+    profile.sessionDuration ? `Session length: ${profile.sessionDuration.replace(/_/g, ' ')}` : null,
+    profile.gymType ? `Gym: ${profile.gymType.replace(/_/g, ' ')}` : null,
+    profile.fitnessEquipment.length > 0 ? `Equipment: ${profile.fitnessEquipment.join(', ')}` : null,
   ]
     .filter(Boolean)
     .join(', ');
@@ -76,20 +83,36 @@ function gatherBriefingContext(): string {
     : 'No recent workouts';
 
   // Active program + today's workout
+  // Use the same algorithm as useWorkoutPrograms.getTodayWorkout:
+  // find the first uncompleted lifting day this week.
   const activeProgram = workoutState.programs.find((p) => p.isActive);
   let todayWorkoutInfo = 'No active program';
   if (activeProgram) {
-    const dayOfWeekNum = now.getDay();
-    const dayNumber = ((dayOfWeekNum === 0 ? 7 : dayOfWeekNum) % activeProgram.days.length) + 1;
-    const todayDay = activeProgram.days.find((d) => d.dayNumber === dayNumber) ?? activeProgram.days[0];
+    const dayOfWeek = now.getDay();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const completedDayIds = new Set<string>();
+    for (const session of workoutState.history) {
+      if (session.programId !== activeProgram.id || !session.dayId) continue;
+      if (new Date(session.completedAt) < startOfWeek) break;
+      completedDayIds.add(session.dayId);
+    }
+
+    const liftingDays = activeProgram.days.filter((d) => d.dayType === 'lifting');
+    const todayDay = liftingDays.find((d) => !completedDayIds.has(d.id));
+
     if (todayDay) {
       todayWorkoutInfo = `Today's workout: ${todayDay.name} (${todayDay.exercises.length} exercises) from program "${activeProgram.name}"`;
+    } else if (liftingDays.length > 0) {
+      todayWorkoutInfo = `All lifting days completed this week in "${activeProgram.name}" — rest or extras`;
     }
   }
 
   // Nutrition
   const nutritionState = useNutritionStore.getState();
-  const todayKey = now.toISOString().split('T')[0];
+  const todayKey = getDateString(now);
   const todayLog = nutritionState.dailyLogs[todayKey];
   const todayMeals = todayLog?.meals ?? [];
   const consumed = calculateDailyTotals(todayMeals);
@@ -113,7 +136,7 @@ function gatherBriefingContext(): string {
 // ── Briefing Generation ──────────────────────────────────────────────
 
 const BRIEFING_SYSTEM_PROMPT =
-  'You are a fitness coach creating a daily briefing. Be concise (3-4 sentences). Include: what workout is planned today (if any), nutrition focus, and a motivational note based on recent progress. Be encouraging but direct. Do not use markdown formatting — write plain text only. You are EXCLUSIVELY a health and fitness coach — only discuss exercise, workouts, nutrition, and wellness topics.';
+  'You are a fitness coach writing a brief daily check-in. STRICT LIMIT: 80 words maximum — no exceptions. Cover three areas in 1-2 sentences each: (1) today\'s workout plan, (2) nutrition tip, (3) quick motivation based on recent progress. Write plain text only — no markdown, no headers, no bullet points. Be direct and personal. You are EXCLUSIVELY a health and fitness coach — only discuss exercise, workouts, nutrition, and wellness topics.';
 
 const FALLBACK_MESSAGES = [
   "New day, new opportunity. Stay consistent with your training and nutrition — that's where real results come from. You've got this!",
@@ -128,7 +151,7 @@ function getRandomFallback(): string {
 
 export async function generateDailyBriefing(): Promise<string> {
   // Check cache first
-  const today = new Date().toISOString().split('T')[0];
+  const today = getDateString();
   const cached = await getCachedBriefing(today);
   if (cached) return cached;
 
@@ -149,11 +172,14 @@ export async function generateDailyBriefing(): Promise<string> {
       { role: 'user', content: `Here is my current context for today's briefing:\n\n${context}` },
     ];
 
-    const response = await callAI(messages, config);
+    const response = await callAI(messages, config, { max_tokens: 200 });
     const briefing = response.content.trim();
 
-    await cacheBriefing(today, briefing);
-    return briefing;
+    // Only cache non-empty briefings
+    if (briefing.length > 0) {
+      await cacheBriefing(today, briefing);
+    }
+    return briefing || getRandomFallback();
   } catch (error) {
     console.warn('Failed to generate daily briefing:', error);
     return getRandomFallback();

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -69,7 +70,7 @@ export default function SupplementsScreen() {
   };
 
   const handleRemove = (id: string, name: string) => {
-    Alert.alert('Remove Supplement', `Stop tracking "${name}"?`, [
+    crossPlatformAlert('Remove Supplement', `Stop tracking "${name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => removeUserSupplement(id) },
     ]);

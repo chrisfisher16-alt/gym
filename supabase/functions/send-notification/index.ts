@@ -21,7 +21,7 @@ Deno.serve(async (req: Request) => {
   if (corsResp) return corsResp;
 
   try {
-    const { supabase } = await verifyAuth(req);
+    const { user_id: caller_id, supabaseAdmin } = await verifyAuth(req);
 
     const body: SendNotificationRequest = await req.json();
     const { user_id, title, body: notifBody, data } = body;
@@ -30,8 +30,13 @@ Deno.serve(async (req: Request) => {
       return errorResponse('user_id, title, and body are required', 400);
     }
 
-    // Look up push token from notification preferences
-    const { data: prefRow, error: prefError } = await supabase
+    // Callers can only send notifications to themselves
+    if (user_id !== caller_id) {
+      return errorResponse('Forbidden: you can only send notifications to yourself', 403);
+    }
+
+    // Look up push token from notification preferences (admin bypasses RLS)
+    const { data: prefRow, error: prefError } = await supabaseAdmin
       .from('notification_preferences')
       .select('push_token, quiet_hours_start, quiet_hours_end')
       .eq('user_id', user_id)
@@ -62,7 +67,7 @@ Deno.serve(async (req: Request) => {
 
       if (isQuietTime) {
         // Log that we skipped due to quiet hours
-        await supabase.from('notification_events').insert({
+        await supabaseAdmin.from('notification_events').insert({
           user_id,
           type: data?.type ?? 'unknown',
           channel: 'push',
@@ -99,7 +104,7 @@ Deno.serve(async (req: Request) => {
     const pushResult = await pushResponse.json();
 
     // Log the notification event
-    await supabase.from('notification_events').insert({
+    await supabaseAdmin.from('notification_events').insert({
       user_id,
       type: data?.type ?? 'unknown',
       channel: 'push',

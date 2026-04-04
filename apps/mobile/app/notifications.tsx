@@ -9,8 +9,8 @@ import {
   TouchableOpacity,
   Platform,
   Linking,
-  Alert,
 } from 'react-native';
+import { crossPlatformAlert } from '../src/lib/cross-platform-alert';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
 import { Card, ScreenContainer, Divider, Button } from '../src/components/ui';
@@ -61,7 +61,7 @@ export default function NotificationsScreen() {
     setRequesting(false);
 
     if (status === 'denied') {
-      Alert.alert(
+      crossPlatformAlert(
         'Notifications Disabled',
         'To enable notifications, go to your device Settings and allow notifications for this app.',
         [
@@ -532,7 +532,7 @@ function ToggleRow({
         value={value}
         onValueChange={onToggle}
         trackColor={{ true: colors.primary, false: colors.border }}
-        thumbColor="#FFFFFF"
+        thumbColor={colors.textOnPrimary}
       />
     </View>
   );
@@ -575,7 +575,7 @@ function MealToggleRow({
             value={enabled}
             onValueChange={onToggle}
             trackColor={{ true: colors.primary, false: colors.border }}
-            thumbColor="#FFFFFF"
+            thumbColor={colors.textOnPrimary}
             style={{ marginLeft: sp.sm }}
           />
         </View>
@@ -689,8 +689,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dayButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

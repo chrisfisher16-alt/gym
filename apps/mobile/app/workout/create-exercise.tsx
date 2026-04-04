@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Alert,
 } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,7 +23,7 @@ const EQUIPMENT_LIST: Equipment[] = ['barbell', 'dumbbell', 'machine', 'cable', 
 export default function CreateExerciseScreen() {
   const router = useRouter();
   const { colors, spacing, radius, typography } = useTheme();
-  const { createCustomExercise } = useExerciseLibrary();
+  const { createCustomExercise, allExercises } = useExerciseLibrary();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<MuscleGroup>('chest');
@@ -34,7 +34,12 @@ export default function CreateExerciseScreen() {
 
   const handleSave = () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter an exercise name');
+      crossPlatformAlert('Error', 'Please enter an exercise name');
+      return;
+    }
+
+    if (allExercises.some((e) => e.name.toLowerCase().trim() === name.toLowerCase().trim())) {
+      crossPlatformAlert('Duplicate Name', 'An exercise with this name already exists.');
       return;
     }
 

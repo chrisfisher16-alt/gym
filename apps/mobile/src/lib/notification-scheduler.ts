@@ -19,12 +19,20 @@ import type {
 
 // ── Lazy-load native module (crashes on web) ──────────────────────
 
-let Notifications: typeof import('expo-notifications') | null = null;
+let _Notifications: typeof import('expo-notifications') | null = null;
+let _notificationsLoaded = false;
 
-if (Platform.OS !== 'web') {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {}
+function getNotifications() {
+  if (!_notificationsLoaded && Platform.OS !== 'web') {
+    _notificationsLoaded = true;
+    try {
+      _Notifications = require('expo-notifications');
+    } catch (e) {
+      console.warn('expo-notifications not available:', e);
+      _Notifications = null;
+    }
+  }
+  return _Notifications;
 }
 
 // ── Quiet-hours gate ─────────────────────────────────────────────
@@ -54,6 +62,7 @@ export async function scheduleWorkoutReminder(
   time: string,
   days: DayOfWeek[],
 ): Promise<string[]> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return [];
 
   const { hour, minute } = parseTime(time);
@@ -104,6 +113,7 @@ export async function scheduleMealReminder(
   mealType: MealType,
   time: string,
 ): Promise<string[]> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return [];
 
   const { hour, minute } = parseTime(time);
@@ -141,6 +151,7 @@ export async function scheduleHydrationReminder(
   quietStart?: string,
   quietEnd?: string,
 ): Promise<string[]> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return [];
 
   const ids: string[] = [];
@@ -186,6 +197,7 @@ export async function scheduleSupplementReminder(
   supplementName: string,
   time: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return '';
 
   const { hour, minute } = parseTime(time);
@@ -210,6 +222,7 @@ export async function scheduleWeeklyCheckin(
   dayOfWeek: DayOfWeek,
   time: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return '';
 
   const { hour, minute } = parseTime(time);
@@ -234,6 +247,7 @@ export async function scheduleWeeklyCheckin(
 export async function scheduleDailyBriefing(
   time: string,
 ): Promise<string> {
+  const Notifications = getNotifications();
   if (Platform.OS === 'web' || !Notifications) return '';
 
   const { hour, minute } = parseTime(time);
@@ -256,6 +270,86 @@ export async function scheduleDailyBriefing(
 
 export async function cancelAllReminders(): Promise<void> {
   await cancelAllNotifications();
+}
+
+// ── Smart Notifications (Pattern-Based) ──────────────────────────
+// Detects behavioural patterns from workout / nutrition history and
+// schedules date-based local notifications for the next 7 days.
+// All computation is local — no API calls.
+
+import { detectPatterns } from './pattern-detector';
+import type { ScheduledNotification } from './pattern-detector';
+
+const SMART_NOTIFICATION_TYPE = 'smart_pattern';
+
+/**
+ * Clear all previously-scheduled smart (pattern-based) notifications.
+ */
+export async function clearSmartNotifications(): Promise<void> {
+  await cancelNotificationsByType(SMART_NOTIFICATION_TYPE);
+}
+
+/**
+ * Analyse workout / nutrition history, detect patterns, and schedule
+ * smart local notifications for the next 7 days.
+ *
+ * Safe to call repeatedly — clears old smart notifications first.
+ */
+export async function scheduleSmartNotifications(): Promise<void> {
+  const Notifications = getNotifications();
+  if (Platform.OS === 'web' || !Notifications) return;
+
+  // Check permissions & user preference
+  const { useNotificationStore } = require('../stores/notification-store');
+  const prefs: NotificationPreferences =
+    useNotificationStore.getState().preferences;
+
+  if (prefs.permissionStatus !== 'granted') return;
+
+  // Grab store data
+  const { useWorkoutStore } = require('../stores/workout-store');
+  const { useNutritionStore } = require('../stores/nutrition-store');
+  const { useProfileStore } = require('../stores/profile-store');
+
+  const history = useWorkoutStore.getState().history;
+  const dailyLogs = useNutritionStore.getState().dailyLogs;
+  const targets = useNutritionStore.getState().targets;
+  const profile = useProfileStore.getState().profile;
+
+  // Clear previous smart notifications
+  await clearSmartNotifications();
+
+  // Detect patterns
+  const notifications: ScheduledNotification[] = detectPatterns(
+    history,
+    dailyLogs,
+    targets,
+    profile,
+  );
+
+  const now = new Date();
+
+  for (const notif of notifications) {
+    // Skip notifications in the past
+    if (notif.triggerDate <= now) continue;
+
+    // Respect quiet hours
+    const triggerHour = notif.triggerDate.getHours();
+    const triggerMinute = notif.triggerDate.getMinutes();
+    const triggerTimeStr = `${String(triggerHour).padStart(2, '0')}:${String(triggerMinute).padStart(2, '0')}`;
+    if (shouldSuppressTime(triggerTimeStr, prefs)) continue;
+
+    await scheduleLocalNotification(
+      notif.title,
+      notif.body,
+      {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: notif.triggerDate,
+      },
+      { type: SMART_NOTIFICATION_TYPE, category: notif.category },
+      notif.category,
+    );
+  }
 }
 
 // ── Sync From Preferences ─────────────────────────────────────────

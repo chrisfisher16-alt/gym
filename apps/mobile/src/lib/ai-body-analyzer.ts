@@ -1,5 +1,4 @@
-import { Platform } from 'react-native';
-import { getAIConfig, getProviderDefaults } from './ai-provider';
+import { getAIConfig, callAI, type AIMessage } from './ai-provider';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -19,16 +18,7 @@ export interface BodyEstimationResult {
   rightThighCm: number;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
-const CLAUDE_WEB_PROXY_URL = 'http://localhost:3001/api/anthropic';
-
-function getClaudeUrl(configBaseUrl: string, defaultBaseUrl: string): string {
-  if (Platform.OS === 'web') {
-    return CLAUDE_WEB_PROXY_URL;
-  }
-  return configBaseUrl || defaultBaseUrl;
-}
+// ── System Prompt ────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are a body measurement estimation AI. Given a person's height, weight, gender, and waist measurement, estimate their other body measurements using known anthropometric proportions and correlations.
 
@@ -50,9 +40,6 @@ export async function estimateBodyMeasurements(
   params: BodyEstimationParams,
 ): Promise<BodyEstimationResult> {
   const config = await getAIConfig();
-  const defaults = getProviderDefaults('claude');
-  const baseUrl = getClaudeUrl(config.baseUrl || '', defaults.baseUrl);
-  const model = config.model || defaults.model;
 
   const heightFt = Math.floor(params.heightCm / 30.48);
   const heightIn = Math.round((params.heightCm / 2.54) % 12);
@@ -64,33 +51,14 @@ export async function estimateBodyMeasurements(
 - Gender: ${params.gender || 'not specified'}
 - Waist: ${params.waistCm.toFixed(1)} cm`;
 
-  const response = await fetch(baseUrl, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': config.apiKey ?? '',
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-      max_tokens: 512,
-    }),
-  });
+  const messages: AIMessage[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: userMessage },
+  ];
 
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
+  const response = await callAI(messages, config);
 
-  const data = await response.json();
-  const textBlock = data.content?.find((b: { type: string }) => b.type === 'text');
-
-  if (!textBlock?.text) {
-    throw new Error('No text in AI response');
-  }
-
-  let cleaned = textBlock.text.trim();
+  let cleaned = response.content.trim();
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
   }

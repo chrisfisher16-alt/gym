@@ -3,11 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ACHIEVEMENTS, calculateStreak, type AchievementData } from '../lib/achievements';
 import { useWorkoutStore } from './workout-store';
 import { useNutritionStore } from './nutrition-store';
+import { getDateString } from '../lib/nutrition-utils';
 import { useMeasurementsStore } from './measurements-store';
 
 // ── Storage Keys ───────────────────────────────────────────────────
 
 const STORAGE_KEY = '@achievements/earned';
+const XP_STORAGE_KEY = '@achievements/xp';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -16,18 +18,44 @@ export interface EarnedAchievement {
   dateEarned: string; // ISO
 }
 
+export interface XPHistoryEntry {
+  date: string; // ISO
+  amount: number;
+  source: string;
+}
+
+interface XPState {
+  xp: number;
+  level: number;
+  xpHistory: XPHistoryEntry[];
+}
+
 interface AchievementsState {
   earned: EarnedAchievement[];
   newlyEarned: string[]; // IDs of achievements earned in the latest check
   isInitialized: boolean;
 
+  // XP state
+  xp: number;
+  level: number;
+  xpHistory: XPHistoryEntry[];
+
   // Actions
   initialize: () => Promise<void>;
   checkAchievements: () => string[]; // returns newly earned IDs
   clearNewlyEarned: () => void;
+
+  // XP actions
+  awardXP: (amount: number, source: string) => void;
+  getXPToNextLevel: () => number;
+  reset: () => Promise<void>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+function calculateLevel(totalXP: number): number {
+  return Math.floor(totalXP / 1000) + 1;
+}
 
 function gatherAchievementData(): AchievementData {
   const workoutState = useWorkoutStore.getState();
@@ -36,8 +64,8 @@ function gatherAchievementData(): AchievementData {
 
   const history = workoutState.history;
   const totalWorkouts = history.length;
-  const totalPRs = history.reduce((sum, s) => sum + s.prCount, 0);
-  const totalVolumeKg = history.reduce((sum, s) => sum + s.totalVolume, 0);
+  const totalPRs = history.reduce((sum, s) => sum + (s.prCount ?? 0), 0);
+  const totalVolumeKg = history.reduce((sum, s) => sum + (s.totalVolume ?? 0), 0);
   const totalVolumeLbs = totalVolumeKg * 2.20462;
   const currentStreak = calculateStreak(history);
 
@@ -56,17 +84,18 @@ function gatherAchievementData(): AchievementData {
   const sortedMealDates = mealDates.sort().reverse();
   let consecutiveMealDays = 0;
   if (sortedMealDates.length > 0) {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const today = getDateString();
+    const yd = new Date(Date.now() - 86400000);
+    const yesterday = getDateString(yd);
     if (sortedMealDates[0] === today || sortedMealDates[0] === yesterday) {
       consecutiveMealDays = 1;
-      let current = new Date(sortedMealDates[0]);
       for (let i = 1; i < sortedMealDates.length; i++) {
-        const prev = new Date(sortedMealDates[i]);
-        const diff = (current.getTime() - prev.getTime()) / 86400000;
-        if (diff === 1) {
+        const currentDate = new Date(sortedMealDates[i - 1] + 'T12:00:00');
+        const prevDate = new Date(sortedMealDates[i] + 'T12:00:00');
+        const expectedPrev = new Date(currentDate);
+        expectedPrev.setDate(expectedPrev.getDate() - 1);
+        if (getDateString(prevDate) === getDateString(expectedPrev)) {
           consecutiveMealDays++;
-          current = prev;
         } else {
           break;
         }
@@ -83,7 +112,9 @@ function gatherAchievementData(): AchievementData {
   if (activeProgram) {
     const now = new Date();
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+    const dayOfWeek = now.getDay();
+    const dayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    weekStart.setDate(now.getDate() - dayOffset); // Monday
     weekStart.setHours(0, 0, 0, 0);
 
     const thisWeekWorkouts = history.filter(
@@ -109,6 +140,29 @@ function gatherAchievementData(): AchievementData {
   };
 }
 
+// ── XP Persistence Helpers ────────────────────────────────────────
+
+function persistXP(state: XPState): void {
+  AsyncStorage.setItem(XP_STORAGE_KEY, JSON.stringify(state)).catch((e) => console.error('XP persist failed:', e));
+}
+
+async function loadXP(): Promise<XPState> {
+  try {
+    const stored = await AsyncStorage.getItem(XP_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as XPState;
+      return {
+        xp: parsed.xp ?? 0,
+        level: parsed.level ?? 1,
+        xpHistory: parsed.xpHistory ?? [],
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to load XP data:', error);
+  }
+  return { xp: 0, level: 1, xpHistory: [] };
+}
+
 // ── Store ──────────────────────────────────────────────────────────
 
 export const useAchievementsStore = create<AchievementsState>((set, get) => ({
@@ -116,11 +170,25 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
   newlyEarned: [],
   isInitialized: false,
 
+  // XP state
+  xp: 0,
+  level: 1,
+  xpHistory: [],
+
   initialize: async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      const [stored, xpState] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEY),
+        loadXP(),
+      ]);
       const earned: EarnedAchievement[] = stored ? JSON.parse(stored) : [];
-      set({ earned, isInitialized: true });
+      set({
+        earned,
+        isInitialized: true,
+        xp: xpState.xp,
+        level: xpState.level,
+        xpHistory: xpState.xpHistory,
+      });
     } catch (error) {
       console.warn('Failed to initialize achievements store:', error);
       set({ earned: [], isInitialized: true });
@@ -140,8 +208,8 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
         if (achievement.condition(data)) {
           newlyEarned.push(achievement.id);
         }
-      } catch {
-        // Skip failed condition checks
+      } catch (err) {
+        console.warn('[Achievements] Condition check failed for', achievement.id, err);
       }
     }
 
@@ -153,7 +221,7 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
       }));
 
       const earned = [...state.earned, ...newEarnedEntries];
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(earned));
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(earned)).catch((err) => console.error('Achievement persist failed:', err));
       set({ earned, newlyEarned });
     }
 
@@ -162,5 +230,41 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
 
   clearNewlyEarned: () => {
     set({ newlyEarned: [] });
+  },
+
+  awardXP: (amount: number, source: string) => {
+    const state = get();
+    const newXP = state.xp + amount;
+    const newLevel = calculateLevel(newXP);
+
+    // Keep last 100 history entries to avoid unbounded growth
+    const entry: XPHistoryEntry = {
+      date: new Date().toISOString(),
+      amount,
+      source,
+    };
+    const xpHistory = [...state.xpHistory, entry].slice(-100);
+
+    set({
+      xp: newXP,
+      level: newLevel,
+      xpHistory,
+    });
+
+    persistXP({ xp: newXP, level: newLevel, xpHistory });
+  },
+
+  getXPToNextLevel: () => {
+    const { xp } = get();
+    const xpInCurrentLevel = xp % 1000;
+    return 1000 - xpInCurrentLevel;
+  },
+
+  reset: async () => {
+    set({ earned: [], newlyEarned: [], isInitialized: false, xp: 0, level: 1, xpHistory: [] });
+    await Promise.all([
+      AsyncStorage.removeItem(STORAGE_KEY),
+      AsyncStorage.removeItem(XP_STORAGE_KEY),
+    ]).catch((e) => console.warn('[AchievementsStore] reset storage failed:', e));
   },
 }));

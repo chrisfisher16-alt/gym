@@ -42,7 +42,7 @@ export function WorkoutPlanCard({ data }: WorkoutPlanCardProps) {
 
           return (
             <TouchableOpacity
-              key={index}
+              key={`day-${dayNum}-${index}`}
               onPress={() => setExpandedDay(isExpanded ? null : index)}
               activeOpacity={0.7}
             >

@@ -55,13 +55,13 @@ export default function HealthConnectScreen() {
     const granted = await requestPermissions();
     setConnecting(false);
 
-    if (granted.length > 0) {
-      router.back();
-    }
+    // Always navigate to tabs — this screen is reached via replace() from
+    // onboarding so there is no previous screen to go back to.
+    router.replace('/(tabs)');
   };
 
   const handleSkip = () => {
-    router.back();
+    router.replace('/(tabs)');
   };
 
   return (

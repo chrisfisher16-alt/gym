@@ -1,3 +1,5 @@
+export * from './compete';
+
 import { z } from 'zod';
 
 // ── Shared primitives ────────────────────────────────────────────────
@@ -8,6 +10,17 @@ const unitPreferenceSchema = z.enum(['metric', 'imperial']);
 const productModeSchema = z.enum(['workout_coach', 'nutrition_coach', 'full_health_coach']);
 const coachToneSchema = z.enum(['direct', 'balanced', 'encouraging']);
 const setTypeSchema = z.enum(['warmup', 'working', 'drop', 'failure']);
+
+export const trackingModeSchema = z.enum([
+  'weight_reps', 'bodyweight_reps', 'duration',
+  'duration_distance', 'duration_level', 'distance_weight', 'reps_only',
+]);
+
+export const weightContextSchema = z.enum([
+  'barbell', 'dumbbell_single', 'dumbbell_pair', 'dumbbell_each',
+  'cable_stack', 'machine_stack', 'machine_plates', 'kettlebell',
+  'band', 'bodyweight_added', 'sled', 'vest', 'body_only', 'custom',
+]);
 const mealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 const mealSourceSchema = z.enum(['manual', 'text_parse', 'photo', 'barcode', 'quick_add', 'saved_meal']);
 
@@ -90,6 +103,14 @@ export const setLogSchema = z.object({
   reps: z.number().int().min(0).optional(),
   duration_seconds: z.number().int().min(0).optional(),
   rpe: z.number().min(1).max(10).optional(),
+  distance: z.number().min(0).optional(),
+  distance_unit: z.enum(['miles', 'km', 'meters']).optional(),
+  incline: z.number().min(0).max(40).optional(),
+  speed: z.number().min(0).max(50).optional(),
+  speed_unit: z.enum(['mph', 'kph']).optional(),
+  level: z.number().int().min(1).max(25).optional(),
+  calories: z.number().int().min(0).optional(),
+  resistance: z.number().int().min(1).max(10).optional(),
   is_pr: z.boolean().default(false),
   notes: z.string().max(500).optional(),
 });

@@ -1,16 +1,19 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Platform, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../src/theme';
-import { Card, ScreenContainer, ProgressRing } from '../../src/components/ui';
+import { Card, ScreenContainer, ProgressRing, EmptyState, ExpandableCard, Sparkline, QuickActionSheet, SmartHeader } from '../../src/components/ui';
+import { useQuickActions } from '../../src/hooks/useQuickActions';
 import { useAuthStore } from '../../src/stores/auth-store';
 import { useProfileStore } from '../../src/stores/profile-store';
 import { useWorkoutStore } from '../../src/stores/workout-store';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { useNutritionDashboard } from '../../src/hooks/useNutritionDashboard';
+import { useNutritionStore } from '../../src/stores/nutrition-store';
+import { calculateDailyTotals } from '../../src/lib/nutrition-utils';
 import { useWorkoutPrograms } from '../../src/hooks/useWorkoutPrograms';
 import { useSupplements } from '../../src/hooks/useSupplements';
 import { useEntitlement } from '../../src/hooks/useEntitlement';
@@ -21,7 +24,14 @@ import {
 } from '../../src/lib/weekly-summary';
 import { calculateStreak } from '../../src/lib/achievements';
 import { isDemoMode, DEMO_STREAK, getDemoTodayNutrition, DEMO_NUTRITION_TARGETS } from '../../src/lib/demo-mode';
-import { CoachFAB } from '../../src/components/CoachFAB';
+import { QuickLogMealSheet } from '../../src/components/QuickLogMealSheet';
+import { QuickAddWaterSheet } from '../../src/components/QuickAddWaterSheet';
+import { generateInsights, type InsightContext as InsightCtx } from '../../src/lib/insight-engine';
+import { InsightBadge } from '../../src/components/ui';
+import { useCoachStore } from '../../src/stores/coach-store';
+import { useFriendsStore } from '../../src/stores/friends-store';
+import { useCoachPeekTrigger } from '../../src/hooks/useCoachPeekTrigger';
+import { TodayTabSkeleton } from '../../src/components/ui/SkeletonLayouts';
 
 // ── Types & Constants ─────────────────────────────────────────────────
 interface AIInsight {
@@ -36,34 +46,104 @@ const fmt = (n: number) => Math.round(n).toLocaleString();
 
 // ── Component ─────────────────────────────────────────────────────────
 export default function TodayTab() {
+  useCoachPeekTrigger();
   const { colors, spacing, typography, radius, dark } = useTheme();
   const profile = useAuthStore((s) => s.profile);
   const authLoading = useAuthStore((s) => s.isLoading);
   const isLoading = Platform.OS === 'web' ? false : authLoading;
   const profileStore = useProfileStore((s) => s.profile);
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
   const personalRecords = useWorkoutStore((s) => s.personalRecords);
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
   const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
   const activeSession = useWorkoutStore((s) => s.activeSession);
+  const isWorkoutInitialized = useWorkoutStore((s) => s.isInitialized);
+  const initializeWorkout = useWorkoutStore((s) => s.initialize);
   const { tier } = useEntitlement();
 
   const { recentWorkouts, totalWorkouts, weeklyVolume, history } = useWorkoutHistory();
-  const { targets, consumed, waterIntake } = useNutritionDashboard();
+  const { targets, consumed, waterIntake, meals: todayMeals } = useNutritionDashboard();
   const { activeProgram, getTodayWorkout, programs } = useWorkoutPrograms();
   const { activeSupplements, isSupplementTaken, logSupplement } = useSupplements();
+
+  // Ensure workout store is initialized so programs / activeProgram are available
+  useEffect(() => {
+    if (!isWorkoutInitialized) {
+      initializeWorkout();
+    }
+  }, [isWorkoutInitialized, initializeWorkout]);
 
   const demo = isDemoMode();
   const demoNutrition = useMemo(() => (demo ? getDemoTodayNutrition() : null), [demo]);
   const showWorkout = tier !== 'nutrition_coach';
   const showNutrition = tier !== 'workout_coach';
 
-  // ── Date & Greeting ───────────────────────────────────────────────
-  const now = new Date();
+  // Sheet states
+  const [mealSheetVisible, setMealSheetVisible] = useState(false);
+  const [waterSheetVisible, setWaterSheetVisible] = useState(false);
+
+  // Quick Actions
+  const { show: showQuickActions, sheetProps: quickActionSheetProps } = useQuickActions();
+
+  // Workout status for contextual header
+  const todayWorkoutStatus = useWorkoutStore((s) => s.todayWorkoutStatus);
+
+  // 7-day sparkline data from nutrition store dailyLogs
+  const dailyLogs = useNutritionStore((s) => s.dailyLogs);
+  const sparklineData = useMemo(() => {
+    const days: string[] = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      days.push(d.toISOString().split('T')[0]);
+    }
+    const calories: number[] = [];
+    const protein: number[] = [];
+    const water: number[] = [];
+    for (const day of days) {
+      const log = dailyLogs[day];
+      if (log) {
+        const totals = calculateDailyTotals(log.meals);
+        calories.push(totals.calories);
+        protein.push(totals.protein_g);
+        water.push(log.waterIntake_oz);
+      } else {
+        calories.push(0);
+        protein.push(0);
+        water.push(0);
+      }
+    }
+    return { calories, protein, water };
+  }, [dailyLogs]);
+
+  // ── Date & Greeting (reactive to focus / time changes) ────────────
+  const [now, setNow] = useState(() => new Date());
+  // Re-evaluate time when screen gains focus or every 60s
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  // Also refresh on navigation focus
+  const lastFocusRef = useRef(Date.now());
+  useFocusEffect(
+    useCallback(() => {
+      const elapsed = Date.now() - lastFocusRef.current;
+      if (elapsed > 60_000) {
+        setNow(new Date());
+      }
+      lastFocusRef.current = Date.now();
+    }, [])
+  );
   const hour = now.getHours();
   const timeOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
   const greeting = timeOfDay === 'morning' ? 'Good morning' : timeOfDay === 'afternoon' ? 'Good afternoon' : 'Good evening';
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const displayName = profile?.display_name?.split(' ')[0] || profileStore?.displayName?.split(' ')[0] || 'there';
+  const email = useAuthStore((s) => s.session?.user?.email);
+  const displayName = profile?.display_name?.split(' ')[0]
+    || profileStore?.displayName?.split(' ')[0]
+    || (email ? email.split('@')[0] : null)
+    || 'there';
 
   // ── Nutrition ─────────────────────────────────────────────────────
   const dC = demo && demoNutrition ? demoNutrition.consumed : consumed;
@@ -88,21 +168,30 @@ export default function TodayTab() {
   // ── Daily Briefing ────────────────────────────────────────────────
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingExpanded, setBriefingExpanded] = useState(false);
+  const [nutritionExpanded, setNutritionExpanded] = useState(true);
 
   const loadBriefing = useCallback(async (force = false) => {
     setBriefingLoading(true);
     try {
       if (force) {
         const today = new Date().toISOString().split('T')[0];
-        await cacheBriefing(today, '');
         await AsyncStorage.removeItem(`@briefing/${today}`);
       }
       setBriefing(await generateDailyBriefing());
-    } catch { setBriefing(null); }
+    } catch (err) { console.warn('[Home] Daily briefing generation failed:', err); setBriefing(null); }
     finally { setBriefingLoading(false); }
   }, []);
 
   useEffect(() => { loadBriefing(); }, [loadBriefing]);
+
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadBriefing(true);
+    setRefreshing(false);
+  }, [loadBriefing]);
 
   const fallback = timeOfDay === 'morning'
     ? 'Start your day strong. Check your workout plan and hit your nutrition targets.'
@@ -118,13 +207,34 @@ export default function TodayTab() {
     return history.find((w) => new Date(w.completedAt).toISOString().split('T')[0] === ts) ?? null;
   }, [demo, history]);
 
-  // ── Persistent Dismissed Insights ─────────────────────────────────
+  // ── Persistent Dismissed Insights (date-keyed, resets daily) ───────
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   useEffect(() => {
-    AsyncStorage.getItem(DISMISSED_KEY).then((v) => { if (v) setDismissed(new Set(JSON.parse(v))); }).catch(() => {});
+    const todayStr = new Date().toISOString().split('T')[0];
+    AsyncStorage.getItem(DISMISSED_KEY).then((v) => {
+      if (v) {
+        try {
+          const stored = JSON.parse(v);
+          if (stored && stored.date === todayStr && Array.isArray(stored.dismissed)) {
+            setDismissed(new Set(stored.dismissed));
+          } else {
+            // New day — reset
+            setDismissed(new Set());
+            AsyncStorage.removeItem(DISMISSED_KEY).catch((e) => console.warn('[Home] clear dismissed failed:', e));
+          }
+        } catch {
+          setDismissed(new Set());
+        }
+      }
+    }).catch((e) => console.warn('[Home] load dismissed state failed:', e));
   }, []);
   const dismiss = useCallback((id: string) => {
-    setDismissed((p) => { const n = new Set(p).add(id); AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify(Array.from(n))).catch(() => {}); return n; });
+    setDismissed((p) => {
+      const n = new Set(p).add(id);
+      const todayStr = new Date().toISOString().split('T')[0];
+      AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify({ date: todayStr, dismissed: Array.from(n) })).catch((e) => console.warn('[Home] persist dismissed failed:', e));
+      return n;
+    });
   }, []);
 
   // ── AI Insights ───────────────────────────────────────────────────
@@ -158,6 +268,30 @@ export default function TodayTab() {
     return items.filter((i) => !dismissed.has(i.id)).slice(0, 2);
   }, [demo, proP, streak, totalWorkouts, history, watP, hour, dismissed, colors, showNutrition]);
 
+  // ── Smart Inline Insights (rule-based) ──────────────────────────
+  const setPrefilledContext = useCoachStore((s) => s.setPrefilledContext);
+  const friendCount = useFriendsStore((s) => s.friends.length);
+  const smartInsights = useMemo(() => {
+    const ctx: InsightCtx = {
+      caloriesConsumed: dC.calories,
+      caloriesTarget: dT.calories,
+      proteinConsumed: dC.protein_g,
+      proteinTarget: dT.protein_g,
+      waterConsumed: dW,
+      waterTarget: dT.water_oz,
+      timeOfDay: hour,
+      workoutsThisWeek,
+      currentStreak: streak,
+      lastWorkoutDate: history[0]?.completedAt?.split('T')[0],
+    };
+    return generateInsights(ctx).slice(0, 2);
+  }, [dC, dT, dW, hour, workoutsThisWeek, streak, history]);
+
+  const handleAskInsight = useCallback((prompt: string) => {
+    setPrefilledContext('general', prompt);
+    router.push('/(tabs)/coach');
+  }, [setPrefilledContext, router]);
+
   // ── Weekly Check-In ───────────────────────────────────────────────
   const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
   const [weekLoad, setWeekLoad] = useState(false);
@@ -173,7 +307,7 @@ export default function TodayTab() {
       if (c) return;
       setWeekHidden(false); setWeekLoad(true);
       try { const s = await generateWeeklySummary(); if (!c) setWeekly(s); }
-      catch {} finally { if (!c) setWeekLoad(false); }
+      catch (err) { console.warn('[Home] Weekly summary generation failed:', err); } finally { if (!c) setWeekLoad(false); }
     })();
     return () => { c = true; };
   }, [isWeekDay, weekStart]);
@@ -181,16 +315,6 @@ export default function TodayTab() {
   const dismissWeek = useCallback(async () => { setWeekHidden(true); await dismissWeeklySummary(weekStart); }, [weekStart]);
 
   // ── Quick Actions (product-mode aware) ────────────────────────────
-  const actions = useMemo(() => {
-    type QA = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; color: string; s: 'w'|'n'|'b' };
-    const all: QA[] = [
-      { icon: 'barbell-outline', label: 'Workout', route: '/(tabs)/workout', color: colors.primary, s: 'w' },
-      { icon: 'restaurant-outline', label: 'Log Meal', route: '/nutrition/log-meal', color: colors.calories, s: 'n' },
-      { icon: 'chatbubble-outline', label: 'Coach', route: '/(tabs)/coach', color: colors.success, s: 'b' },
-      { icon: 'stats-chart-outline', label: 'Progress', route: '/(tabs)/progress', color: colors.info, s: 'b' },
-    ];
-    return all.filter((a) => (a.s === 'w' ? showWorkout : a.s === 'n' ? showNutrition : true));
-  }, [colors, showWorkout, showNutrition]);
 
   // ── Workout Start Handler ─────────────────────────────────────────
   const handleStartToday = useCallback(() => {
@@ -203,7 +327,7 @@ export default function TodayTab() {
       name: `${activeProgram.name} — ${todayWorkout.name}`,
       programId: activeProgram.id,
       dayId: todayWorkout.id,
-      exercises: todayWorkout.exercises.map((e: any) => ({
+      exercises: todayWorkout.exercises.map((e) => ({
         exerciseId: e.exerciseId,
         exerciseName: e.exerciseName,
         targetSets: e.targetSets,
@@ -224,17 +348,15 @@ export default function TodayTab() {
     router.push('/workout/active');
   }, [activeSession, startEmptyWorkout]);
 
+
   // ── Gradient ──────────────────────────────────────────────────────
   const grad = dark ? [colors.primaryMuted, colors.surface] as const : [colors.primaryMuted, colors.background] as const;
 
   // ── Loading ───────────────────────────────────────────────────────
-  if (isLoading) {
+  if (isLoading || !isWorkoutInitialized) {
     return (
       <ScreenContainer>
-        <View style={S.loadWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>Loading your dashboard...</Text>
-        </View>
+        <TodayTabSkeleton />
       </ScreenContainer>
     );
   }
@@ -249,7 +371,7 @@ export default function TodayTab() {
 
   // ════════════════════════════════════════════════════════════════════
   return (
-    <ScreenContainer padded={false}>
+    <ScreenContainer padded={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       {/* ── 1. HEADER ─────────────────────────────────────────────────── */}
       <LinearGradient colors={grad} style={S.heroGrad}>
         <View style={[S.heroInner, { paddingHorizontal: spacing.base }]}>
@@ -257,15 +379,44 @@ export default function TodayTab() {
             <View style={{ flex: 1 }}>
               <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>{dateStr}</Text>
               <Text style={[typography.h1, { color: colors.text, marginTop: spacing.xs }]}>{greeting}, {displayName}</Text>
+              <SmartHeader tab="today" displayName={displayName} />
             </View>
-            <TouchableOpacity onPress={() => router.push('/settings')} activeOpacity={0.7}
-              style={[S.avatar, { backgroundColor: colors.surface, borderRadius: radius.full }]}>
-              <Ionicons name="person" size={18} color={colors.primary} />
+            <TouchableOpacity
+              onPress={() => router.push('/settings')}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+            >
+              <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {/* ── 2. DAILY COACHING ─────────────────────────────────────── */}
-          <View style={[S.coachCard, { backgroundColor: colors.surface, borderRadius: radius.lg, marginTop: spacing.lg, padding: spacing.base, shadowColor: colors.shadow }]}>
+          <ExpandableCard
+            style={{ marginTop: spacing.lg }}
+            onExpand={() => setBriefingExpanded(true)}
+            onCollapse={() => setBriefingExpanded(false)}
+            expandedContent={
+              <View>
+                {briefingLoading ? (
+                  <View style={[S.row, { marginTop: spacing.md }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>Preparing your briefing...</Text>
+                  </View>
+                ) : (
+                  <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]}>{briefing ?? fallback}</Text>
+                )}
+                <TouchableOpacity
+                  style={[S.row, { marginTop: spacing.md, alignSelf: 'flex-start' }]}
+                  onPress={() => router.push('/(tabs)/coach')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chatbubble-outline" size={14} color={colors.primary} />
+                  <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>Ask more...</Text>
+                </TouchableOpacity>
+              </View>
+            }
+          >
             <View style={S.coachHead}>
               <View style={[S.sparkle, { backgroundColor: colors.primaryMuted, borderRadius: radius.md }]}>
                 <Ionicons name="sparkles" size={16} color={colors.primary} />
@@ -275,17 +426,53 @@ export default function TodayTab() {
                 <Ionicons name="refresh" size={16} color={briefingLoading ? colors.textTertiary : colors.primary} />
               </TouchableOpacity>
             </View>
-            {briefingLoading ? (
-              <View style={[S.row, { marginTop: spacing.md }]}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>Preparing your briefing...</Text>
-              </View>
-            ) : (
-              <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]}>{briefing ?? fallback}</Text>
+            {!briefingExpanded && (
+              briefingLoading ? (
+                <View style={[S.row, { marginTop: spacing.md }]}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[typography.bodySmall, { color: colors.textSecondary, marginLeft: spacing.sm }]}>Preparing your briefing...</Text>
+                </View>
+              ) : (
+                <Text style={[typography.bodyLarge, { color: colors.text, marginTop: spacing.md, lineHeight: 24 }]} numberOfLines={2}>{briefing ?? fallback}</Text>
+              )
             )}
-          </View>
+          </ExpandableCard>
         </View>
       </LinearGradient>
+
+      {/* ── QUICK ACTIONS ──────────────────────────────────────────── */}
+      <View style={[S.quickActions, { paddingHorizontal: spacing.base, paddingVertical: spacing.sm }]}>
+        {showWorkout && (
+          <TouchableOpacity
+            style={S.quickBtn}
+            onPress={activeSession ? () => router.push('/workout/active') : () => router.push('/workout/ai-generate')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={activeSession ? 'barbell-outline' : 'sparkles-outline'} size={24} color={colors.primary} />
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+              {activeSession ? 'Resume' : 'AI Workout'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {showNutrition && (
+          <TouchableOpacity
+            style={S.quickBtn}
+            onPress={() => setMealSheetVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="restaurant-outline" size={24} color={colors.primary} />
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>Log Meal</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={S.quickBtn}
+          onPress={() => router.push('/(tabs)/coach')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.primary} />
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>AI Coach</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={{ paddingHorizontal: spacing.base }}>
         {/* ── 3. TODAY'S WORKOUT ───────────────────────────────────────── */}
@@ -293,37 +480,132 @@ export default function TodayTab() {
 
         {/* ── 4. NUTRITION SNAPSHOT ────────────────────────────────────── */}
         {showNutrition && (
-          <Card style={{ marginTop: spacing.base }}>
+          <ExpandableCard
+            style={{ marginTop: spacing.base }}
+            initiallyExpanded
+            onExpand={() => setNutritionExpanded(true)}
+            onCollapse={() => setNutritionExpanded(false)}
+            expandedContent={
+              <View>
+                {/* Per-meal breakdown */}
+                {todayMeals.length > 0 && (
+                  <View style={{ marginBottom: spacing.md }}>
+                    <Text style={[typography.labelSmall, { color: colors.textSecondary, marginBottom: spacing.sm }]}>TODAY&apos;S MEALS</Text>
+                    {todayMeals.map((meal) => {
+                      const mealCals = meal.items.reduce((sum, it) => sum + it.calories, 0);
+                      const mealPro = meal.items.reduce((sum, it) => sum + it.protein_g, 0);
+                      return (
+                        <View key={meal.id} style={[S.row, { justifyContent: 'space-between', paddingVertical: spacing.xs }]}>
+                          <View style={S.row}>
+                            <Ionicons
+                              name={meal.mealType === 'breakfast' ? 'sunny-outline' : meal.mealType === 'lunch' ? 'restaurant-outline' : meal.mealType === 'dinner' ? 'moon-outline' : 'cafe-outline'}
+                              size={14}
+                              color={colors.textTertiary}
+                            />
+                            <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm, textTransform: 'capitalize' }]}>{meal.mealType}</Text>
+                          </View>
+                          <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>{Math.round(mealCals)} cal · {Math.round(mealPro)}g protein</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+                {/* 7-day sparklines */}
+                <View style={{ marginBottom: spacing.md }}>
+                  <Text style={[typography.labelSmall, { color: colors.textSecondary, marginBottom: spacing.sm }]}>7-DAY TRENDS</Text>
+                  {[
+                    { label: 'Calories', data: sparklineData.calories, color: colors.calories },
+                    { label: 'Protein', data: sparklineData.protein, color: colors.protein },
+                    { label: 'Water', data: sparklineData.water, color: colors.info },
+                  ].map((trend) => (
+                    <View key={trend.label} style={[S.row, { justifyContent: 'space-between', paddingVertical: spacing.xs }]}>
+                      <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>{trend.label}</Text>
+                      <Sparkline variant="inline" data={trend.data} color={trend.color} />
+                    </View>
+                  ))}
+                </View>
+                {/* Coach shortcut */}
+                <TouchableOpacity
+                  style={[S.row, { alignSelf: 'flex-start' }]}
+                  onPress={() => router.push('/(tabs)/coach')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chatbubble-outline" size={14} color={colors.primary} />
+                  <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>What should I eat?</Text>
+                </TouchableOpacity>
+              </View>
+            }
+          >
+            {/* Collapsed: header + preview */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onLongPress={() => showQuickActions({
+                title: 'Nutrition',
+                subtitle: `${fmt(dC.calories)} / ${fmt(dT.calories)} cal today`,
+                actions: [
+                  { id: 'log-meal', label: 'Log a Meal', icon: 'restaurant-outline', onPress: () => setMealSheetVisible(true) },
+                  { id: 'ask-coach', label: 'What should I eat?', icon: 'chatbubble-outline', onPress: () => router.push('/(tabs)/coach'), badge: 'AI' },
+                  { id: 'edit-targets', label: 'Edit Targets', icon: 'options-outline', onPress: () => router.push('/(tabs)/nutrition') },
+                ],
+              })}
+            >
             <View style={S.secHead}>
               <Text style={[typography.labelLarge, { color: colors.text }]}>Nutrition</Text>
               <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
                 <Text style={[typography.labelSmall, { color: colors.primary }]}>See All</Text>
               </TouchableOpacity>
             </View>
-            <View style={[S.ringsRow, { marginTop: spacing.base }]}>
-              {[
-                { p: calP, c: colors.calories, l: calLbl, sl: calSub, t: 'Calories' },
-                { p: proP, c: colors.protein, l: proLbl, sl: proSub, t: 'Protein' },
-                { p: watP, c: colors.info, l: watLbl, sl: watSub, t: 'Water' },
-              ].map((r) => (
-                <View key={r.t} style={S.ringItem}>
-                  <ProgressRing progress={Math.min(r.p, 1)} size={64} strokeWidth={5} color={r.c} label={r.l} sublabel={r.sl} />
-                  <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>{r.t}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={[S.row, { marginTop: spacing.md, gap: spacing.sm }]}>
-              <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
-                onPress={() => router.push('/nutrition/log-meal')} activeOpacity={0.7}>
-                <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-                <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>Log Meal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
-                onPress={() => router.push('/(tabs)/nutrition')} activeOpacity={0.7}>
-                <Ionicons name="water-outline" size={16} color={colors.info} />
-                <Text style={[typography.labelSmall, { color: colors.info, marginLeft: spacing.xs }]}>Add Water</Text>
-              </TouchableOpacity>
-            </View>
+            {!nutritionExpanded && (
+              dC.calories === 0 && dC.protein_g === 0 ? (
+                <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>No meals logged today</Text>
+              ) : (
+                <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                  {fmt(dC.calories)} / {fmt(dT.calories)} cal · {fmt(dC.protein_g)}g protein
+                </Text>
+              )
+            )}
+            {nutritionExpanded && (
+              dC.calories === 0 && dC.protein_g === 0 ? (
+                <EmptyState
+                  icon="nutrition-outline"
+                  title="Track Your Nutrition"
+                  description="Log meals to see your daily breakdown."
+                  actionLabel="Log a Meal"
+                  onAction={() => router.push('/nutrition/log')}
+                  compact
+                />
+              ) : (
+                <>
+                  <View style={[S.ringsRow, { marginTop: spacing.base }]}>
+                    {[
+                      { p: calP, c: colors.calories, l: calLbl, sl: calSub, t: 'Calories', sd: sparklineData.calories },
+                      { p: proP, c: colors.protein, l: proLbl, sl: proSub, t: 'Protein', sd: sparklineData.protein },
+                      { p: watP, c: colors.info, l: watLbl, sl: watSub, t: 'Water', sd: sparklineData.water },
+                    ].map((r) => (
+                      <View key={r.t} style={S.ringItem}>
+                        <ProgressRing progress={Math.min(r.p, 1)} size={64} strokeWidth={5} color={r.c} label={r.l} sublabel={r.sl} />
+                        <View style={[S.row, { marginTop: spacing.xs, justifyContent: 'center' }]}>
+                          <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center' }]}>{r.t}</Text>
+                          <Sparkline variant="inline" data={r.sd} color={r.c} style={{ marginLeft: 4 }} />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={[S.row, { marginTop: spacing.md, gap: spacing.sm }]}>
+                    <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
+                      onPress={() => setMealSheetVisible(true)} activeOpacity={0.7}>
+                      <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                      <Text style={[typography.labelSmall, { color: colors.primary, marginLeft: spacing.xs }]}>Log Meal</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md }]}
+                      onPress={() => setWaterSheetVisible(true)} activeOpacity={0.7}>
+                      <Ionicons name="water-outline" size={16} color={colors.info} />
+                      <Text style={[typography.labelSmall, { color: colors.info, marginLeft: spacing.xs }]}>Add Water</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )
+            )}
             {activeSupplements.length > 0 && (
               <View style={{ marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderLight }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -331,16 +613,30 @@ export default function TodayTab() {
                     const t = isSupplementTaken(s.id);
                     return (
                       <TouchableOpacity key={s.id} onPress={() => { if (!t) logSupplement(s.id); }} activeOpacity={0.7}
-                        style={[S.pill, { backgroundColor: t ? colors.successLight : colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginRight: spacing.sm }]}>
-                        <Ionicons name={t ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={t ? colors.success : colors.textTertiary} />
-                        <Text style={[typography.caption, { color: t ? colors.success : colors.textSecondary, marginLeft: spacing.xs }]}>{s.name}</Text>
+                        style={[S.pill, { backgroundColor: t ? colors.completedMuted : colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginRight: spacing.sm }]}>
+                        <Ionicons name={t ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={t ? colors.completed : colors.textTertiary} />
+                        <Text style={[typography.caption, { color: t ? colors.completed : colors.textSecondary, marginLeft: spacing.xs }]}>{s.supplementName}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
               </View>
             )}
-          </Card>
+            </TouchableOpacity>
+          </ExpandableCard>
+        )}
+
+        {/* ── 4b. INLINE INSIGHTS ──────────────────────────────────── */}
+        {smartInsights.filter((si) => !dismissed.has(si.id)).length > 0 && (
+          <View style={{ marginTop: spacing.sm, gap: spacing.xs }}>
+            {smartInsights.filter((si) => !dismissed.has(si.id)).map((si) => (
+              <InsightBadge
+                key={si.id}
+                insight={si}
+                onAskMore={si.coachPrompt ? () => handleAskInsight(si.coachPrompt!) : undefined}
+              />
+            ))}
+          </View>
         )}
 
         {/* ── 5. STREAKS & MOMENTUM ───────────────────────────────────── */}
@@ -376,7 +672,7 @@ export default function TodayTab() {
         {insights.length > 0 && (
           <View style={{ marginTop: spacing.base }}>
             <Text style={[typography.labelLarge, { color: colors.text, marginBottom: spacing.sm }]}>Insights</Text>
-            {insights.map((i) => (
+            {insights.filter((i) => !dismissed.has(i.id)).map((i) => (
               <View key={i.id} style={[S.insight, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, borderColor: colors.borderLight, shadowColor: colors.shadow }]}>
                 <View style={[S.insightIco, { backgroundColor: `${i.iconColor}15`, borderRadius: radius.md }]}>
                   <Ionicons name={i.icon} size={18} color={i.iconColor} />
@@ -429,113 +725,160 @@ export default function TodayTab() {
           </Card>
         )}
 
-        {/* ── 8. QUICK ACTIONS ────────────────────────────────────────── */}
-        <View style={[S.qaRow, { marginTop: spacing.lg, marginBottom: spacing['2xl'] }]}>
-          {actions.map((a) => (
-            <TouchableOpacity key={a.label} onPress={() => router.push(a.route as any)} activeOpacity={0.7} style={S.qaItem}>
-              <View style={[S.qaCircle, { backgroundColor: `${a.color}15`, borderRadius: radius.full }]}>
-                <Ionicons name={a.icon} size={22} color={a.color} />
+        {/* ── SOCIAL TEASER ─────────────────────────────────────── */}
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/compete')}
+          activeOpacity={0.7}
+          style={{ marginTop: spacing.sm }}
+        >
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{
+                width: 36, height: 36, borderRadius: 18,
+                backgroundColor: colors.primaryMuted,
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+                <Ionicons name="trophy-outline" size={18} color={colors.primary} />
               </View>
-              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' }]}>{a.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.label, { color: colors.text }]}>Compete</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  {friendCount > 0
+                    ? `${friendCount} friend${friendCount !== 1 ? 's' : ''} · See the leaderboard`
+                    : 'Invite friends to compete'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
+        {/* ── TIMELINE LINK ─────────────────────────────────────── */}
+        <TouchableOpacity
+          onPress={() => router.push('/timeline')}
+          activeOpacity={0.7}
+          style={{ alignItems: 'center', paddingVertical: spacing.lg }}
+        >
+          <Text style={[typography.label, { color: colors.primary }]}>View Timeline →</Text>
+        </TouchableOpacity>
+
+        {/* Extra padding so content scrolls clear of the CoachFAB */}
+        <View style={{ height: 100 }} />
       </View>
 
-      <CoachFAB context="general" />
+      {/* Bottom Sheets */}
+      <QuickLogMealSheet visible={mealSheetVisible} onClose={() => setMealSheetVisible(false)} />
+      <QuickAddWaterSheet visible={waterSheetVisible} onClose={() => setWaterSheetVisible(false)} />
+      <QuickActionSheet {...quickActionSheetProps} />
     </ScreenContainer>
   );
 
   // ── Workout Card (extracted for clarity) ──────────────────────────
   function renderWorkoutCard() {
     if (activeSession) {
-      const completedSets = activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0);
-      const totalSets = activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0);
-      const elapsedMin = Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000);
-      const visibleExercises = activeSession.exercises.filter(e => !e.isSkipped).slice(0, 3);
       return (
-        <Card style={{ marginTop: spacing.base, borderColor: colors.success, borderWidth: 2 }}>
-          <View style={S.actHead}>
-            <View style={[S.actCircle, { backgroundColor: colors.successLight }]}>
-              <Ionicons name="flash" size={24} color={colors.success} />
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/workout')}
+          activeOpacity={0.7}
+          style={{ marginTop: spacing.sm }}
+        >
+          <Card style={{ borderColor: colors.primary, borderWidth: 1.5 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.caption, { color: colors.primary, fontWeight: '700', letterSpacing: 1 }]}>
+                  ACTIVE SESSION
+                </Text>
+                <Text style={[typography.body, { color: colors.text, marginTop: 2 }]} numberOfLines={1}>
+                  {activeSession.name}
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                  {activeSession.exercises.reduce((acc, e) => acc + e.sets.filter(s => s.isCompleted).length, 0)}/
+                  {activeSession.exercises.reduce((acc, e) => acc + e.sets.length, 0)} sets · {Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 60000)} min
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
             </View>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT IN PROGRESS</Text>
-              <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{activeSession.name}</Text>
-              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{completedSets} of {totalSets} sets completed · {elapsedMin} min</Text>
-            </View>
-          </View>
-          {visibleExercises.length > 0 && (
-            <View style={{ marginTop: spacing.md }}>
-              {visibleExercises.map((ex) => {
-                const done = ex.sets.every(s => s.isCompleted);
-                return (
-                  <View key={ex.id} style={[S.row, { paddingVertical: spacing.xs }]}>
-                    <Ionicons
-                      name={done ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={16}
-                      color={done ? colors.success : colors.textTertiary}
-                    />
-                    <Text style={[typography.body, { color: done ? colors.success : colors.text, marginLeft: spacing.sm }]}>{ex.exerciseName}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-          <TouchableOpacity
-            style={[S.cta, { backgroundColor: colors.success, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
-            onPress={() => router.push('/workout/active')} activeOpacity={0.8}>
-            <Ionicons name="play" size={18} color={colors.textInverse} />
-            <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Resume Workout</Text>
-          </TouchableOpacity>
-        </Card>
+          </Card>
+        </TouchableOpacity>
       );
     }
     if (todayDone) {
       return (
-        <Card style={{ marginTop: spacing.base }}>
-          <View style={S.actHead}>
-            <View style={[S.actCircle, { backgroundColor: colors.successLight }]}>
-              <Ionicons name="trophy" size={24} color={colors.success} />
+        <Card style={{ marginTop: spacing.sm }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.completedMuted, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.completed} />
             </View>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>WORKOUT COMPLETE</Text>
-              <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayDone.name}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[typography.body, { color: colors.text, fontWeight: '600' }]}>Workout Complete</Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                Great session — rest well!
+              </Text>
             </View>
           </View>
-          <View style={[S.statsR, { marginTop: spacing.base }]}>
-            <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{Math.round(todayDone.durationSeconds / 60)}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>minutes</Text></View>
-            <View style={[S.vDiv, { backgroundColor: colors.borderLight }]} />
-            <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{fmt(todayDone.totalVolume)}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>volume</Text></View>
-            <View style={[S.vDiv, { backgroundColor: colors.borderLight }]} />
-            <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{todayDone.totalSets}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>sets</Text></View>
-          </View>
-          {todayDone.prsHit > 0 && (
-            <View style={[S.row, { backgroundColor: colors.goldLight, borderRadius: radius.sm, marginTop: spacing.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, alignSelf: 'flex-start' }]}>
-              <Ionicons name="ribbon" size={14} color={colors.gold} />
-              <Text style={[typography.labelSmall, { color: colors.gold, marginLeft: spacing.xs }]}>{todayDone.prsHit} PR{todayDone.prsHit > 1 ? 's' : ''} hit!</Text>
-            </View>
-          )}
         </Card>
       );
     }
     if (todayWorkout) {
+      const estMinutes = todayWorkout.exercises.reduce((sum, e) => sum + e.targetSets * (e.restSeconds + 45), 0) / 60;
       return (
-        <Card style={{ marginTop: spacing.base }}>
-          <View style={S.actHead}>
-            <View style={[S.actCircle, { backgroundColor: colors.primaryMuted }]}><Ionicons name="barbell" size={24} color={colors.primary} /></View>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.labelSmall, { color: colors.primary, textTransform: 'uppercase', letterSpacing: 1 }]}>TODAY&apos;S WORKOUT</Text>
-              <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayWorkout.name}</Text>
-              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{todayWorkout.exercises.length} exercises{activeProgram ? ` · ${activeProgram.name}` : ''}</Text>
+        <ExpandableCard
+          style={{ marginTop: spacing.base }}
+          onLongPress={() => showQuickActions({
+            title: todayWorkout.name,
+            subtitle: `${todayWorkout.exercises.length} exercises · ${activeProgram?.name ?? ''}`,
+            actions: [
+              { id: 'start', label: 'Start Workout', icon: 'play-circle-outline', onPress: handleStartToday },
+              { id: 'view-program', label: 'View Program', icon: 'list-outline', onPress: () => router.push('/(tabs)/workout') },
+              { id: 'ask-coach', label: 'Ask Coach', icon: 'chatbubble-outline', onPress: () => router.push('/(tabs)/coach'), badge: 'AI' },
+            ],
+          })}
+          expandedContent={
+            <View>
+              {/* Exercise list */}
+              {todayWorkout.exercises.map((ex) => (
+                <View key={ex.id} style={[S.row, { justifyContent: 'space-between', paddingVertical: spacing.xs }]}>
+                  <Text style={[typography.body, { color: colors.text, flex: 1 }]} numberOfLines={1}>{ex.exerciseName}</Text>
+                  <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>{ex.targetSets} × {ex.targetReps}</Text>
+                </View>
+              ))}
+              {/* Duration & muscle tags */}
+              <View style={[S.row, { flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.md }]}>
+                <View style={[S.pill, { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm }]}>
+                  <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
+                  <Text style={[typography.caption, { color: colors.textSecondary, marginLeft: 2 }]}>~{Math.round(estMinutes)} min</Text>
+                </View>
+                {todayWorkout.focusArea && (
+                  <View style={[S.pill, { backgroundColor: colors.primaryMuted, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm }]}>
+                    <Text style={[typography.caption, { color: colors.primary, textTransform: 'capitalize' }]}>{todayWorkout.focusArea.replace(/_/g, ' ')}</Text>
+                  </View>
+                )}
+              </View>
+              {/* Action buttons */}
+              <TouchableOpacity style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
+                onPress={handleStartToday} activeOpacity={0.8}>
+                <Ionicons name="play" size={18} color={colors.textInverse} />
+                <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Start Workout</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[S.cta, { backgroundColor: colors.surface, borderRadius: radius.md, marginTop: spacing.sm, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.primary }]}
+                onPress={() => router.push('/workout/ai-generate')} activeOpacity={0.8}>
+                <Ionicons name="sparkles" size={16} color={colors.primary} />
+                <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm }]}>Build AI Workout</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-          <TouchableOpacity style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
-            onPress={handleStartToday} activeOpacity={0.8}>
-            <Ionicons name="play" size={18} color={colors.textInverse} />
-            <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Start Workout</Text>
-          </TouchableOpacity>
-        </Card>
+          }
+        >
+          {/* Collapsed: workout header */}
+            <View style={S.actHead}>
+              <View style={[S.actCircle, { backgroundColor: colors.primaryMuted }]}><Ionicons name="barbell" size={24} color={colors.primary} /></View>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.labelSmall, { color: colors.primary, textTransform: 'uppercase', letterSpacing: 1 }]}>TODAY&apos;S WORKOUT</Text>
+                <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>{todayWorkout.name}</Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>{todayWorkout.exercises.length} exercises{activeProgram ? ` · ${activeProgram.name}` : ''}</Text>
+              </View>
+              <Ionicons name="chevron-down" size={20} color={colors.textTertiary} />
+            </View>
+        </ExpandableCard>
       );
     }
     if (totalWorkouts === 0 && !demo) {
@@ -548,11 +891,18 @@ export default function TodayTab() {
               <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>Start with a guided workout or create your own.</Text>
             </View>
           </View>
-          <TouchableOpacity style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md }]}
-            onPress={handleEmptyStart} activeOpacity={0.8}>
-            <Ionicons name="play" size={18} color={colors.textInverse} />
-            <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.sm }]}>Let&apos;s Go</Text>
-          </TouchableOpacity>
+          <View style={[S.row, { marginTop: spacing.base, gap: spacing.sm }]}>
+            <TouchableOpacity style={[S.cta, { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md, flex: 1 }]}
+              onPress={handleEmptyStart} activeOpacity={0.8}>
+              <Ionicons name="play" size={16} color={colors.textInverse} />
+              <Text style={[typography.labelLarge, { color: colors.textInverse, marginLeft: spacing.xs }]}>Let&apos;s Go</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[S.cta, { backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.primary, flex: 1 }]}
+              onPress={() => router.push('/workout/ai-generate')} activeOpacity={0.8}>
+              <Ionicons name="sparkles" size={16} color={colors.primary} />
+              <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.xs }]}>AI Workout</Text>
+            </TouchableOpacity>
+          </View>
         </Card>
       );
     }
@@ -586,18 +936,25 @@ export default function TodayTab() {
     return (
       <Card style={{ marginTop: spacing.base }}>
         <View style={S.actHead}>
-          <View style={[S.actCircle, { backgroundColor: colors.successLight }]}><Ionicons name="leaf" size={24} color={colors.success} /></View>
+          <View style={[S.actCircle, { backgroundColor: colors.completedMuted }]}><Ionicons name="leaf" size={24} color={colors.completed} /></View>
           <View style={{ flex: 1, marginLeft: spacing.md }}>
-            <Text style={[typography.labelSmall, { color: colors.success, textTransform: 'uppercase', letterSpacing: 1 }]}>REST DAY</Text>
+            <Text style={[typography.labelSmall, { color: colors.completed, textTransform: 'uppercase', letterSpacing: 1 }]}>REST DAY</Text>
             <Text style={[typography.h2, { color: colors.text, marginTop: 2 }]}>Active Recovery</Text>
             <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>Stretch, walk, or light mobility work</Text>
           </View>
         </View>
-        <TouchableOpacity style={[S.cta, { backgroundColor: colors.surface, borderRadius: radius.md, marginTop: spacing.base, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.primary }]}
-          onPress={handleEmptyStart} activeOpacity={0.8}>
-          <Ionicons name="add" size={18} color={colors.primary} />
-          <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.sm }]}>Start a Workout Anyway</Text>
-        </TouchableOpacity>
+        <View style={[S.row, { marginTop: spacing.base, gap: spacing.sm }]}>
+          <TouchableOpacity style={[S.cta, { backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.primary, flex: 1 }]}
+            onPress={handleEmptyStart} activeOpacity={0.8}>
+            <Ionicons name="add" size={16} color={colors.primary} />
+            <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.xs }]}>Workout</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[S.cta, { backgroundColor: colors.primaryMuted, borderRadius: radius.md, paddingVertical: spacing.md, flex: 1 }]}
+            onPress={() => router.push('/workout/ai-generate')} activeOpacity={0.8}>
+            <Ionicons name="sparkles" size={16} color={colors.primary} />
+            <Text style={[typography.labelLarge, { color: colors.primary, marginLeft: spacing.xs }]}>AI Workout</Text>
+          </TouchableOpacity>
+        </View>
       </Card>
     );
   }
@@ -628,17 +985,16 @@ const S = StyleSheet.create({
   statC: { alignItems: 'center', flex: 1 },
   vDiv: { width: 1, height: 32 },
   strip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderWidth: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 1 },
+  // Quick Actions
+  quickActions: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  quickBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 4, minHeight: 48, minWidth: 48 },
   // Nutrition
-  ringsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
-  ringItem: { alignItems: 'center', flex: 1 },
+  ringsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  ringItem: { alignItems: 'center', flex: 1, minHeight: 100 },
   // Insights
   insight: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 1 },
   insightIco: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   // Weekly
   wGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   wItem: { alignItems: 'center', width: '30%', marginBottom: 12 },
-  // Quick Actions
-  qaRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  qaItem: { alignItems: 'center' },
-  qaCircle: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
 });

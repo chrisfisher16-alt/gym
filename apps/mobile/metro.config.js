@@ -19,8 +19,13 @@ config.resolver.nodeModulesPaths = [
 // Find the zustand package root (CJS files are alongside package.json)
 const zustandRoot = path.join(monorepoRoot, 'node_modules', 'zustand');
 
-// Force CJS resolution for zustand on web to avoid import.meta.env in ESM files
+// Force CJS resolution for zustand on web and shim native-only modules
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Shim native-only modules on web
+  if (platform === 'web' && moduleName === 'react-native-worklets') {
+    return { filePath: path.resolve(projectRoot, 'src/lib/react-native-worklets-web-shim.js'), type: 'sourceFile' };
+  }
+
   if (platform === 'web' && (moduleName === 'zustand' || moduleName.startsWith('zustand/'))) {
     // Map module names to CJS files
     let cjsFile;

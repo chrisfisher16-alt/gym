@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { Button } from './Button';
@@ -10,6 +10,8 @@ interface EmptyStateProps {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Compact horizontal layout with smaller icon and inline action */
+  compact?: boolean;
 }
 
 export function EmptyState({
@@ -18,8 +20,44 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  compact = false,
 }: EmptyStateProps) {
-  const { colors, spacing, typography } = useTheme();
+  const { colors, spacing, radius, typography } = useTheme();
+
+  if (compact) {
+    return (
+      <View style={styles.compactContainer}>
+        <View
+          style={[
+            styles.compactIcon,
+            { backgroundColor: colors.surfaceSecondary },
+          ]}
+        >
+          <Ionicons name={icon} size={22} color={colors.textTertiary} />
+        </View>
+        <View style={styles.compactBody}>
+          <Text style={[typography.label, { color: colors.text }]}>{title}</Text>
+          {description && (
+            <Text
+              style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}
+              numberOfLines={2}
+            >
+              {description}
+            </Text>
+          )}
+        </View>
+        {actionLabel && onAction && (
+          <TouchableOpacity
+            onPress={onAction}
+            style={[styles.compactAction, { backgroundColor: colors.primary, borderRadius: radius.md }]}
+            activeOpacity={0.7}
+          >
+            <Text style={[typography.labelSmall, { color: colors.textOnPrimary }]}>{actionLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -64,5 +102,27 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  compactContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  compactIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactBody: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 12,
+  },
+  compactAction: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
 });

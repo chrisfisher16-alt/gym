@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywall } from '../hooks/usePaywall';
 import type { FeatureKey } from '../lib/pricing-config';
 import { PLANS } from '../lib/pricing-config';
+
+const DISMISSED_KEY = '@upgrade_banner_dismissed';
+const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 interface UpgradeBannerProps {
   /** The feature being promoted */
@@ -28,6 +32,19 @@ export function UpgradeBanner({
   const { showPaywall } = usePaywall();
   const { colors, spacing, radius, typography } = useTheme();
   const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DISMISSED_KEY).then((val) => {
+      if (val) {
+        const ts = Number(val);
+        if (Date.now() - ts < DISMISS_TTL_MS) {
+          setDismissed(true);
+        } else {
+          AsyncStorage.removeItem(DISMISSED_KEY);
+        }
+      }
+    });
+  }, []);
 
   // Don't show if subscribed or dismissed
   if (isSubscribed || dismissed) return null;
@@ -84,7 +101,10 @@ export function UpgradeBanner({
         </View>
 
         <TouchableOpacity
-          onPress={() => setDismissed(true)}
+          onPress={() => {
+            setDismissed(true);
+            AsyncStorage.setItem(DISMISSED_KEY, String(Date.now()));
+          }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <Ionicons name="close" size={18} color={colors.textTertiary} />

@@ -6,7 +6,7 @@ import { Button, ScreenContainer, ProgressBar } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/stores/onboarding-store';
 import type { ProductMode } from '@health-coach/shared';
 import { PRODUCT_MODES } from '@health-coach/shared';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 const MODE_ICONS: Record<ProductMode, keyof typeof Ionicons.glyphMap> = {
   workout_coach: 'barbell-outline',
@@ -22,13 +22,17 @@ export default function ModeScreen() {
   const [selected, setSelected] = useState<ProductMode | null>(store.productMode);
   const [error, setError] = useState('');
 
+  const isNavigating = useRef(false);
   const onContinue = () => {
     if (!selected) {
       setError('Please select a mode');
       return;
     }
+    if (isNavigating.current) return;
+    isNavigating.current = true;
     store.setProductMode(selected);
     router.push('/(onboarding)/coach-tone');
+    setTimeout(() => { isNavigating.current = false; }, 1000);
   };
 
   return (

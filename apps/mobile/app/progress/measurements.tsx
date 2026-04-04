@@ -1,11 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   TextInput,
   Image,
   Platform,
@@ -15,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme';
 import { Card, Button, Divider, ScreenContainer } from '../../src/components/ui';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import {
   useMeasurementsStore,
   type BodyMeasurement,
@@ -106,8 +106,11 @@ export default function MeasurementsScreen() {
   }, [isInitialized, initialize]);
 
   // Pre-fill form from last measurement when switching to log tab
+  const hasPrefilledRef = useRef(false);
   useEffect(() => {
     if (activeTab !== 'log' || measurements.length === 0) return;
+    if (hasPrefilledRef.current) return;
+    hasPrefilledRef.current = true;
     const last = measurements[0]; // sorted by date desc
     if (last.weightKg != null) setWeight(displayWeight(last.weightKg, imperial));
     if (last.heightCm != null) {
@@ -136,7 +139,7 @@ export default function MeasurementsScreen() {
     }
     setFormFields(fields);
     if (last.notes) setNotes(last.notes);
-  }, [activeTab, measurements.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, measurements.length, imperial, measurements, profileHeightCm]);
 
   // ── Weight Chart Data ────────────────────────────────────────────
 
@@ -145,8 +148,9 @@ export default function MeasurementsScreen() {
     .slice(0, 12)
     .reverse();
 
-  const maxWeight = Math.max(...weightHistory.map((m) => m.weightKg!), 1);
-  const minWeight = Math.min(...weightHistory.map((m) => m.weightKg!), 0);
+  const weightValues = weightHistory.map((m) => m.weightKg!);
+  const maxWeight = weightValues.length > 0 ? Math.max(...weightValues) : 100;
+  const minWeight = weightValues.length > 0 ? Math.min(...weightValues) : 0;
   const weightRange = maxWeight - minWeight || 1;
 
   // ── Form Submit ──────────────────────────────────────────────────
@@ -167,7 +171,7 @@ export default function MeasurementsScreen() {
     }
   }, [imperial, heightFeet, heightInches, heightCmInput]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const weightKg = parseWeight(weight, imperial);
     const heightCm = getHeightCm();
     const parsed: Partial<BodyMeasurement> = {};
@@ -180,51 +184,55 @@ export default function MeasurementsScreen() {
     }
 
     if (!weightKg && !heightCm && Object.values(parsed).every((v) => v == null) && !notes) {
-      Alert.alert('Empty', 'Please enter at least one measurement.');
+      crossPlatformAlert('Empty', 'Please enter at least one measurement.');
       return;
     }
 
-    addMeasurement({
-      date: new Date().toISOString(),
-      weightKg,
-      heightCm,
-      ...parsed,
-      notes: notes || undefined,
-    });
+    try {
+      await addMeasurement({
+        date: new Date().toISOString(),
+        weightKg,
+        heightCm,
+        ...parsed,
+        notes: notes || undefined,
+      });
 
-    // Reset form
-    setWeight('');
-    setHeightFeet('');
-    setHeightInches('');
-    setHeightCmInput('');
-    setFormFields({});
-    setNotes('');
-    setEstimatedFields(new Set());
-    Alert.alert('Saved', 'Measurement recorded successfully.');
+      // Reset form
+      setWeight('');
+      setHeightFeet('');
+      setHeightInches('');
+      setHeightCmInput('');
+      setFormFields({});
+      setNotes('');
+      setEstimatedFields(new Set());
+      crossPlatformAlert('Saved', 'Measurement recorded successfully.');
+    } catch (e) {
+      crossPlatformAlert('Error', 'Failed to save measurement. Please try again.');
+    }
   }, [weight, formFields, notes, imperial, addMeasurement, getHeightCm]);
 
   // AI estimation
   const handleAISuggest = useCallback(async () => {
     const waistVal = formFields['waistCm'];
     if (!waistVal) {
-      Alert.alert('Waist Required', 'Please enter your waist measurement first.');
+      crossPlatformAlert('Waist Required', 'Please enter your waist measurement first.');
       return;
     }
     const waistCm = parseLength(waistVal, imperial);
     if (!waistCm) {
-      Alert.alert('Invalid', 'Please enter a valid waist measurement.');
+      crossPlatformAlert('Invalid', 'Please enter a valid waist measurement.');
       return;
     }
 
     const heightCm = getHeightCm() ?? profileHeightCm;
     if (!heightCm) {
-      Alert.alert('Height Required', 'Please enter your height to use AI suggestions.');
+      crossPlatformAlert('Height Required', 'Please enter your height to use AI suggestions.');
       return;
     }
 
     const weightKg = parseWeight(weight, imperial);
     if (!weightKg) {
-      Alert.alert('Weight Required', 'Please enter your weight to use AI suggestions.');
+      crossPlatformAlert('Weight Required', 'Please enter your weight to use AI suggestions.');
       return;
     }
 
@@ -260,7 +268,7 @@ export default function MeasurementsScreen() {
       setFormFields(newFields);
       setEstimatedFields(newEstimated);
     } catch (error) {
-      Alert.alert('Error', 'Could not estimate measurements. Please try again.');
+      crossPlatformAlert('Error', 'Could not estimate measurements. Please try again.');
     } finally {
       setIsEstimating(false);
     }
@@ -273,7 +281,7 @@ export default function MeasurementsScreen() {
       const ImagePicker = require('expo-image-picker');
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow photo library access to add progress photos.');
+        crossPlatformAlert('Permission Required', 'Please allow photo library access to add progress photos.');
         return;
       }
 
@@ -285,31 +293,39 @@ export default function MeasurementsScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        Alert.alert('Label Photo', 'Select a label for this photo:', [
+        crossPlatformAlert('Label Photo', 'Select a label for this photo:', [
           {
             text: 'Front',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Side',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Back',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'No Label',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
         ]);
       }
     } catch (error) {
-      Alert.alert('Error', 'Could not open photo picker.');
+      crossPlatformAlert('Error', 'Could not open photo picker.');
     }
   }, [addPhoto]);
 
@@ -318,7 +334,7 @@ export default function MeasurementsScreen() {
       const ImagePicker = require('expo-image-picker');
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow camera access to take progress photos.');
+        crossPlatformAlert('Permission Required', 'Please allow camera access to take progress photos.');
         return;
       }
 
@@ -329,31 +345,39 @@ export default function MeasurementsScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        Alert.alert('Label Photo', 'Select a label for this photo:', [
+        crossPlatformAlert('Label Photo', 'Select a label for this photo:', [
           {
             text: 'Front',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'front' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Side',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'side' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'Back',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri, label: 'back' })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
           {
             text: 'No Label',
-            onPress: () =>
-              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri }),
+            onPress: () => {
+              addPhoto({ date: new Date().toISOString(), uri: result.assets[0].uri })
+                .catch((e) => console.error('Failed to save photo:', e));
+            },
           },
         ]);
       }
     } catch (error) {
-      Alert.alert('Error', 'Could not open camera.');
+      crossPlatformAlert('Error', 'Could not open camera.');
     }
   }, [addPhoto]);
 
@@ -361,9 +385,15 @@ export default function MeasurementsScreen() {
 
   const confirmDeleteMeasurement = useCallback(
     (id: string) => {
-      Alert.alert('Delete Measurement', 'Are you sure?', [
+      crossPlatformAlert('Delete Measurement', 'Are you sure?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteMeasurement(id) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteMeasurement(id).catch((e) => console.error('Failed to delete measurement:', e));
+          },
+        },
       ]);
     },
     [deleteMeasurement],
@@ -371,9 +401,15 @@ export default function MeasurementsScreen() {
 
   const confirmDeletePhoto = useCallback(
     (id: string) => {
-      Alert.alert('Delete Photo', 'Are you sure?', [
+      crossPlatformAlert('Delete Photo', 'Are you sure?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deletePhoto(id) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deletePhoto(id).catch((e) => console.error('Failed to delete photo:', e));
+          },
+        },
       ]);
     },
     [deletePhoto],

@@ -17,6 +17,22 @@ import {
   updatePersonalRecord,
   activeToCompleted,
 } from '../lib/workout-utils';
+import { preloadExerciseImages } from '../lib/exercise-image-preloader';
+import { getPreviousSetData, getBeginnerSuggestion, type UserBodyMetrics } from '../lib/suggested-load';
+import { useProfileStore } from './profile-store';
+import { getDateString } from '../lib/nutrition-utils';
+
+// ── Persist Debounce ─────────────────────────────────────────────────
+
+let _persistTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// ── Validation Constants ────────────────────────────────────────────
+
+const MAX_WEIGHT = 2000; // lbs (~907 kg)
+const MAX_REPS = 999;
+
+const clampWeight = (v: number) => Math.min(Math.max(0, v), MAX_WEIGHT);
+const clampReps = (v: number) => Math.min(Math.max(0, v), MAX_REPS);
 
 // ── Storage Keys ────────────────────────────────────────────────────
 
@@ -28,6 +44,7 @@ const STORAGE_KEYS = {
   PERSONAL_RECORDS: '@workout/personal_records',
   DEFAULT_REST_SECONDS: '@workout/default_rest_seconds',
   PROGRAM_COMPLETIONS: '@workout/program_completions',
+  AUTO_REST_TIMER: '@workout/auto_rest_timer',
 } as const;
 
 // ── State ───────────────────────────────────────────────────────────
@@ -76,8 +93,10 @@ interface WorkoutState {
   startEmptyWorkout: () => void;
 
   // Actions - Set Management
-  logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number) => void;
+  logSet: (exerciseInstanceId: string, setId: string, weight: number, reps: number, isAutoFilled?: boolean) => void;
+  cascadeWeight: (exerciseInstanceId: string, fromSetIndex: number, weight: number, reps: number) => void;
   completeSet: (exerciseInstanceId: string, setId: string) => void;
+  uncompleteSet: (exerciseInstanceId: string, setId: string, previousValues?: { weight?: number; reps?: number }) => void;
   updateSetRPE: (exerciseInstanceId: string, setId: string, rpe: number) => void;
   removeSet: (exerciseInstanceId: string, setId: string) => void;
   addSet: (exerciseInstanceId: string, setType?: 'working' | 'warmup' | 'drop' | 'failure') => void;
@@ -94,7 +113,10 @@ interface WorkoutState {
   replaceExercise: (exerciseInstanceId: string, newExercise: ExerciseLibraryEntry) => void;
 
   // Actions - Per-Exercise Rest Time
+  getExerciseRestTime: (exerciseId: string) => number;
   updateExerciseRestTime: (exerciseInstanceId: string, seconds: number) => void;
+  updateExerciseNotes: (exerciseInstanceId: string, notes: string) => void;
+  updateExerciseRestTimerMode: (exerciseInstanceId: string, mode: 'auto' | 'manual' | 'disabled' | 'off' | 'custom', customSeconds?: number) => void;
 
   // Actions - Timed Sets
   logTimedSet: (exerciseInstanceId: string, setId: string, durationSeconds: number) => void;
@@ -106,12 +128,19 @@ interface WorkoutState {
   removeSupersetGroup: (groupId: string) => void;
 
   // Actions - Rest Timer
-  startRestTimer: (durationSeconds: number) => void;
+  autoRestTimer: boolean;
+  setAutoRestTimer: (enabled: boolean) => void;
+  restTimerDuration: number;
+  startRestTimer: (durationSeconds: number, exerciseId?: string) => void;
   clearRestTimer: () => void;
+  extendRestTimer: (additionalSeconds: number) => void;
   setDefaultRestSeconds: (seconds: number) => void;
 
+  // Computed
+  todayWorkoutStatus: () => 'pending' | 'active' | 'completed';
+
   // Actions - Workout Completion
-  completeWorkout: () => CompletedSession | null;
+  completeWorkout: () => Promise<CompletedSession | null>;
   cancelWorkout: () => void;
 
   // Actions - Session Metadata
@@ -125,6 +154,9 @@ interface WorkoutState {
 
   // Actions - Custom Exercise
   addCustomExercise: (exercise: ExerciseLibraryEntry) => void;
+
+  // Actions - History
+  deleteSession: (sessionId: string) => void;
 
   // Actions - Persistence
   persistActiveSession: () => Promise<void>;
@@ -141,6 +173,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   defaultRestSeconds: 90,
   programCompletions: {},
   isInitialized: false,
+  autoRestTimer: true,
+  restTimerDuration: 0,
 
   // ── Initialize ──────────────────────────────────────────────────
 
@@ -213,9 +247,22 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ? JSON.parse(storedRecords)
         : {};
 
-      const activeSession: ActiveWorkoutSession | null = storedSession
+      let activeSession: ActiveWorkoutSession | null = storedSession
         ? JSON.parse(storedSession)
         : null;
+
+      // Clear stale rest timer after app kill + restore
+      if (activeSession?.restTimerEndAt) {
+        const remaining = new Date(activeSession.restTimerEndAt).getTime() - Date.now();
+        if (remaining <= 0) {
+          // Timer has already expired — clear it
+          activeSession = {
+            ...activeSession,
+            restTimerEndAt: undefined,
+            restTimerDuration: undefined,
+          };
+        }
+      }
 
       const defaultRestSeconds = storedDefaultRest
         ? parseInt(storedDefaultRest, 10)
@@ -261,7 +308,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   addProgram: (program) => {
     set((state) => {
       const programs = [...state.programs, program];
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
   },
@@ -272,15 +319,20 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const programs = state.programs.map((p) =>
         p.id === updated.id ? updated : p,
       );
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
   },
 
   deleteProgram: (programId) => {
+    const program = get().programs.find((p) => p.id === programId);
+    if (program && program.createdBy !== 'user' && !program.customized) {
+      console.warn(`Cannot delete seed program "${program.name}" (id: ${programId}). Only user-created or customized programs can be deleted.`);
+      return 'Cannot delete built-in programs. Duplicate or customize it first.';
+    }
     set((state) => {
       const programs = state.programs.filter((p) => p.id !== programId);
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
   },
@@ -291,7 +343,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ...p,
         isActive: p.id === programId,
       }));
-      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+      AsyncStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)).catch((err) => console.error('[WorkoutStore] Persist failed:', err));
       return { programs };
     });
     // Re-sync workout reminder days to match the new active program.
@@ -300,13 +352,23 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       try {
         const { useNotificationStore } = require('./notification-store');
         useNotificationStore.getState().syncWorkoutDaysFromProgram();
-      } catch {}
+      } catch (err) {
+        console.warn('[Workout] Failed to sync notification days from program:', err);
+      }
     }, 200);
   },
 
   // ── Workout Session ─────────────────────────────────────────────
 
   startWorkout: ({ name, programId, dayId, exercises }) => {
+    const history = get().history;
+    const profile = useProfileStore.getState().profile;
+    const isMetric = profile.unitPreference === 'metric';
+    const userMetrics: UserBodyMetrics | undefined =
+      profile.weightKg || profile.gender || profile.trainingExperience
+        ? { weightKg: profile.weightKg, gender: profile.gender, trainingExperience: profile.trainingExperience as UserBodyMetrics['trainingExperience'] }
+        : undefined;
+
     const session: ActiveWorkoutSession = {
       id: generateId('ws'),
       programId,
@@ -315,21 +377,38 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       startedAt: new Date().toISOString(),
       exercises: exercises.map((e, index) => {
         const libExercise = get().exercises.find((ex) => ex.id === e.exerciseId);
+        const isBodyweight = libExercise?.isBodyweight || libExercise?.equipment === 'bodyweight';
+        // Beginner suggestion fallback (computed once per exercise, not per set)
+        const beginnerFallback = userMetrics
+          ? getBeginnerSuggestion(e.exerciseId, e.targetReps, userMetrics, !!isBodyweight, isMetric)
+          : null;
+
         return {
           id: generateId('ae'),
           exerciseId: e.exerciseId,
           exerciseName: e.exerciseName,
-          sets: Array.from({ length: e.targetSets }, (_, i) => ({
-            id: generateId('set'),
-            setNumber: i + 1,
-            setType: 'working' as const,
-            isCompleted: false,
-            isPR: false,
-          })),
+          targetReps: e.targetReps,
+          sets: Array.from({ length: e.targetSets }, (_, i) => {
+            const prev = getPreviousSetData(e.exerciseId, i + 1, history);
+            const fallback = !prev && beginnerFallback
+              ? { weight: beginnerFallback.suggestedWeight, reps: beginnerFallback.suggestedReps }
+              : null;
+            return {
+              id: generateId('set'),
+              setNumber: i + 1,
+              setType: 'working' as const,
+              isCompleted: false,
+              isPR: false,
+              ...(prev ? { weight: prev.weight, reps: prev.reps } : fallback ? { weight: fallback.weight, reps: fallback.reps } : {}),
+            };
+          }),
           supersetGroupId: e.supersetGroupId,
           isTimeBased: libExercise?.isTimeBased,
           isBodyweight: libExercise?.isBodyweight,
           defaultDurationSeconds: libExercise?.defaultDurationSeconds,
+          trackingMode: libExercise?.trackingMode,
+          weightContext: libExercise?.weightContext,
+          secondaryMetrics: libExercise?.secondaryMetrics,
           restSeconds: e.restSeconds,
           isSkipped: false,
           order: index,
@@ -341,6 +420,10 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     set({ activeSession: session });
     get().persistActiveSession();
+
+    // Preload exercise images for the session (fire and forget)
+    const exerciseIds = exercises.map(e => e.exerciseId);
+    preloadExerciseImages(exerciseIds).catch((e) => console.warn('[WorkoutStore] image preload failed:', e));
   },
 
   startEmptyWorkout: () => {
@@ -359,7 +442,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   // ── Set Management ──────────────────────────────────────────────
 
-  logSet: (exerciseInstanceId, setId, weight, reps) => {
+  logSet: (exerciseInstanceId, setId, weight, reps, isAutoFilled) => {
+    const clampedWeight = clampWeight(weight);
+    const clampedReps = clampReps(reps);
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -369,7 +454,40 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           ...exercise,
           sets: exercise.sets.map((s) => {
             if (s.id !== setId) return s;
-            return { ...s, weight, reps };
+            return { ...s, weight: clampedWeight, reps: clampedReps, ...(isAutoFilled !== undefined ? { isAutoFilled } : {}) };
+          }),
+        };
+      });
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  cascadeWeight: (exerciseInstanceId, fromSetIndex, weight, reps) => {
+    const clampedWeight = clampWeight(weight);
+    const clampedReps = clampReps(reps);
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((exercise) => {
+        if (exercise.id !== exerciseInstanceId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((s, idx) => {
+            // Only cascade forward from the edited set
+            if (idx <= fromSetIndex) return s;
+            // Skip completed sets
+            if (s.isCompleted) return s;
+            // Skip sets that were manually edited (isAutoFilled explicitly false)
+            if (s.isAutoFilled === false) return s;
+            // Apply cascade to empty or previously auto-filled sets
+            if (s.weight === undefined || s.isAutoFilled === true) {
+              return { ...s, weight: clampedWeight, reps: clampedReps, isAutoFilled: true };
+            }
+            return s;
           }),
         };
       });
@@ -397,22 +515,39 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
             if (s.isCompleted) return s;
 
             let isPR = false;
-            if (s.weight && s.reps && s.setType !== 'warmup') {
-              const prResult = checkForPR(
-                exercise.exerciseId,
-                s.weight,
-                s.reps,
-                updatedRecords,
-              );
-              isPR = prResult.isPR;
-              if (isPR) {
-                updatedRecords[exercise.exerciseId] = updatePersonalRecord(
+            if (s.reps && s.setType !== 'warmup') {
+              const isBodyweight = exercise.isBodyweight || (!s.weight || s.weight === 0);
+              if (isBodyweight) {
+                // Bodyweight PR: compare by max reps
+                const currentRecord = updatedRecords[exercise.exerciseId];
+                const prevMaxReps = currentRecord?.mostReps?.reps ?? 0;
+                if (s.reps > prevMaxReps) {
+                  isPR = true;
+                  updatedRecords[exercise.exerciseId] = updatePersonalRecord(
+                    exercise.exerciseId,
+                    s.weight ?? 0,
+                    s.reps,
+                    now,
+                    updatedRecords,
+                  );
+                }
+              } else if (s.weight) {
+                const prResult = checkForPR(
                   exercise.exerciseId,
                   s.weight,
                   s.reps,
-                  now,
                   updatedRecords,
                 );
+                isPR = prResult.isPR;
+                if (isPR) {
+                  updatedRecords[exercise.exerciseId] = updatePersonalRecord(
+                    exercise.exerciseId,
+                    s.weight,
+                    s.reps,
+                    now,
+                    updatedRecords,
+                  );
+                }
               }
             }
 
@@ -424,11 +559,40 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(
         STORAGE_KEYS.PERSONAL_RECORDS,
         JSON.stringify(updatedRecords),
-      );
+      ).catch((e) => console.error('[WorkoutStore] Failed to persist PR records:', e));
 
       return {
         activeSession: { ...state.activeSession, exercises },
         personalRecords: updatedRecords,
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  uncompleteSet: (exerciseInstanceId, setId, previousValues) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+
+      const exercises = state.activeSession.exercises.map((exercise) => {
+        if (exercise.id !== exerciseInstanceId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((s) => {
+            if (s.id !== setId) return s;
+            return {
+              ...s,
+              isCompleted: false,
+              isPR: false,
+              completedAt: undefined,
+              ...(previousValues?.weight !== undefined ? { weight: previousValues.weight } : {}),
+              ...(previousValues?.reps !== undefined ? { reps: previousValues.reps } : {}),
+            };
+          }),
+        };
+      });
+
+      return {
+        activeSession: { ...state.activeSession, exercises },
       };
     });
     get().persistActiveSession();
@@ -453,6 +617,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         activeSession: { ...state.activeSession, exercises },
       };
     });
+    get().persistActiveSession();
   },
 
   removeSet: (exerciseInstanceId, setId) => {
@@ -496,6 +661,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         if (lastCompleted && setType === 'working') {
           newSet.weight = lastCompleted.weight;
           newSet.reps = lastCompleted.reps;
+          newSet.isAutoFilled = true;
         }
 
         let updatedSets: ActiveSet[];
@@ -531,6 +697,18 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   // ── Exercise Management ─────────────────────────────────────────
 
   addExerciseToSession: (exercise, targetSets = 3, setType = 'working') => {
+    const history = get().history;
+    const profile = useProfileStore.getState().profile;
+    const isMetric = profile.unitPreference === 'metric';
+    const userMetrics: UserBodyMetrics | undefined =
+      profile.weightKg || profile.gender || profile.trainingExperience
+        ? { weightKg: profile.weightKg, gender: profile.gender, trainingExperience: profile.trainingExperience as UserBodyMetrics['trainingExperience'] }
+        : undefined;
+    const isBodyweight = exercise.isBodyweight || exercise.equipment === 'bodyweight';
+    const beginnerFallback = userMetrics
+      ? getBeginnerSuggestion(exercise.id, '8-12', userMetrics, !!isBodyweight, isMetric)
+      : null;
+
     set((state) => {
       if (!state.activeSession) return state;
 
@@ -538,16 +716,27 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         id: generateId('ae'),
         exerciseId: exercise.id,
         exerciseName: exercise.name,
-        sets: Array.from({ length: targetSets }, (_, i) => ({
-          id: generateId('set'),
-          setNumber: i + 1,
-          setType: setType as import('@health-coach/shared').SetType,
-          isCompleted: false,
-          isPR: false,
-        })),
+        sets: Array.from({ length: targetSets }, (_, i) => {
+          const prev = getPreviousSetData(exercise.id, i + 1, history);
+          const fallback = !prev && beginnerFallback
+            ? { weight: beginnerFallback.suggestedWeight, reps: beginnerFallback.suggestedReps }
+            : null;
+          return {
+            id: generateId('set'),
+            setNumber: i + 1,
+            setType: setType as import('@health-coach/shared').SetType,
+            isCompleted: false,
+            isPR: false,
+            ...(prev ? { weight: prev.weight, reps: prev.reps } : fallback ? { weight: fallback.weight, reps: fallback.reps } : {}),
+          };
+        }),
+        restSeconds: exercise.defaultRestSeconds,
         isTimeBased: exercise.isTimeBased,
         isBodyweight: exercise.isBodyweight,
         defaultDurationSeconds: exercise.defaultDurationSeconds,
+        trackingMode: exercise.trackingMode,
+        weightContext: exercise.weightContext,
+        secondaryMetrics: exercise.secondaryMetrics,
         isSkipped: false,
         order: state.activeSession.exercises.length,
       };
@@ -577,6 +766,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           isCompleted: false,
           isPR: false,
         })),
+        restSeconds: exercise.defaultRestSeconds,
         isTimeBased: exercise.isTimeBased,
         isBodyweight: exercise.isBodyweight,
         defaultDurationSeconds: exercise.defaultDurationSeconds,
@@ -609,8 +799,10 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         .filter((e) => e.id !== exerciseInstanceId)
         .map((e, i) => ({ ...e, order: i }));
 
+      const currentIdx = state.activeSession.currentExerciseIndex ?? 0;
+      const clampedIdx = Math.min(currentIdx, Math.max(0, exercises.length - 1));
       return {
-        activeSession: { ...state.activeSession, exercises },
+        activeSession: { ...state.activeSession, exercises, currentExerciseIndex: clampedIdx },
       };
     });
     get().persistActiveSession();
@@ -631,6 +823,25 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     get().persistActiveSession();
   },
 
+  getExerciseRestTime: (exerciseId) => {
+    const state = get();
+    if (state.activeSession) {
+      // 1. Check exercise-level override
+      const exercise = state.activeSession.exercises.find(
+        (e) => e.exerciseId === exerciseId,
+      );
+      if (exercise?.restSeconds != null && exercise.restSeconds > 0) {
+        return exercise.restSeconds;
+      }
+      // 2. Check session default
+      if (state.activeSession.defaultRestSeconds != null && state.activeSession.defaultRestSeconds > 0) {
+        return state.activeSession.defaultRestSeconds;
+      }
+    }
+    // 3. Global default
+    return state.defaultRestSeconds || 90;
+  },
+
   updateExerciseRestTime: (exerciseInstanceId, seconds) => {
     const clamped = Math.max(5, Math.min(600, seconds));
     set((state) => {
@@ -647,6 +858,9 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         e.exerciseId === target.exerciseId ? { ...e, restSeconds: clamped } : e,
       );
 
+      // Update the rest setting without restarting a running timer.
+      // If a timer is running for this exercise, keep its current end time
+      // and just update the stored duration setting for future timers.
       return {
         activeSession: { ...state.activeSession, exercises },
       };
@@ -688,7 +902,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           ...exercise,
           sets: exercise.sets.map((s) => {
             if (s.id !== setId) return s;
-            return { ...s, durationSeconds };
+            return { ...s, durationSeconds, isCompleted: true, completedAt: new Date().toISOString() };
           }),
         };
       });
@@ -812,16 +1026,23 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   // ── Rest Timer ──────────────────────────────────────────────────
 
-  startRestTimer: (durationSeconds) => {
+  setAutoRestTimer: (enabled) => {
+    set({ autoRestTimer: enabled });
+    AsyncStorage.setItem(STORAGE_KEYS.AUTO_REST_TIMER, JSON.stringify(enabled)).catch(console.warn);
+  },
+
+  startRestTimer: (durationSeconds, exerciseId) => {
     set((state) => {
       if (!state.activeSession) return state;
 
       const endAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
       return {
+        restTimerDuration: durationSeconds,
         activeSession: {
           ...state.activeSession,
           restTimerEndAt: endAt,
           restTimerDuration: durationSeconds,
+          restTimerExerciseId: exerciseId,
         },
       };
     });
@@ -832,6 +1053,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set((state) => {
       if (!state.activeSession) return state;
       return {
+        restTimerDuration: 0,
         activeSession: {
           ...state.activeSession,
           restTimerEndAt: undefined,
@@ -841,17 +1063,60 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     });
   },
 
+  extendRestTimer: (additionalSeconds) => {
+    set((state) => {
+      if (!state.activeSession?.restTimerEndAt) return state;
+      const currentEnd = new Date(state.activeSession.restTimerEndAt).getTime();
+      const newEnd = new Date(currentEnd + additionalSeconds * 1000).toISOString();
+      const newDuration = (state.activeSession.restTimerDuration ?? 0) + additionalSeconds;
+      return {
+        restTimerDuration: newDuration,
+        activeSession: {
+          ...state.activeSession,
+          restTimerEndAt: newEnd,
+          restTimerDuration: newDuration,
+        },
+      };
+    });
+    get().persistActiveSession();
+  },
+
   setDefaultRestSeconds: (seconds) => {
     const clamped = Math.max(5, Math.min(600, seconds));
     set({ defaultRestSeconds: clamped });
-    AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_REST_SECONDS, clamped.toString());
+    AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_REST_SECONDS, clamped.toString()).catch(console.error);
+  },
+
+  // ── Today Workout Status ──────────────────────────────────────
+
+  todayWorkoutStatus: () => {
+    const { activeSession, history } = get();
+    if (activeSession) return 'active';
+    const todayStr = getDateString();
+    const completedToday = history.some(
+      (s) =>
+        getDateString(new Date(s.completedAt)) === todayStr ||
+        getDateString(new Date(s.startedAt)) === todayStr,
+    );
+    return completedToday ? 'completed' : 'pending';
   },
 
   // ── Workout Completion ──────────────────────────────────────────
 
-  completeWorkout: () => {
+  completeWorkout: async () => {
     const state = get();
     if (!state.activeSession) return null;
+
+    // #34: Guard against empty workouts — require at least 1 completed set
+    const hasCompletedSet = state.activeSession.exercises.some((exercise) =>
+      exercise.sets.some(
+        (s) => s.isCompleted && ((s.weight != null && s.weight > 0) || (s.reps != null && s.reps > 0)),
+      ),
+    );
+    if (!hasCompletedSet) {
+      console.warn('completeWorkout: no completed sets with data, skipping');
+      return null;
+    }
 
     const completed = activeToCompleted(
       state.activeSession,
@@ -861,17 +1126,91 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     const history = [completed, ...state.history];
 
-    set({ activeSession: null, history });
+    // #30: Save previous state for rollback on persist failure
+    const prevHistory = state.history;
+    const prevActiveSession = state.activeSession;
 
-    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
-    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    set({ activeSession: null, history, restTimerDuration: 0 });
+
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+      await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    } catch (e) {
+      // Revert state on persistence failure
+      set({ activeSession: prevActiveSession, history: prevHistory });
+      console.error('Failed to persist workout completion:', e);
+      return null;
+    }
 
     return completed;
   },
 
   cancelWorkout: () => {
-    set({ activeSession: null });
-    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+    // #48: Clear rest timer state along with the active session
+    set({ activeSession: null, restTimerDuration: 0 });
+    AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION).catch((e) => console.warn('[WorkoutStore] Persist failed:', e));
+  },
+
+  // ── Delete Session from History ────────────────────────────────
+
+  deleteSession: (sessionId) => {
+    const state = get();
+    const session = state.history.find((s) => s.id === sessionId);
+    if (!session) return;
+
+    const newHistory = state.history.filter((s) => s.id !== sessionId);
+
+    // Recalculate PRs for exercises that appeared in the deleted session
+    const affectedExerciseIds = new Set(
+      session.exercises.map((e) => e.exerciseId),
+    );
+
+    const newRecords = { ...state.personalRecords };
+    for (const exerciseId of affectedExerciseIds) {
+      let heaviestWeight: PersonalRecord['heaviestWeight'] = null;
+      let mostReps: PersonalRecord['mostReps'] = null;
+      let highestVolume: PersonalRecord['highestVolume'] = null;
+
+      for (const s of newHistory) {
+        for (const ex of s.exercises) {
+          if (ex.exerciseId !== exerciseId) continue;
+          for (const set of ex.sets) {
+            if (set.setType === 'warmup') continue;
+            const w = set.weight ?? 0;
+            const r = set.reps ?? 0;
+            if (w <= 0 || r <= 0) continue;
+            const vol = w * r;
+
+            if (!heaviestWeight || w > heaviestWeight.weight) {
+              heaviestWeight = { weight: w, reps: r, date: s.completedAt };
+            }
+
+            if (!mostReps || (w >= (mostReps.weight ?? 0) && r > mostReps.reps)) {
+              mostReps = { weight: w, reps: r, date: s.completedAt };
+            }
+
+            if (!highestVolume || vol > highestVolume.volume) {
+              highestVolume = { weight: w, reps: r, volume: vol, date: s.completedAt };
+            }
+          }
+        }
+      }
+
+      if (heaviestWeight || mostReps || highestVolume) {
+        newRecords[exerciseId] = {
+          exerciseId,
+          heaviestWeight,
+          mostReps,
+          highestVolume,
+        };
+      } else {
+        delete newRecords[exerciseId];
+      }
+    }
+
+    set({ history: newHistory, personalRecords: newRecords });
+    AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(newHistory)).catch(console.warn);
+    AsyncStorage.setItem(STORAGE_KEYS.PERSONAL_RECORDS, JSON.stringify(newRecords)).catch(console.warn);
   },
 
   // ── Session Metadata ────────────────────────────────────────────
@@ -881,6 +1220,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, notes } };
     });
+    get().persistActiveSession();
   },
 
   updateSessionMood: (mood) => {
@@ -888,6 +1228,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, mood } };
     });
+    get().persistActiveSession();
   },
 
   updateSessionName: (name) => {
@@ -895,6 +1236,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (!state.activeSession) return state;
       return { activeSession: { ...state.activeSession, name } };
     });
+    get().persistActiveSession();
   },
 
   // ── Program Progress ───────────────────────────────────────────
@@ -935,7 +1277,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(
         STORAGE_KEYS.PROGRAM_COMPLETIONS,
         JSON.stringify(programCompletions),
-      );
+      ).catch(console.warn);
       return { programCompletions };
     });
   },
@@ -950,20 +1292,65 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       AsyncStorage.setItem(
         STORAGE_KEYS.EXERCISES,
         JSON.stringify(customExercises),
-      );
+      ).catch(console.warn);
       return { exercises };
     });
+  },
+
+  // ── Exercise Notes & Rest Timer Mode ──────────────────────────
+
+  updateExerciseNotes: (exerciseInstanceId, notes) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+      return {
+        activeSession: {
+          ...state.activeSession,
+          exercises: state.activeSession.exercises.map((e) =>
+            e.id === exerciseInstanceId ? { ...e, notes } : e,
+          ),
+        },
+      };
+    });
+    get().persistActiveSession();
+  },
+
+  updateExerciseRestTimerMode: (exerciseInstanceId, mode, customSeconds) => {
+    set((state) => {
+      if (!state.activeSession) return state;
+      return {
+        activeSession: {
+          ...state.activeSession,
+          exercises: state.activeSession.exercises.map((e) =>
+            e.id === exerciseInstanceId
+              ? { ...e, restTimerMode: mode, ...(customSeconds != null ? { restTimerCustomSeconds: customSeconds } : {}) }
+              : e,
+          ),
+        },
+      };
+    });
+    get().persistActiveSession();
   },
 
   // ── Persistence ─────────────────────────────────────────────────
 
   persistActiveSession: async () => {
-    const { activeSession } = get();
-    if (activeSession) {
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.ACTIVE_SESSION,
-        JSON.stringify(activeSession),
-      );
-    }
+    if (_persistTimeout) clearTimeout(_persistTimeout);
+    return new Promise<void>((resolve) => {
+      _persistTimeout = setTimeout(async () => {
+        _persistTimeout = null;
+        try {
+          const { activeSession } = get();
+          if (activeSession) {
+            await AsyncStorage.setItem(
+              STORAGE_KEYS.ACTIVE_SESSION,
+              JSON.stringify(activeSession),
+            );
+          }
+        } catch (error) {
+          console.error('[WorkoutStore] Failed to persist active session:', error);
+        }
+        resolve();
+      }, 100);
+    });
   },
 }));

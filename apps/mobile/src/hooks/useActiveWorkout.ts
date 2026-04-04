@@ -32,11 +32,13 @@ export function useActiveWorkout() {
   const logTimedSet = useWorkoutStore((s) => s.logTimedSet);
   const startRestTimer = useWorkoutStore((s) => s.startRestTimer);
   const clearRestTimer = useWorkoutStore((s) => s.clearRestTimer);
+  const extendRestTimer = useWorkoutStore((s) => s.extendRestTimer);
   const defaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
   const setDefaultRestSeconds = useWorkoutStore((s) => s.setDefaultRestSeconds);
   const updateSessionNotes = useWorkoutStore((s) => s.updateSessionNotes);
   const updateSessionMood = useWorkoutStore((s) => s.updateSessionMood);
   const updateSessionName = useWorkoutStore((s) => s.updateSessionName);
+  const cascadeWeight = useWorkoutStore((s) => s.cascadeWeight);
 
   // Elapsed timer
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -62,15 +64,23 @@ export function useActiveWorkout() {
   // Rest timer
   const [restSecondsLeft, setRestSecondsLeft] = useState(0);
   const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const originalDurationRef = useRef(0);
+  const [isRestTimerActive, setIsRestTimerActive] = useState(false);
 
   useEffect(() => {
     if (activeSession?.restTimerEndAt) {
+      // Capture original duration when a new rest timer starts
+      if (!isRestTimerActive) {
+        originalDurationRef.current = activeSession.restTimerDuration ?? 0;
+      }
+      setIsRestTimerActive(true);
       const update = () => {
         const endTime = new Date(activeSession.restTimerEndAt!).getTime();
         const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
         setRestSecondsLeft(remaining);
         if (remaining <= 0) {
-          clearRestTimer();
+          // Stop the interval but don't clear timer state —
+          // let the overlay detect restSecondsLeft===0 and fire completion effects first
           if (restIntervalRef.current) clearInterval(restIntervalRef.current);
         }
       };
@@ -81,12 +91,13 @@ export function useActiveWorkout() {
       };
     } else {
       setRestSecondsLeft(0);
+      setIsRestTimerActive(false);
+      originalDurationRef.current = 0;
       if (restIntervalRef.current) clearInterval(restIntervalRef.current);
     }
-  }, [activeSession?.restTimerEndAt, clearRestTimer]);
+  }, [activeSession?.restTimerEndAt]);
 
   const isActive = !!activeSession;
-  const isRestTimerActive = restSecondsLeft > 0;
 
   const totalVolume = useMemo(
     () => (activeSession ? calculateSessionVolume(activeSession) : 0),
@@ -173,7 +184,13 @@ export function useActiveWorkout() {
     // Rest timer
     startRestTimer,
     clearRestTimer,
+    extendRestTimer,
     defaultRestSeconds,
     setDefaultRestSeconds,
+    restTimerDuration: activeSession?.restTimerDuration ?? 0,
+    restTimerOriginalDuration: originalDurationRef.current,
+
+    // Weight cascade
+    cascadeWeight,
   };
 }

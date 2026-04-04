@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Linking, Platform, TouchableOpacity } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,11 +8,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Button, Input, ScreenContainer } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/auth-store';
+import { isSupabaseConfigured } from '../../src/lib/supabase';
+import { friendlyAuthError } from '../../src/lib/auth-utils';
 
 const signUpSchema = z
   .object({
     email: z.string().email('Please enter a valid email'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: z.string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Must contain an uppercase letter')
+      .regex(/[0-9]/, 'Must contain a number'),
     confirmPassword: z.string(),
     acceptTerms: z.boolean(),
   })
@@ -30,7 +35,25 @@ type SignUpForm = z.infer<typeof signUpSchema>;
 export default function SignUpScreen() {
   const { colors, spacing, typography } = useTheme();
   const signUp = useAuthStore((s) => s.signUp);
+  const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
   const [formError, setFormError] = useState('');
+  const [confirmationEmail, setConfirmationEmail] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setFormError('');
+    setGoogleLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        setFormError(friendlyAuthError(error));
+      } else {
+        router.replace('/');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const {
     control,
@@ -48,13 +71,45 @@ export default function SignUpScreen() {
 
   const onSubmit = async (data: SignUpForm) => {
     setFormError('');
-    const { error } = await signUp(data.email, data.password);
+    const { error, needsConfirmation } = await signUp(data.email, data.password);
     if (error) {
-      setFormError(error.message || 'Failed to create account. Please try again.');
+      setFormError(friendlyAuthError(error));
+    } else if (needsConfirmation) {
+      setConfirmationEmail(data.email);
     } else {
       router.replace('/');
     }
   };
+
+  if (confirmationEmail) {
+    return (
+      <ScreenContainer>
+        <View style={[styles.content, { paddingTop: spacing['2xl'] }]}>
+          <View style={styles.header}>
+            <Ionicons name="mail-outline" size={64} color={colors.primary} style={{ marginBottom: spacing.lg }} />
+            <Text style={[typography.displayLarge, { color: colors.primary }]}>
+              Check Your Email
+            </Text>
+            <Text
+              style={[
+                typography.bodyLarge,
+                { color: colors.textSecondary, marginTop: spacing.md, textAlign: 'center' },
+              ]}
+            >
+              We sent a verification link to{' '}
+              <Text style={{ fontWeight: '600', color: colors.text }}>{confirmationEmail}</Text>.
+              Please check your inbox to confirm your account.
+            </Text>
+          </View>
+          <Button
+            title="Back to Sign In"
+            onPress={() => router.replace('/(auth)/sign-in')}
+            style={{ marginTop: spacing.xl }}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>
@@ -76,6 +131,36 @@ export default function SignUpScreen() {
               Start your health journey today.
             </Text>
           </View>
+
+          {isSupabaseConfigured && (
+            <>
+              <TouchableOpacity
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                activeOpacity={0.7}
+                style={[
+                  styles.googleButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    padding: spacing.md,
+                  },
+                ]}
+              >
+                <Ionicons name="logo-google" size={20} color={colors.text} />
+                <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                  {googleLoading ? 'Signing in...' : 'Continue with Google'}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
+                <Text style={[typography.caption, { color: colors.textTertiary, marginHorizontal: spacing.md }]}>or</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
+              </View>
+            </>
+          )}
 
           <View style={[styles.form, { gap: spacing.base }]}>
             {formError ? (
@@ -141,39 +226,44 @@ export default function SignUpScreen() {
               control={control}
               name="acceptTerms"
               render={({ field: { onChange, value } }) => (
-                <TouchableOpacity
-                  onPress={() => onChange(!value)}
-                  activeOpacity={0.7}
-                  style={styles.termsRow}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        borderColor: errors.acceptTerms ? colors.error : colors.border,
-                        backgroundColor: value ? colors.primary : 'transparent',
-                      },
-                    ]}
+                <View style={styles.termsRow}>
+                  <TouchableOpacity
+                    onPress={() => onChange(!value)}
+                    activeOpacity={0.7}
+                    style={styles.checkboxHitArea}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    {value && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
-                  </View>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          borderColor: errors.acceptTerms ? colors.error : colors.border,
+                          backgroundColor: value ? colors.primary : 'transparent',
+                        },
+                      ]}
+                    >
+                      {value && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
+                    </View>
+                  </TouchableOpacity>
                   <Text style={[typography.bodySmall, { color: colors.textSecondary, flex: 1 }]}>
                     I agree to the{' '}
                     <Text
                       style={{ color: colors.primary, textDecorationLine: 'underline' }}
-                      onPress={() => router.push('/terms')}
+                      onPress={() => Linking.openURL('https://formiq.app/terms')}
+                      suppressHighlighting
                     >
                       Terms of Service
                     </Text>
                     {' '}and{' '}
                     <Text
                       style={{ color: colors.primary, textDecorationLine: 'underline' }}
-                      onPress={() => router.push('/privacy')}
+                      onPress={() => Linking.openURL('https://formiq.app/privacy')}
+                      suppressHighlighting
                     >
                       Privacy Policy
                     </Text>
                   </Text>
-                </TouchableOpacity>
+                </View>
               )}
             />
             {errors.acceptTerms && (
@@ -218,11 +308,22 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   errorBanner: {},
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    minHeight: 48,
+  },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     minHeight: 48,
+  },
+  checkboxHitArea: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   checkbox: {
     width: 22,

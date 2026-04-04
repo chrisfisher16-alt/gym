@@ -1,7 +1,6 @@
 import { View, Text, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme';
-import { ScreenContainer, Card } from '../src/components/ui';
+import { ScreenContainer } from '../src/components/ui';
 
 export default function TermsOfServiceScreen() {
   const { colors, spacing, typography } = useTheme();
@@ -33,29 +32,34 @@ export default function TermsOfServiceScreen() {
         'The AI coaching features are powered by artificial intelligence and machine learning:\n\n• AI recommendations are generated algorithmically and may not always be accurate\n• AI responses should be considered suggestions, not professional advice\n• The AI does not have access to your complete medical history\n• AI-generated workout and nutrition plans should be reviewed for safety before following\n• We continuously improve our AI, but cannot guarantee perfect accuracy\n• You are responsible for evaluating the appropriateness of AI suggestions for your situation',
     },
     {
-      title: '6. User Responsibilities',
+      title: '6. Age Requirements',
+      content:
+        'You must be at least 13 years old to create an account and use Health Coach. If you are between 13 and 17 years old, you must have the consent of a parent or guardian to use the App.\n\nBy creating an account, you represent that you meet these age requirements. We reserve the right to terminate accounts that we reasonably believe are held by users under the age of 13.',
+    },
+    {
+      title: '7. User Responsibilities',
       content:
         'As a user, you agree to:\n\n• Provide accurate information when creating your account and logging data\n• Use the App in compliance with all applicable laws\n• Not misuse or attempt to reverse-engineer the App\n• Not share your account credentials\n• Not use the App for any purpose other than personal health and fitness tracking\n• Report any security vulnerabilities responsibly',
     },
     {
-      title: '7. Intellectual Property',
+      title: '8. Intellectual Property',
       content:
         'All content, features, and functionality of the App are owned by Health Coach and are protected by international copyright, trademark, and other intellectual property laws.\n\nYou retain ownership of any personal data and content you submit to the App.',
     },
     {
-      title: '8. Limitation of Liability',
+      title: '9. Limitation of Liability',
       content:
         'To the fullest extent permitted by law, Health Coach shall not be liable for:\n\n• Any indirect, incidental, special, consequential, or punitive damages\n• Any loss of profits, data, or goodwill\n• Personal injury or health issues arising from following AI-generated recommendations\n• Service interruptions, errors, or data loss\n• Any damages exceeding the amount paid by you in the 12 months preceding the claim\n\nSome jurisdictions do not allow the exclusion of certain warranties or limitation of liability, so some of the above may not apply to you.',
     },
     {
-      title: '9. Termination',
+      title: '10. Termination',
       content:
         'We may terminate or suspend your account at any time for violation of these Terms. You may delete your account at any time through the App settings.\n\nUpon termination, your right to use the App ceases immediately. Provisions that by their nature should survive termination shall survive.',
     },
     {
-      title: '10. Governing Law',
+      title: '11. Governing Law',
       content:
-        'These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which Health Coach is incorporated, without regard to conflict of law principles.\n\nAny disputes arising from these Terms or your use of the App shall be resolved through binding arbitration, except where prohibited by law.',
+        'These Terms shall be governed by and construed in accordance with the laws of the State of Delaware, United States, without regard to conflict of law principles.\n\nAny disputes arising from these Terms or your use of the App shall be resolved through binding arbitration administered by the American Arbitration Association (AAA) under its Consumer Arbitration Rules, except where prohibited by law. You agree that any arbitration will be conducted on an individual basis and not as a class, consolidated, or representative action.',
     },
   ];
 
@@ -69,27 +73,6 @@ export default function TermsOfServiceScreen() {
           <Text style={[typography.bodySmall, { color: colors.textTertiary, marginBottom: spacing.lg }]}>
             Last updated: March 2026
           </Text>
-
-          <Card
-            style={{
-              marginBottom: spacing.base,
-              backgroundColor: colors.warningLight,
-              borderColor: colors.warning,
-              borderWidth: 1,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="warning-outline" size={20} color={colors.warning} />
-              <Text
-                style={[
-                  typography.label,
-                  { color: colors.text, marginLeft: spacing.sm, flex: 1 },
-                ]}
-              >
-                Placeholder — Replace with actual legal text reviewed by a lawyer before launch.
-              </Text>
-            </View>
-          </Card>
 
           <Text
             style={[

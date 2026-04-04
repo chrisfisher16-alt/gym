@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
+import { crossPlatformAlert } from '../../src/lib/cross-platform-alert';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,14 +12,13 @@ export default function PhotoLogScreen() {
   const { mealType = 'lunch' } = useLocalSearchParams<{ mealType: string }>();
   const { colors, spacing, radius, typography } = useTheme();
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const handlePickImage = async () => {
     try {
       const ImagePicker = await import('expo-image-picker');
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please grant camera roll access to use this feature.');
+        crossPlatformAlert('Permission needed', 'Please grant camera roll access to use this feature.');
         return;
       }
 
@@ -32,7 +32,7 @@ export default function PhotoLogScreen() {
         setImageUri(result.assets[0].uri);
       }
     } catch {
-      Alert.alert('Error', 'Could not open image picker.');
+      crossPlatformAlert('Error', 'Could not open image picker.');
     }
   };
 
@@ -41,7 +41,7 @@ export default function PhotoLogScreen() {
       const ImagePicker = await import('expo-image-picker');
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please grant camera access to use this feature.');
+        crossPlatformAlert('Permission needed', 'Please grant camera access to use this feature.');
         return;
       }
 
@@ -54,7 +54,7 @@ export default function PhotoLogScreen() {
         setImageUri(result.assets[0].uri);
       }
     } catch {
-      Alert.alert('Error', 'Could not open camera.');
+      crossPlatformAlert('Error', 'Could not open camera.');
     }
   };
 
@@ -138,7 +138,6 @@ export default function PhotoLogScreen() {
         <Button
           title="Analyze Photo"
           onPress={handleAnalyze}
-          loading={loading}
           icon={<Ionicons name="sparkles-outline" size={20} color={colors.textInverse} />}
         />
       )}

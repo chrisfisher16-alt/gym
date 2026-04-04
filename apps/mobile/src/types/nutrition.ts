@@ -2,7 +2,7 @@
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
-export type MealSource = 'manual' | 'text' | 'photo' | 'quick_add' | 'saved_meal';
+export type MealSource = 'manual' | 'text' | 'photo' | 'quick_add' | 'saved_meal' | 'recipe';
 
 // ── Nutrition Targets ──────────────────────────────────────────────
 
