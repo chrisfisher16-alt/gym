@@ -37,7 +37,10 @@ export interface ToolCallResult {
 }
 
 export interface CoachConversation {
+  /** Local id used for client-side grouping and persistence. */
   id: string;
+  /** Server-side conversation id returned by the `coach-chat` Edge Function. */
+  remoteId?: string;
   context: CoachContext;
   title?: string;
   started_at: string;
@@ -174,9 +177,11 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const historyMessages = currentMessages.slice(0, -1);
       const aiHistory = toAIHistory(historyMessages);
 
-      // Call the API with conversation history
+      // Call the API with conversation history. Pass the server-side
+      // (remote) conversation id so the Edge Function threads context
+      // correctly; otherwise pass undefined to let the server create one.
       const response = await coachApi.sendChatMessage(
-        conversation.id,
+        conversation.remoteId,
         text,
         context ?? conversation.context,
         aiHistory,
@@ -191,6 +196,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         conversation_id: conversation.id,
         role: 'assistant',
         content: cleanContent,
+        structured_content: response.structured_content,
         actions: actions.length > 0
           ? actions.map((action) => ({ action, status: 'pending' as const }))
           : undefined,
@@ -198,9 +204,10 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         created_at: new Date().toISOString(),
       };
 
-      // Update conversation
+      // Update conversation, capturing the server-side id on first reply.
       const updatedConversation: CoachConversation = {
         ...conversation,
+        remoteId: conversation.remoteId ?? (response.conversation_id || undefined),
         last_message_at: new Date().toISOString(),
         message_count: (conversation.message_count ?? 0) + 2,
       };
