@@ -6,6 +6,8 @@ import { useColorScheme, Platform, View, ActivityIndicator } from 'react-native'
 import { ToastProvider } from '../src/components/Toast';
 import { migrateAIConfig } from '../src/lib/ai-provider';
 import { bootstrapNotifications } from '../src/lib/notification-bootstrap';
+import { initObservability } from '../src/lib/observability';
+import { flushSyncQueue } from '../src/lib/sync';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +26,9 @@ export default function RootLayout() {
     // Migrate AI config on all platforms (clears stale cached API key)
     migrateAIConfig().catch(() => {});
 
+    // Observability (error + analytics). Silent no-op when env vars aren't set.
+    initObservability().catch(() => {});
+
     // On web, skip all native initialization and just render
     if (Platform.OS === 'web') {
       setReady(true);
@@ -37,6 +42,8 @@ export default function RootLayout() {
         await useAuthStore.getState().initialize();
         // Bootstrap notification categories, re-sync reminders, and set up response listener
         await bootstrapNotifications();
+        // Flush sync queue after auth is restored so pushes are attributed to the right user.
+        flushSyncQueue().catch(() => {});
       } catch (e) {
         console.warn('Init failed:', e);
       } finally {

@@ -4,6 +4,7 @@ import type { CoachContext } from '@health-coach/shared';
 import * as coachApi from '../lib/coach-api';
 import type { AIMessage } from '../lib/ai-provider';
 import { parseCoachActions, executeCoachAction, type CoachAction } from '../lib/coach-actions';
+import { captureException, track } from '../lib/observability';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -168,6 +169,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       error: null,
     }));
 
+    track('coach_message_sent', { context: context ?? conversation.context });
+
     try {
       // Build history from current conversation messages
       const currentMessages = get().messages.filter(
@@ -229,6 +232,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(updatedConversation)),
       ]);
     } catch (error) {
+      captureException(error, { where: 'coach-store.sendMessage', context: conversation.context });
+
       const errorMessage =
         error instanceof Error
           ? error.message

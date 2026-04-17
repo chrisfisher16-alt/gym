@@ -45,6 +45,12 @@ interface GroceryState {
    * If no list exists, creates a minimal one. Persists automatically.
    */
   mergeRecipeItems: (categoryName: string, items: GroceryItem[]) => void;
+  /** Add a single user-entered item under the named category (creates the category if new). */
+  addItem: (categoryName: string, item: GroceryItem) => void;
+  /** Remove one item by its (categoryIndex, itemIndex). Drops the category if it ends up empty. */
+  removeItem: (categoryIndex: number, itemIndex: number) => void;
+  /** Remove all checked items across every category. Returns the count removed. */
+  clearCheckedItems: () => number;
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -124,6 +130,60 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
     }
     set({ currentList: updated });
     get().persist();
+  },
+
+  addItem: (categoryName: string, item: GroceryItem) => {
+    const { currentList } = get();
+    let updated: GroceryList;
+    if (!currentList) {
+      updated = {
+        id: `grocery_${Date.now()}`,
+        categories: [{ name: categoryName, items: [item] }],
+        createdAt: new Date().toISOString(),
+        daysPlanned: 1,
+      };
+    } else {
+      const existingIdx = currentList.categories.findIndex((c) => c.name === categoryName);
+      const categories =
+        existingIdx >= 0
+          ? currentList.categories.map((c, i) =>
+              i === existingIdx ? { ...c, items: [...c.items, item] } : c,
+            )
+          : [...currentList.categories, { name: categoryName, items: [item] }];
+      updated = { ...currentList, categories };
+    }
+    set({ currentList: updated });
+    get().persist();
+  },
+
+  removeItem: (categoryIndex: number, itemIndex: number) => {
+    const { currentList } = get();
+    if (!currentList) return;
+    const categories = currentList.categories
+      .map((cat, ci) =>
+        ci === categoryIndex
+          ? { ...cat, items: cat.items.filter((_, ii) => ii !== itemIndex) }
+          : cat,
+      )
+      .filter((cat) => cat.items.length > 0);
+    set({ currentList: { ...currentList, categories } });
+    get().persist();
+  },
+
+  clearCheckedItems: () => {
+    const { currentList } = get();
+    if (!currentList) return 0;
+    let removed = 0;
+    const categories = currentList.categories
+      .map((cat) => {
+        const kept = cat.items.filter((item) => !item.checked);
+        removed += cat.items.length - kept.length;
+        return { ...cat, items: kept };
+      })
+      .filter((cat) => cat.items.length > 0);
+    set({ currentList: { ...currentList, categories } });
+    get().persist();
+    return removed;
   },
 
   persist: async () => {

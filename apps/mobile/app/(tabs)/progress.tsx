@@ -937,6 +937,34 @@ export default function ProgressTab() {
         )}
       </View>
 
+      {/* Goals Card */}
+      <View style={{ marginBottom: spacing.lg }}>
+        <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>
+          Goals
+        </Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => router.push('/progress/goals')}
+        >
+          <Card>
+            <View style={styles.measurementCard}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs }}>
+                  <Ionicons name="flag-outline" size={20} color={colors.primary} />
+                  <Text style={[typography.label, { color: colors.text, marginLeft: spacing.sm }]}>
+                    Track your goals
+                  </Text>
+                </View>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                  See progress toward your training, weight, and nutrition targets
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+            </View>
+          </Card>
+        </TouchableOpacity>
+      </View>
+
       {/* Body Measurements Card */}
       <View style={{ marginBottom: spacing.lg }}>
         <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>

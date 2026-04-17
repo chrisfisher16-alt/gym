@@ -17,6 +17,8 @@ import {
   updatePersonalRecord,
   activeToCompleted,
 } from '../lib/workout-utils';
+import { track } from '../lib/observability';
+import { syncWorkoutSession } from '../lib/sync';
 
 // ── Storage Keys ────────────────────────────────────────────────────
 
@@ -865,6 +867,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
     AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+
+    track('workout_completed', {
+      duration_seconds: completed.durationSeconds,
+      total_sets: completed.totalSets,
+      total_volume: completed.totalVolume,
+      pr_count: completed.prCount,
+      exercises_count: completed.exercises.length,
+    });
+
+    // Fire-and-forget write-through sync. Queues locally if the push fails.
+    syncWorkoutSession(completed).catch(() => {});
 
     return completed;
   },

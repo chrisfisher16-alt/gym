@@ -4,6 +4,7 @@ export default function ProgressLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="measurements" options={{ headerShown: false }} />
+      <Stack.Screen name="goals" options={{ headerShown: false }} />
     </Stack>
   );
 }

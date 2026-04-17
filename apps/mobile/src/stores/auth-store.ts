@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { Profile, CoachPreferences } from '@health-coach/shared';
+import { identify, resetUser, track } from '../lib/observability';
 
 interface AuthState {
   session: Session | null;
@@ -59,6 +60,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           coachPreferences: coachPrefs ?? null,
           isOnboarded: !!profile?.display_name,
         });
+
+        identify(session.user.id, {
+          email: session.user.email,
+          display_name: profile?.display_name,
+        });
       }
     } catch {
       // Session check failed, user not authenticated
@@ -88,6 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return { error };
       await get().initialize();
+      track('user_signed_in');
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -98,6 +105,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) return { error };
+      track('user_signed_up');
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -106,6 +114,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
+    track('user_signed_out');
+    resetUser();
     set({
       session: null,
       user: null,
