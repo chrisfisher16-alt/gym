@@ -15,6 +15,8 @@ import type {
 } from '../types/nutrition';
 import { calculateDailyTotals, generateNutritionId, getDateString } from '../lib/nutrition-utils';
 import { getSeedRecipes, getSeedRecipeIds } from '../lib/seed-recipes';
+import { track } from '../lib/observability';
+import { syncMealLog } from '../lib/sync';
 
 // ── Storage Keys ──────────────────────────────────────────────────
 
@@ -429,6 +431,16 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
     set({ dailyLogs });
     get().persistAll();
+
+    track('meal_logged', {
+      meal_type: meal.mealType,
+      source: meal.source,
+      item_count: meal.items.length,
+      calories: Math.round(meal.items.reduce((s, i) => s + i.calories, 0)),
+    });
+
+    // Fire-and-forget write-through sync. Queues locally if the push fails.
+    syncMealLog(date, meal).catch(() => {});
   },
 
   addMealItem: (mealId, item) => {

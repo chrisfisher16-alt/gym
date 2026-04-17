@@ -7,6 +7,7 @@ import { useTheme } from '../../src/theme';
 import { useExerciseLibrary } from '../../src/hooks/useExerciseLibrary';
 import { usePersonalRecords } from '../../src/hooks/usePersonalRecords';
 import { useActiveWorkout } from '../../src/hooks/useActiveWorkout';
+import { useProfileStore } from '../../src/stores/profile-store';
 import { Badge, Card, Button } from '../../src/components/ui';
 import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS, EQUIPMENT_ICONS } from '../../src/lib/exercise-data';
 import { getExerciseHistory } from '../../src/lib/workout-db';
@@ -26,7 +27,8 @@ export default function ExerciseDetailScreen() {
   const exercise = getExerciseById(exerciseId ?? '');
   const record = getRecordForExercise(exerciseId ?? '');
   const recentHistory = getExerciseHistory(exerciseId ?? '', history, 5);
-  const unit = 'lbs'; // TODO: from user prefs
+  const unitPref = useProfileStore((s) => s.profile.unitPreference);
+  const unit = unitPref === 'metric' ? 'kg' : 'lbs';
 
   if (!exercise) {
     return (

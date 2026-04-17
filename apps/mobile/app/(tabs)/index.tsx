@@ -333,7 +333,7 @@ export default function TodayTab() {
                       <TouchableOpacity key={s.id} onPress={() => { if (!t) logSupplement(s.id); }} activeOpacity={0.7}
                         style={[S.pill, { backgroundColor: t ? colors.successLight : colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginRight: spacing.sm }]}>
                         <Ionicons name={t ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={t ? colors.success : colors.textTertiary} />
-                        <Text style={[typography.caption, { color: t ? colors.success : colors.textSecondary, marginLeft: spacing.xs }]}>{s.name}</Text>
+                        <Text style={[typography.caption, { color: t ? colors.success : colors.textSecondary, marginLeft: spacing.xs }]}>{s.supplementName}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -510,10 +510,10 @@ export default function TodayTab() {
             <View style={[S.vDiv, { backgroundColor: colors.borderLight }]} />
             <View style={S.statC}><Text style={[typography.h2, { color: colors.text }]}>{todayDone.totalSets}</Text><Text style={[typography.caption, { color: colors.textSecondary }]}>sets</Text></View>
           </View>
-          {todayDone.prsHit > 0 && (
+          {todayDone.prCount > 0 && (
             <View style={[S.row, { backgroundColor: colors.goldLight, borderRadius: radius.sm, marginTop: spacing.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, alignSelf: 'flex-start' }]}>
               <Ionicons name="ribbon" size={14} color={colors.gold} />
-              <Text style={[typography.labelSmall, { color: colors.gold, marginLeft: spacing.xs }]}>{todayDone.prsHit} PR{todayDone.prsHit > 1 ? 's' : ''} hit!</Text>
+              <Text style={[typography.labelSmall, { color: colors.gold, marginLeft: spacing.xs }]}>{todayDone.prCount} PR{todayDone.prCount > 1 ? 's' : ''} hit!</Text>
             </View>
           )}
         </Card>

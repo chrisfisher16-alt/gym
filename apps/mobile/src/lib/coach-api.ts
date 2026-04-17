@@ -1,19 +1,42 @@
 // ── Coach API Layer ─────────────────────────────────────────────────
-// Functions for AI coach features. Uses client-side AI providers instead
-// of Supabase Edge Functions.
+// Primary chat goes through the Supabase `coach-chat` Edge Function so
+// the Anthropic key stays server-side. Falls back to the client-side AI
+// provider only when Supabase is unconfigured or the user has no session
+// (e.g. demo/preview mode).
 
 import { sendAIMessage, sendWorkoutCoachMessage, sendNutritionCoachMessage, type AIClientResponse } from './ai-client';
 import { buildExerciseAdjustmentSystemPrompt } from './coach-system-prompt';
 import type { AIMessage } from './ai-provider';
+import { supabase, isSupabaseConfigured } from './supabase';
+import { useProfileStore } from '../stores/profile-store';
+import { useNutritionStore } from '../stores/nutrition-store';
+import { getDateString } from './nutrition-utils';
+import type { DailyNutritionLog } from '../types/nutrition';
 
 // ── Types ───────────────────────────────────────────────────────────
 
+export interface StructuredContent {
+  type: 'workout_plan' | 'nutrition_summary' | 'meal_analysis' | 'weekly_summary' | 'progress_chart' | 'action_button' | 'text';
+  data: Record<string, unknown>;
+}
+
 export interface ChatResponse {
+  /** Server-side conversation id (UUID). Absent when running via the client-side fallback. */
   conversation_id: string;
   message_id: string;
   content: string;
   model: string;
   isDemo: boolean;
+  structured_content?: StructuredContent[];
+}
+
+interface EdgeChatResponse {
+  conversation_id: string;
+  message_id: string;
+  content: string;
+  structured_content?: StructuredContent[];
+  model: string;
+  tokens?: { input: number; output: number; total: number };
 }
 
 export interface ParsedMealItem {
@@ -32,8 +55,12 @@ export interface ParsedMealItem {
 // ── API Functions ───────────────────────────────────────────────────
 
 /**
- * Send a chat message to the AI coach.
- * Uses the client-side AI provider (demo, Groq, OpenAI, Ollama).
+ * Send a chat message to the AI coach. Prefers the server-side `coach-chat`
+ * Edge Function; falls back to the client-side provider only when the user
+ * has no Supabase session.
+ *
+ * `conversationId` should be the server-side (remote) conversation id from a
+ * prior response, or undefined to start a new server-side conversation.
  */
 export async function sendChatMessage(
   conversationId: string | undefined,
@@ -41,6 +68,35 @@ export async function sendChatMessage(
   context: string = 'general',
   history: AIMessage[] = [],
 ): Promise<ChatResponse> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        const { data, error } = await supabase.functions.invoke<EdgeChatResponse>('coach-chat', {
+          body: {
+            message,
+            conversation_id: conversationId,
+            context,
+          },
+        });
+        if (error) throw error;
+        if (data) {
+          return {
+            conversation_id: data.conversation_id,
+            message_id: data.message_id,
+            content: data.content,
+            model: data.model,
+            isDemo: false,
+            structured_content: data.structured_content,
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('coach-chat edge function failed, falling back to client-side provider:', error);
+    }
+  }
+
+  // Fallback: client-side provider (demo mode or offline/unauthenticated)
   const response = await sendAIMessage(message, {
     history,
     context: context as 'general' | 'workout' | 'nutrition',
@@ -55,22 +111,115 @@ export async function sendChatMessage(
   };
 }
 
+// ── Coach Quick Edge Function helpers ───────────────────────────────
+
+interface CoachQuickResponse {
+  content: string;
+  model: string;
+}
+
+async function hasAuthedSession(): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  const { data } = await supabase.auth.getSession();
+  return !!data.session;
+}
+
 /**
- * Send a quick in-workout coach message.
+ * Collect the nutrition context the Edge Function needs to build the
+ * in-nutrition system prompt (targets, today's totals, allergies, etc.).
+ */
+function gatherNutritionContext(): Record<string, unknown> {
+  const profile = useProfileStore.getState().profile;
+  const nutrition = useNutritionStore.getState();
+
+  const ctx: Record<string, unknown> = {
+    targets: {
+      calories: nutrition.targets.calories,
+      protein_g: nutrition.targets.protein_g,
+      carbs_g: nutrition.targets.carbs_g,
+      fat_g: nutrition.targets.fat_g,
+    },
+  };
+
+  const todayStr = getDateString(new Date());
+  const logs = (nutrition.dailyLogs ?? {}) as Record<string, DailyNutritionLog>;
+  const todayLog = logs[todayStr];
+  if (todayLog && todayLog.meals.length > 0) {
+    let cals = 0, protein = 0, carbs = 0, fat = 0;
+    for (const meal of todayLog.meals) {
+      for (const item of meal.items) {
+        cals += item.calories;
+        protein += item.protein_g;
+        carbs += item.carbs_g;
+        fat += item.fat_g;
+      }
+    }
+    ctx.today_totals = {
+      calories: Math.round(cals),
+      protein: Math.round(protein),
+      carbs: Math.round(carbs),
+      fat: Math.round(fat),
+      meal_count: todayLog.meals.length,
+    };
+  }
+
+  if (profile.allergies?.length) ctx.allergies = profile.allergies;
+  if (profile.dietaryPreferences?.length) ctx.dietary_preferences = profile.dietaryPreferences;
+
+  return ctx;
+}
+
+/**
+ * Send a quick in-workout coach message. Prefers the `coach-quick`
+ * Edge Function; falls back to the client-side provider when the user
+ * has no Supabase session (demo/preview mode).
  */
 export async function sendWorkoutQuickMessage(
   message: string,
   exerciseName?: string,
 ): Promise<AIClientResponse> {
+  if (await hasAuthedSession()) {
+    try {
+      const { data, error } = await supabase.functions.invoke<CoachQuickResponse>('coach-quick', {
+        body: {
+          mode: 'workout',
+          message,
+          workout: exerciseName ? { current_exercise: exerciseName } : undefined,
+        },
+      });
+      if (error) throw error;
+      if (data) return { content: data.content, model: data.model, isDemo: false };
+    } catch (error) {
+      console.warn('coach-quick (workout) failed, falling back to client-side provider:', error);
+    }
+  }
   return sendWorkoutCoachMessage(message, exerciseName);
 }
 
 /**
- * Send a quick in-nutrition coach message.
+ * Send a quick in-nutrition coach message. Prefers the `coach-quick`
+ * Edge Function; falls back to the client-side provider when the user
+ * has no Supabase session.
  */
 export async function sendNutritionQuickMessage(
   message: string,
 ): Promise<AIClientResponse> {
+  if (await hasAuthedSession()) {
+    try {
+      const nutritionContext = gatherNutritionContext();
+      const { data, error } = await supabase.functions.invoke<CoachQuickResponse>('coach-quick', {
+        body: {
+          mode: 'nutrition',
+          message,
+          nutrition: nutritionContext,
+        },
+      });
+      if (error) throw error;
+      if (data) return { content: data.content, model: data.model, isDemo: false };
+    } catch (error) {
+      console.warn('coach-quick (nutrition) failed, falling back to client-side provider:', error);
+    }
+  }
   return sendNutritionCoachMessage(message);
 }
 
@@ -198,6 +347,40 @@ export async function requestExerciseAdjustment(
   userRequest: string,
   workoutExercises?: Array<{ name: string; exerciseId: string }>,
 ): Promise<ExerciseAdjustmentResponse> {
+  // Prefer the server-side `coach-quick` Edge Function so the AI key
+  // stays off the client. Client still parses the returned JSON block
+  // to extract structured adjustment actions.
+  if (await hasAuthedSession()) {
+    try {
+      const { data, error } = await supabase.functions.invoke<CoachQuickResponse>('coach-quick', {
+        body: {
+          mode: 'exercise_adjustment',
+          message: userRequest,
+          adjustment: {
+            current_exercise: currentExerciseName,
+            workout_exercises: workoutExercises?.map((e) => ({ name: e.name })),
+            available_exercises: availableExerciseNames,
+          },
+        },
+      });
+      if (error) throw error;
+      if (data) {
+        const adjustments = parseAdjustmentsFromResponse(data.content, currentExerciseName);
+        const content = stripJsonBlock(data.content);
+        return {
+          content,
+          adjustment: adjustments[0] ?? null,
+          adjustments,
+          model: data.model,
+          isDemo: false,
+        };
+      }
+    } catch (error) {
+      console.warn('coach-quick (exercise_adjustment) failed, falling back to client-side provider:', error);
+    }
+  }
+
+  // Fallback: client-side provider (demo/preview mode or no session)
   const response = await sendAIMessage(userRequest, {
     systemPrompt: buildExerciseAdjustmentSystemPrompt(
       currentExerciseName,

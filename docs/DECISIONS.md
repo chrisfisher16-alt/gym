@@ -349,3 +349,97 @@ In v1, request only the minimum health data permissions:
 - Heart rate → workout intensity validation
 - Steps → daily activity score
 - Each new permission will be its own ADR when the time comes
+
+---
+
+## ADR-010: Write-Through Summary Sync (Client → Supabase)
+
+**Status:** Accepted
+**Date:** 2026-04-17
+
+### Context
+
+The mobile app is local-first: workouts, meal logs, measurements, water intake, supplements, PRs, and achievements all live in Zustand stores persisted to AsyncStorage. At the same time, Supabase-side features — coach memory, weekly-summary Edge Function, admin Overview KPIs — expect to read user activity from the relational tables (`workout_sessions`, `set_logs`, `nutrition_day_logs`, `meal_logs`, `meal_items`).
+
+Before this ADR, only `profiles` and `coach_preferences` were ever written to Supabase by the client. Every server-side feature that depends on user activity returned empty results for real users.
+
+Full normalized sync (resolving local exercise IDs to server UUIDs, joining meal items on barcodes, reconciling conflicts on edits) is a substantial design that needs its own spec. We want to unblock server-side features now without committing to that larger design.
+
+### Decision
+
+Implement a **write-through summary sync** with these properties:
+
+1. **Local store remains the source of truth for the UI.** Reads from Zustand, unchanged.
+2. **Summary-level push.** On workout completion and meal log, the client fires a best-effort push to Supabase containing:
+   - Session/meal metadata + a `*_json` column with the denormalized payload.
+   - Added columns: `workout_sessions.total_volume/total_sets/pr_count/exercises_json/sets_json` and `meal_logs.items_json/local_id/is_synced`. (Migration `00003_sync_summary_columns.sql`.)
+3. **No read-back.** The client never pulls server state to reconcile. Local wins.
+4. **Retry queue.** Failed pushes are stored in AsyncStorage under `@sync/queue` and retried on the next app launch (`flushSyncQueue` in `_layout.tsx`).
+5. **Idempotent upserts.** All writes use `onConflict: 'user_id,local_id'` so retries are safe.
+6. **No UI status surface.** Sync is silent. A status indicator can be added later if needed.
+
+### Consequences
+
+**Positive:**
+
+- Weekly-summary, coach memory, admin KPIs, and AI Ops telemetry see real user data.
+- No change to the offline-first UX — local writes always succeed immediately.
+- Small scope; small surface area to debug.
+
+**Negative:**
+
+- Server-side data is denormalized JSON rather than queryable columns for set-level analytics.
+- No conflict resolution: if the same local session is edited on two devices, last-write-wins at the Supabase layer (local wins in the UI).
+- `set_logs`, `meal_items`, `exercises` tables remain empty — any feature that depends on them (e.g. SQL aggregations on set-level data) won't work until full sync is built.
+
+**Deferred work (separate ADR when we need it):**
+
+- **Full relational sync.** Map local exercise IDs → server `exercises` rows; populate `set_logs` and `meal_items`; design for edits/deletes and conflict rules.
+- **Sync status UI.** A small indicator showing queued / syncing / synced.
+- **Multi-device reconciliation.** If/when a user installs the app on a second device, decide whether to pull server state or treat each install as isolated.
+
+---
+
+## ADR-011: Deferred UX / Infra Items
+
+**Status:** Accepted
+**Date:** 2026-04-17
+
+This is a consolidated record of items surfaced during the April 2026 QA pass that we deliberately chose not to land in the same wave. Each is individually small but collectively would have blown up the blast radius.
+
+### 1. Exercise library in code, not the database
+
+`apps/mobile/src/lib/exercise-data.ts` is 3.8K LOC of hard-coded exercise definitions. Moving it to a Supabase `exercises` table would let us:
+
+- Update the library without shipping an app update.
+- Share exercises between mobile and admin tools.
+- Unblock the full relational sync from ADR-010.
+
+Blockers: designing the migration path (local IDs are strings like `ex_bench_press`; server IDs are UUIDs), seeding the table, keeping offline-first (library needs to be cached locally on first launch).
+
+### 2. Large component splits
+
+Two components are each ~630 LOC and getting painful to maintain:
+
+- `src/components/FocusedWorkoutView.tsx`
+- `src/components/InWorkoutCoach.tsx`
+
+These should be broken into smaller pieces (set row, rest timer, coach prompt, etc.). Not urgent — both work correctly — and we have no tests yet, so refactoring blind is risky.
+
+### 3. Demo-mode code volume
+
+`src/lib/demo-mode.ts` (~560 LOC) plus `src/lib/ai-demo-responses.ts` (~800 LOC) add up to ~1,400 lines of fixture data. Worth revisiting when we know which demo flows we still need.
+
+Options: keep it, move behind a separate bundle that only ships in `__DEV__`, or replace with a small seed dataset loaded into a real Supabase project.
+
+### 4. Sentry for the admin portal
+
+Next.js 16.1 landed inside the window where `@sentry/nextjs` hasn't published a peer-compatible release (peer-dep resolve fails). The mobile `@sentry/react-native` wiring landed; admin side has PostHog but no error reporting yet. Revisit once `@sentry/nextjs` supports Next 16.
+
+### 5. Mobile/admin test coverage
+
+Shared package has vitest + 28 unit tests (schemas + utilities). Mobile and admin have none yet — adding jest-expo for RN and jest/playwright for Next.js is a meaningful project on its own.
+
+### 6. Sync status UI
+
+ADR-010 intentionally ships silent sync. Users can't see if a workout is queued for upload. Fine for v1; if we start seeing confusion we'll add a small status chip on Today tab.

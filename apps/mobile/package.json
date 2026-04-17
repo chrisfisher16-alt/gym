@@ -7,13 +7,15 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "proxy": "node scripts/cors-proxy.js"
+    "proxy": "node scripts/cors-proxy.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/metro-runtime": "^55.0.6",
     "@expo/vector-icons": "^15.0.2",
     "@hookform/resolvers": "^5.2.2",
     "@react-native-async-storage/async-storage": "^3.0.1",
+    "@sentry/react-native": "^8.5.0",
     "@supabase/supabase-js": "^2.99.2",
     "@tanstack/react-query": "^5.90.21",
     "expo": "~55.0.6",
@@ -30,6 +32,7 @@
     "expo-splash-screen": "~55.0.10",
     "expo-status-bar": "~55.0.4",
     "expo-system-ui": "~55.0.9",
+    "posthog-react-native": "^4.42.0",
     "react": "19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",

@@ -4,6 +4,7 @@ import type { CoachContext } from '@health-coach/shared';
 import * as coachApi from '../lib/coach-api';
 import type { AIMessage } from '../lib/ai-provider';
 import { parseCoachActions, executeCoachAction, type CoachAction } from '../lib/coach-actions';
+import { captureException, track } from '../lib/observability';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -37,7 +38,10 @@ export interface ToolCallResult {
 }
 
 export interface CoachConversation {
+  /** Local id used for client-side grouping and persistence. */
   id: string;
+  /** Server-side conversation id returned by the `coach-chat` Edge Function. */
+  remoteId?: string;
   context: CoachContext;
   title?: string;
   started_at: string;
@@ -165,6 +169,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       error: null,
     }));
 
+    track('coach_message_sent', { context: context ?? conversation.context });
+
     try {
       // Build history from current conversation messages
       const currentMessages = get().messages.filter(
@@ -174,9 +180,11 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const historyMessages = currentMessages.slice(0, -1);
       const aiHistory = toAIHistory(historyMessages);
 
-      // Call the API with conversation history
+      // Call the API with conversation history. Pass the server-side
+      // (remote) conversation id so the Edge Function threads context
+      // correctly; otherwise pass undefined to let the server create one.
       const response = await coachApi.sendChatMessage(
-        conversation.id,
+        conversation.remoteId,
         text,
         context ?? conversation.context,
         aiHistory,
@@ -191,6 +199,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         conversation_id: conversation.id,
         role: 'assistant',
         content: cleanContent,
+        structured_content: response.structured_content,
         actions: actions.length > 0
           ? actions.map((action) => ({ action, status: 'pending' as const }))
           : undefined,
@@ -198,9 +207,10 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         created_at: new Date().toISOString(),
       };
 
-      // Update conversation
+      // Update conversation, capturing the server-side id on first reply.
       const updatedConversation: CoachConversation = {
         ...conversation,
+        remoteId: conversation.remoteId ?? (response.conversation_id || undefined),
         last_message_at: new Date().toISOString(),
         message_count: (conversation.message_count ?? 0) + 2,
       };
@@ -222,6 +232,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION, JSON.stringify(updatedConversation)),
       ]);
     } catch (error) {
+      captureException(error, { where: 'coach-store.sendMessage', context: conversation.context });
+
       const errorMessage =
         error instanceof Error
           ? error.message

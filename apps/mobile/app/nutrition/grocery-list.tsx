@@ -37,11 +37,16 @@ export default function GroceryListScreen() {
   const setList = useGroceryStore((s) => s.setList);
   const toggleItem = useGroceryStore((s) => s.toggleItem);
   const clearList = useGroceryStore((s) => s.clearList);
+  const addItem = useGroceryStore((s) => s.addItem);
+  const removeItem = useGroceryStore((s) => s.removeItem);
+  const clearCheckedItems = useGroceryStore((s) => s.clearCheckedItems);
 
   const [selectedDays, setSelectedDays] = useState<3 | 5 | 7>(7);
   const [generating, setGenerating] = useState(false);
   const [additionalPrompt, setAdditionalPrompt] = useState('');
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemQty, setNewItemQty] = useState('');
 
   useEffect(() => {
     if (!isInitialized) initialize();
@@ -225,6 +230,29 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
     return { total, checked };
   }, [currentList]);
 
+  // ── Add & remove items ────────────────────────────────────────────
+
+  const handleAddItem = useCallback(() => {
+    const name = newItemName.trim();
+    if (!name) return;
+    addItem('Other', {
+      name,
+      quantity: newItemQty.trim() || '1',
+      checked: false,
+    });
+    setNewItemName('');
+    setNewItemQty('');
+  }, [newItemName, newItemQty, addItem]);
+
+  const handleClearChecked = useCallback(async () => {
+    if (progress.checked === 0) return;
+    const confirmed = await confirmAction(
+      'Clear Checked',
+      `Remove ${progress.checked} checked item${progress.checked > 1 ? 's' : ''} from the list?`,
+    );
+    if (confirmed) clearCheckedItems();
+  }, [progress.checked, clearCheckedItems]);
+
   // ── Generation Form (shared between empty state and regenerate) ──
 
   const renderGenerationForm = () => (
@@ -385,6 +413,18 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
             <Text style={[typography.caption, { color: colors.textTertiary, marginTop: spacing.xs }]}>
               {currentList.daysPlanned}-day plan · Created {new Date(currentList.createdAt).toLocaleDateString()}
             </Text>
+            {progress.checked > 0 && (
+              <TouchableOpacity
+                onPress={handleClearChecked}
+                style={{ marginTop: spacing.sm, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' }}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+              >
+                <Ionicons name="trash-bin-outline" size={14} color={colors.error} />
+                <Text style={[typography.labelSmall, { color: colors.error, marginLeft: 4 }]}>
+                  Clear checked ({progress.checked})
+                </Text>
+              </TouchableOpacity>
+            )}
           </Card>
 
           {/* Categories */}
@@ -449,12 +489,91 @@ Include estimated cost per item in USD. Make quantities realistic for ${selected
                         <Ionicons name="cart-outline" size={18} color={colors.primary} />
                       </TouchableOpacity>
                     )}
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        removeItem(catIdx, itemIdx);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ padding: 4, marginLeft: 2 }}
+                    >
+                      <Ionicons name="close-circle-outline" size={18} color={colors.textTertiary} />
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 ))}
               </Card>
             </View>
             );
           })}
+
+          {/* Add custom item */}
+          <View style={{ marginBottom: spacing.base }}>
+            <Card>
+              <Text style={[typography.label, { color: colors.text, marginBottom: spacing.sm }]}>
+                Add item
+              </Text>
+              <View style={styles.addItemRow}>
+                <TextInput
+                  value={newItemName}
+                  onChangeText={setNewItemName}
+                  placeholder="Item name"
+                  placeholderTextColor={colors.textTertiary}
+                  style={[
+                    styles.addItemInput,
+                    {
+                      flex: 2,
+                      color: colors.text,
+                      backgroundColor: colors.surfaceSecondary,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                    },
+                  ]}
+                  returnKeyType="done"
+                  onSubmitEditing={handleAddItem}
+                />
+                <TextInput
+                  value={newItemQty}
+                  onChangeText={setNewItemQty}
+                  placeholder="Qty"
+                  placeholderTextColor={colors.textTertiary}
+                  style={[
+                    styles.addItemInput,
+                    {
+                      flex: 1,
+                      marginLeft: spacing.sm,
+                      color: colors.text,
+                      backgroundColor: colors.surfaceSecondary,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                    },
+                  ]}
+                  returnKeyType="done"
+                  onSubmitEditing={handleAddItem}
+                />
+                <TouchableOpacity
+                  onPress={handleAddItem}
+                  disabled={!newItemName.trim()}
+                  style={[
+                    styles.addItemButton,
+                    {
+                      backgroundColor: newItemName.trim() ? colors.primary : colors.surfaceSecondary,
+                      borderRadius: radius.md,
+                      marginLeft: spacing.sm,
+                      paddingHorizontal: spacing.md,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="add"
+                    size={20}
+                    color={newItemName.trim() ? colors.textInverse : colors.textTertiary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </Card>
+          </View>
 
           {/* Cook with these groceries — only when unchecked items exist */}
           {progress.checked < progress.total && (
@@ -522,5 +641,18 @@ const styles = StyleSheet.create({
   },
   additionalPromptInput: {
     textAlignVertical: 'top',
+  },
+  addItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addItemInput: {
+    fontSize: 14,
+  },
+  addItemButton: {
+    minWidth: 44,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
