@@ -1,8 +1,10 @@
 // ── AI Workout Generator ────────────────────────────────────────────
-// Generates workout sessions via the AI provider, using the user's
-// profile, equipment, experience, recent workouts, and active program.
+// Calls the `ai-workout-generate` Supabase Edge Function so the AI key
+// stays server-side. Profile + exercise library context is passed in
+// the request body; exercise-ID matching happens client-side after the
+// model returns names. Falls back to a demo workout when unauthenticated.
 
-import { getAIConfig, callAI, type AIMessage } from './ai-provider';
+import { supabase, isSupabaseConfigured } from './supabase';
 import { useProfileStore } from '../stores/profile-store';
 import { useWorkoutStore } from '../stores/workout-store';
 import type { ExerciseLibraryEntry } from '../types/workout';
@@ -29,9 +31,7 @@ export interface GenerateWorkoutResult {
   model: string;
 }
 
-// ── Raw AI response shape ───────────────────────────────────────────
-
-interface AIWorkoutResponse {
+interface EdgeWorkoutResponse {
   name: string;
   exercises: Array<{
     name: string;
@@ -40,105 +40,64 @@ interface AIWorkoutResponse {
     rest_seconds: number;
     notes?: string;
   }>;
+  model: string;
 }
 
-// ── Context builders ────────────────────────────────────────────────
+// ── Context gathering ───────────────────────────────────────────────
 
-function buildWorkoutContext(): string {
+function gatherRequestContext(): {
+  exerciseNames: string[];
+  library: ExerciseLibraryEntry[];
+  context: Record<string, unknown>;
+} {
   const profile = useProfileStore.getState().profile;
   const { history, programs, exercises } = useWorkoutStore.getState();
 
-  const lines: string[] = [];
+  const library = exercises.filter((e) => e.category !== 'warmup' && e.category !== 'cooldown');
+  const exerciseNames = library.map((e) => e.name);
 
-  // Goals
-  const goalLabels: Record<string, string> = {
-    lose_weight: 'Lose Weight', gain_muscle: 'Gain Muscle',
-    build_lean_muscle: 'Build Lean Muscle', improve_endurance: 'Improve Endurance',
-    maintain_weight: 'Maintain Weight', improve_general_health: 'Improve General Health',
-  };
-  if (profile.healthGoals?.length) {
-    lines.push(`Goals: ${profile.healthGoals.map((g) => goalLabels[g] ?? g).join(', ')}`);
-  }
-  if (profile.primaryGoal) {
-    lines.push(`Primary goal: ${profile.primaryGoal}`);
-  }
+  const recent = history.slice(-5).map((s) => ({
+    name: s.name,
+    date: s.startedAt ? new Date(s.startedAt).toISOString().slice(0, 10) : undefined,
+    exercises: s.exercises.map((e) => e.exerciseName),
+  }));
 
-  // Physical stats
-  if (profile.trainingExperience) {
-    lines.push(`Training experience: ${profile.trainingExperience}`);
-  }
-  if (profile.trainingDaysPerWeek) {
-    lines.push(`Training days/week: ${profile.trainingDaysPerWeek}`);
-  }
-  if (profile.injuriesOrLimitations) {
-    lines.push(`Injuries/limitations: ${profile.injuriesOrLimitations}`);
-  }
-
-  // Equipment
-  const equipment = profile.fitnessEquipment ?? profile.availableEquipment ?? [];
-  if (equipment.length > 0) {
-    lines.push(`Available equipment: ${equipment.join(', ')}`);
-  }
-
-  // Recent workouts (last 5)
-  const recent = history.slice(-5);
-  if (recent.length > 0) {
-    lines.push('\nRecent workouts:');
-    for (const session of recent) {
-      const exerciseNames = session.exercises.map((e) => e.exerciseName).join(', ');
-      lines.push(`- ${session.name} (${new Date(session.startedAt).toLocaleDateString()}): ${exerciseNames}`);
-    }
-  }
-
-  // Active program context
   const activeProgram = programs.find((p) => p.isActive);
+  const equipment = profile.fitnessEquipment ?? profile.availableEquipment ?? [];
+
+  const context: Record<string, unknown> = {
+    goals: profile.healthGoals,
+    primary_goal: profile.primaryGoal,
+    training_experience: profile.trainingExperience,
+    training_days_per_week: profile.trainingDaysPerWeek,
+    injuries: profile.injuriesOrLimitations,
+    equipment,
+    recent_workouts: recent,
+  };
+
   if (activeProgram) {
-    lines.push(`\nActive program: ${activeProgram.name} (${activeProgram.difficulty}, ${activeProgram.daysPerWeek} days/week)`);
+    context.active_program = {
+      name: activeProgram.name,
+      difficulty: activeProgram.difficulty,
+      days_per_week: activeProgram.daysPerWeek,
+    };
   }
 
-  // Available exercises (names only for reference)
-  const exerciseNames = exercises
-    .filter((e) => e.category !== 'warmup' && e.category !== 'cooldown')
-    .map((e) => e.name);
-  lines.push(`\nAvailable exercises in the app's library (use ONLY these exact names):\n${exerciseNames.join(', ')}`);
-
-  return lines.join('\n');
+  return { exerciseNames, library, context };
 }
 
-// ── System prompt ───────────────────────────────────────────────────
+// ── Exercise matching ───────────────────────────────────────────────
 
-function buildWorkoutSystemPrompt(): string {
-  const ctx = buildWorkoutContext();
-
-  return `You are a workout programming AI for a health and fitness app. Generate a single workout session based on the user's prompt, goals, equipment, and experience.
-
-## User Context
-${ctx}
-
-## Requirements
-- ONLY use exercises from the "Available exercises" list above. Use the EXACT exercise names.
-- Respect the user's injuries/limitations — avoid movements that aggravate them.
-- Match volume and intensity to the user's experience level.
-- Consider recent workouts to avoid overtraining the same muscle groups back-to-back.
-- Use appropriate equipment based on what the user has.
-- Include 4–8 exercises per workout.
-- Sets: 2–5 per exercise. Reps: appropriate for the goal (e.g. "6-8" for strength, "8-12" for hypertrophy, "12-15" for endurance).
-- Rest seconds: 60–90 for hypertrophy, 120–180 for strength, 30–60 for conditioning.
-
-## Output Format
-Respond with ONLY a valid JSON object (no markdown fences, no extra text) in this exact shape:
-{
-  "name": "Workout Name",
-  "exercises": [
-    {
-      "name": "Barbell Bench Press",
-      "sets": 4,
-      "reps": "8-10",
-      "rest_seconds": 90,
-      "notes": "Focus on controlled tempo"
-    }
-  ]
-}`;
+function findExerciseMatch(
+  aiName: string,
+  library: ExerciseLibraryEntry[],
+): ExerciseLibraryEntry | undefined {
+  const lower = aiName.toLowerCase().trim();
+  const exact = library.find((e) => e.name.toLowerCase() === lower);
+  if (exact) return exact;
+  return library.find(
+    (e) => lower.includes(e.name.toLowerCase()) || e.name.toLowerCase().includes(lower),
+  );
 }
 
 // ── Generator ───────────────────────────────────────────────────────
@@ -146,42 +105,34 @@ Respond with ONLY a valid JSON object (no markdown fences, no extra text) in thi
 export async function generateWorkout(
   options: GenerateWorkoutOptions,
 ): Promise<GenerateWorkoutResult> {
-  const config = await getAIConfig();
-
-  if (config.provider === 'demo') {
+  if (!isSupabaseConfigured) {
     return getDemoWorkout();
   }
 
-  const systemPrompt = buildWorkoutSystemPrompt();
-  const messages: AIMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: options.prompt },
-  ];
-
-  const response = await callAI(messages, config);
-  const parsed = parseAIWorkoutResponse(response.content);
-
-  return { ...parsed, model: response.model };
-}
-
-// ── Response parsing ────────────────────────────────────────────────
-
-function parseAIWorkoutResponse(raw: string): Omit<GenerateWorkoutResult, 'model'> {
-  let cleaned = raw.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    return getDemoWorkout();
   }
 
-  const data: AIWorkoutResponse = JSON.parse(cleaned);
+  const { exerciseNames, library, context } = gatherRequestContext();
 
-  if (!data.name || !data.exercises || !Array.isArray(data.exercises) || data.exercises.length === 0) {
-    throw new Error('AI response missing required workout fields');
+  const { data, error } = await supabase.functions.invoke<EdgeWorkoutResponse>(
+    'ai-workout-generate',
+    {
+      body: {
+        prompt: options.prompt,
+        exercise_names: exerciseNames,
+        context,
+      },
+    },
+  );
+
+  if (error) throw error;
+  if (!data || !Array.isArray(data.exercises) || data.exercises.length === 0) {
+    throw new Error('Workout generator returned no exercises');
   }
-
-  const library = useWorkoutStore.getState().exercises;
 
   const exercises: GeneratedExercise[] = data.exercises.map((aiEx) => {
-    // Match by name (case-insensitive)
     const match = findExerciseMatch(aiEx.name, library);
     return {
       exerciseId: match?.id ?? `custom_${aiEx.name.toLowerCase().replace(/\s+/g, '_')}`,
@@ -193,21 +144,7 @@ function parseAIWorkoutResponse(raw: string): Omit<GenerateWorkoutResult, 'model
     };
   });
 
-  return { name: data.name, exercises };
-}
-
-function findExerciseMatch(
-  aiName: string,
-  library: ExerciseLibraryEntry[],
-): ExerciseLibraryEntry | undefined {
-  const lower = aiName.toLowerCase().trim();
-  // Exact match first
-  const exact = library.find((e) => e.name.toLowerCase() === lower);
-  if (exact) return exact;
-  // Partial match — AI name contains library name or vice versa
-  return library.find(
-    (e) => lower.includes(e.name.toLowerCase()) || e.name.toLowerCase().includes(lower),
-  );
+  return { name: data.name, exercises, model: data.model };
 }
 
 // ── Demo fallback ───────────────────────────────────────────────────

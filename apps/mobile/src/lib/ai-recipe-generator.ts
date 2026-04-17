@@ -1,8 +1,10 @@
 // ── AI Recipe Generator ─────────────────────────────────────────────
-// Generates recipes via the AI provider, respecting the user's goals,
-// allergies, dietary preferences, cooking skill, and available equipment.
+// Calls the `ai-recipe-generate` Supabase Edge Function. Profile context
+// (allergies, dietary prefs, cooking skills, targets, grocery list) is
+// passed in the body since it lives client-side. Falls back to a demo
+// recipe when unauthenticated.
 
-import { getAIConfig, callAI, type AIMessage } from './ai-provider';
+import { supabase, isSupabaseConfigured } from './supabase';
 import { useProfileStore } from '../stores/profile-store';
 import { useNutritionStore } from '../stores/nutrition-store';
 import { useGroceryStore } from '../stores/grocery-store';
@@ -23,9 +25,7 @@ export interface GenerateRecipeResult {
   model: string;
 }
 
-// ── Raw AI response shape ───────────────────────────────────────────
-
-interface AIRecipeResponse {
+interface EdgeRecipeResponse {
   name: string;
   description: string;
   difficulty: string;
@@ -49,126 +49,48 @@ interface AIRecipeResponse {
     fat_g: number;
     fiber_g: number;
   };
+  model: string;
 }
 
-// ── Context builders ────────────────────────────────────────────────
+// ── Context gathering ───────────────────────────────────────────────
 
-function buildUserContext(): string {
+function gatherRequestContext(useGroceryList: boolean): Record<string, unknown> {
   const profile = useProfileStore.getState().profile;
   const targets = useNutritionStore.getState().targets;
-  const lines: string[] = [];
 
-  // Goals
-  const goalLabels: Record<string, string> = {
-    lose_weight: 'Lose Weight', gain_muscle: 'Gain Muscle',
-    build_lean_muscle: 'Build Lean Muscle', improve_endurance: 'Improve Endurance',
-    maintain_weight: 'Maintain Weight', improve_general_health: 'Improve General Health',
+  const context: Record<string, unknown> = {
+    goals: profile.healthGoals,
+    primary_goal: profile.primaryGoal,
+    allergies: profile.allergies,
+    dietary_preferences: profile.dietaryPreferences,
+    dietary_restrictions: profile.dietaryRestrictions,
+    cooking_skill: profile.cookingSkillLevel,
+    cooking_equipment: profile.cookingEquipment,
+    daily_targets: {
+      calories: targets.calories,
+      protein_g: targets.protein_g,
+      carbs_g: targets.carbs_g,
+      fat_g: targets.fat_g,
+      fiber_g: targets.fiber_g,
+    },
   };
-  if (profile.healthGoals?.length) {
-    lines.push(`Goals: ${profile.healthGoals.map((g) => goalLabels[g] ?? g).join(', ')}`);
-  }
-  if (profile.primaryGoal) {
-    lines.push(`Primary goal: ${profile.primaryGoal}`);
-  }
 
-  // Allergies (safety-critical)
-  if (profile.allergies?.length) {
-    lines.push(`ALLERGIES (NEVER include): ${profile.allergies.join(', ')}`);
-  }
-
-  // Dietary preferences
-  if (profile.dietaryPreferences?.length) {
-    lines.push(`Dietary preferences: ${profile.dietaryPreferences.join(', ')}`);
-  }
-  if (profile.dietaryRestrictions) {
-    lines.push(`Dietary restrictions: ${profile.dietaryRestrictions}`);
-  }
-
-  // Cooking constraints
-  if (profile.cookingSkillLevel) {
-    lines.push(`Cooking skill: ${profile.cookingSkillLevel}`);
-  }
-  if (profile.cookingEquipment?.length) {
-    lines.push(`Available equipment: ${profile.cookingEquipment.join(', ')}`);
-  }
-
-  // Macro targets
-  lines.push(`Daily targets: ${targets.calories} cal, ${targets.protein_g}g protein, ${targets.carbs_g}g carbs, ${targets.fat_g}g fat, ${targets.fiber_g}g fiber`);
-
-  return lines.join('\n');
-}
-
-function buildGroceryContext(): string {
-  const { currentList } = useGroceryStore.getState();
-  if (!currentList) return '';
-
-  const sections: string[] = [];
-  for (const cat of currentList.categories) {
-    const unchecked = cat.items.filter((item) => !item.checked);
-    if (unchecked.length > 0) {
-      sections.push(`${cat.name}: ${unchecked.map((i) => `${i.name} (${i.quantity})`).join(', ')}`);
+  if (useGroceryList) {
+    const { currentList } = useGroceryStore.getState();
+    if (currentList) {
+      const items: string[] = [];
+      for (const cat of currentList.categories) {
+        for (const item of cat.items) {
+          if (!item.checked) items.push(`${item.name} (${item.quantity})`);
+        }
+      }
+      if (items.length > 0) {
+        context.grocery_list = items;
+      }
     }
   }
 
-  if (sections.length === 0) return '';
-  return `Available groceries:\n${sections.join('\n')}`;
-}
-
-// ── System prompt ───────────────────────────────────────────────────
-
-function buildRecipeSystemPrompt(options: GenerateRecipeOptions): string {
-  const userCtx = buildUserContext();
-  const groceryCtx = options.useGroceryList ? buildGroceryContext() : '';
-
-  return `You are a recipe creation AI for a health and fitness app. Generate a single recipe that is healthy, balanced, and aligned with the user's goals and constraints.
-
-## User Context
-${userCtx}
-${groceryCtx ? `\n## Grocery List (prefer these ingredients)\n${groceryCtx}\nUse ingredients from this list where possible. You may include a few extra staples (oil, salt, spices) but prioritize what's available.` : ''}
-
-## Requirements
-- The recipe MUST respect all allergies listed above. Never include allergens.
-- The recipe must match the user's dietary preferences.
-- Use only equipment the user has (or no special equipment if none listed).
-- Match the recipe difficulty to the user's cooking skill level.
-- Design the recipe to support the user's health/fitness goals (e.g. high protein for muscle gain, lower calorie for weight loss).
-- Be realistic with macro estimates — label them as estimates.
-- Each ingredient must have macros estimated per the quantity used in the recipe.
-
-## Output Format
-Respond with ONLY a valid JSON object (no markdown fences, no extra text) in this exact shape:
-{
-  "name": "Recipe Name",
-  "description": "One-sentence description of the dish",
-  "difficulty": "Easy" | "Medium" | "Hard",
-  "servings": 1,
-  "equipment": ["stove", "pan"],
-  "ingredients": [
-    {
-      "name": "chicken breast",
-      "quantity": 6,
-      "unit": "oz",
-      "calories": 187,
-      "protein_g": 35,
-      "carbs_g": 0,
-      "fat_g": 4,
-      "fiber_g": 0
-    }
-  ],
-  "instructions": [
-    "Season chicken breast with salt, pepper, and paprika.",
-    "Heat pan over medium-high heat with olive oil.",
-    "Cook chicken 5–6 minutes per side until internal temp reaches 165°F.",
-    "Rest 5 minutes, slice, and serve."
-  ],
-  "totals": {
-    "calories": 450,
-    "protein_g": 42,
-    "carbs_g": 30,
-    "fat_g": 15,
-    "fiber_g": 6
-  }
-}`;
+  return context;
 }
 
 // ── Generator ───────────────────────────────────────────────────────
@@ -176,46 +98,33 @@ Respond with ONLY a valid JSON object (no markdown fences, no extra text) in thi
 export async function generateRecipe(
   options: GenerateRecipeOptions,
 ): Promise<GenerateRecipeResult> {
-  const config = await getAIConfig();
-
-  if (config.provider === 'demo') {
-    return { recipe: getDemoRecipe(options.prompt), model: 'Demo Mode' };
+  if (!isSupabaseConfigured) {
+    return { recipe: getDemoRecipe(), model: 'Demo Mode' };
   }
 
-  const systemPrompt = buildRecipeSystemPrompt(options);
-
-  const messages: AIMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: options.prompt },
-  ];
-
-  const response = await callAI(messages, config);
-  const parsed = parseAIRecipeResponse(response.content);
-
-  return { recipe: parsed, model: response.model };
-}
-
-// ── Response parsing ────────────────────────────────────────────────
-
-function parseAIRecipeResponse(
-  raw: string,
-): Omit<RecipeEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'> {
-  // Strip markdown code fences if present
-  let cleaned = raw.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    return { recipe: getDemoRecipe(), model: 'Demo Mode' };
   }
 
-  const data: AIRecipeResponse = JSON.parse(cleaned);
+  const context = gatherRequestContext(!!options.useGroceryList);
 
-  // Validate required fields
-  if (!data.name || !data.ingredients || !Array.isArray(data.ingredients) || data.ingredients.length === 0) {
-    throw new Error('AI response missing required recipe fields');
-  }
+  const { data, error } = await supabase.functions.invoke<EdgeRecipeResponse>(
+    'ai-recipe-generate',
+    {
+      body: {
+        prompt: options.prompt,
+        context,
+      },
+    },
+  );
+
+  if (error) throw error;
+  if (!data) throw new Error('Recipe generator returned no data');
 
   const difficulty = normalizeDifficulty(data.difficulty);
 
-  return {
+  const recipe: Omit<RecipeEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
     name: data.name,
     description: data.description ?? '',
     servings: data.servings ?? 1,
@@ -229,7 +138,7 @@ function parseAIRecipeResponse(
     carbs_g: data.totals?.carbs_g ?? 0,
     fat_g: data.totals?.fat_g ?? 0,
     fiber_g: data.totals?.fiber_g ?? 0,
-    items: data.ingredients.map((ing, idx) => ({
+    items: data.ingredients.map((ing) => ({
       id: generateNutritionId('ri'),
       name: ing.name,
       calories: ing.calories ?? 0,
@@ -242,6 +151,8 @@ function parseAIRecipeResponse(
       is_estimate: true,
     })),
   };
+
+  return { recipe, model: data.model };
 }
 
 function normalizeDifficulty(raw: string | undefined): RecipeDifficulty {
@@ -254,9 +165,7 @@ function normalizeDifficulty(raw: string | undefined): RecipeDifficulty {
 
 // ── Demo fallback ───────────────────────────────────────────────────
 
-function getDemoRecipe(
-  _prompt: string,
-): Omit<RecipeEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'> {
+function getDemoRecipe(): Omit<RecipeEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'> {
   return {
     name: 'Grilled Chicken & Veggie Bowl',
     description: 'A balanced, high-protein bowl with grilled chicken, roasted vegetables, and quinoa.',
